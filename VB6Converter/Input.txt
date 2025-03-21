@@ -1,0 +1,7 @@
+﻿
+Private Sub ConsultaDaVendaNaCaixa()
+    
+    Select Case iErro
+        Case ERRO_UNKNOWN: Resume Abortar
+    End Select
+End Sub
