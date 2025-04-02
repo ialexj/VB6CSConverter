@@ -20,7 +20,7 @@ namespace VB6Converter.CSharpModel
             b.StartBlock($"{Visibility.ToCodeString()} {ReturnType} {Name} ({Arguments.ToArgumentsString()}) {{");
 
             foreach (var statement in Statements) {
-                b.WriteLine(statement.ToString());
+                b.AppendLine(statement.ToString());
             }
 
             b.EndBlock("}");

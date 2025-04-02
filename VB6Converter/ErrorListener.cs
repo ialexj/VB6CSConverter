@@ -8,7 +8,7 @@ namespace VB6Converter
     using System.IO;
     using System.Linq;
 
-    public class ErrorListener<S> : ConsoleErrorListener<S>
+    public class ErrorListener<S>(string prefix) : ConsoleErrorListener<S>
     {
         public bool had_error;
 
@@ -16,7 +16,7 @@ namespace VB6Converter
             int col, string msg, RecognitionException e)
         {
             had_error = true;
-            base.SyntaxError(output, recognizer, offendingSymbol, line, col, msg, e);
+            //output.WriteLine(prefix + " line " + line + ":" + col + " " + msg);
         }
     }
 }

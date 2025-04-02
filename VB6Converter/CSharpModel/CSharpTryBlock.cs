@@ -16,14 +16,14 @@ public class CSharpTryBlock : CSharpStatement
         sb.StartBlock("try {");
 
         foreach (var statement in TryStatements) {
-            sb.WriteLine(statement.ToString());
+            sb.AppendLine(statement.ToString());
         }
 
         sb.EndBlock("}");
         sb.StartBlock("catch {");
 
         foreach (var statement in CatchStatements) {
-            sb.WriteLine(statement.ToString());
+            sb.AppendLine(statement.ToString());
         }
 
         sb.EndBlock("}");

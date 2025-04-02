@@ -18,21 +18,21 @@ partial class CSharpModelConverter
             sb.StartBlock($"switch ({Condition}) {{");
 
             foreach (var @case in Cases) {
-                sb.WriteLine(@case.ToString());
+                sb.AppendLine(@case.ToString());
             }
 
             if (Default != null) {
                 sb.StartBlock("default:");
                 
                 foreach (var statement in Default) {
-                    sb.WriteLine(statement.ToString());
+                    sb.AppendLine(statement.ToString());
                 }
 
                 sb.EndBlock();
             }
 
             sb.EndBlock();
-            sb.Write("}");
+            sb.Append("}");
             return sb.ToString();
         }
     }

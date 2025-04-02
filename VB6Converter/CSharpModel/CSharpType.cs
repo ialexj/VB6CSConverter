@@ -6,6 +6,8 @@
 
         public static readonly CSharpType Void = new("void");
 
+        public static readonly CSharpType String = new("string");
+
         public override string ToString() => Name ?? "object";
     }
 }

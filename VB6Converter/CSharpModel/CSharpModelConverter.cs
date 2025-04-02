@@ -86,21 +86,58 @@ partial class CSharpModelConverter()
                     continue; // Already processed
                 }
 
+                //else if (element.declareStmt() is DeclareStmtContext declare) {
+                //    WriteDeclare(declare);
+                //}
+
                 else if (element.subStmt() is SubStmtContext sub) {
                     c.Members.Add(GetMethod(sub));
                 }
                 else if (element.functionStmt() is FunctionStmtContext func) {
                     c.Members.Add(GetMethod(func));
                 }
-                else if (element.enumerationStmt() is EnumerationStmtContext enums) {
-                    GetEnum(enums);
+
+                else if (element.propertyGetStmt() is PropertyGetStmtContext get) {
+                    var propName = GetIdentifier(get.ambiguousIdentifier());
+                    var property = c.GetOrCreateProperty(propName);
+
+                    property.IsStatic = get.STATIC() is not null;
+                    property.Type = GetType(get.asTypeClause());
+                    property.Getter = (GetVisibility(get.visibility()), new CSharpBlockStatement(GetBlock(get.block())));
                 }
-                //else if (element.typeStmt() is TypeStmtContext type) {
-                //    WriteType(type);
-                //}
-                //else if (element.declareStmt() is DeclareStmtContext declare) {
-                //    WriteDeclare(declare);
-                //}
+                else if (element.propertySetStmt() is PropertySetStmtContext set) {
+                    var propName = GetIdentifier(set.ambiguousIdentifier());
+                    var property = c.GetOrCreateProperty(propName);
+
+                    var arguments = GetMethodArguments(set.argList());
+                    if (arguments.Count > 0) {
+                        property.Type = arguments[0].Variable.Type;
+                    }
+
+                    property.IsStatic = set.STATIC() is not null;
+                    property.Setter = (GetVisibility(set.visibility()), new CSharpBlockStatement(GetBlock(set.block())), arguments[0].Variable);
+                }
+                else if (element.propertyLetStmt() is PropertyLetStmtContext let) {
+                    var propName = GetIdentifier(let.ambiguousIdentifier());
+                    var property = c.GetOrCreateProperty(propName);
+
+                    var arguments = GetMethodArguments(let.argList());
+                    if (arguments.Count > 0) {
+                        property.Type = arguments[0].Variable.Type;
+                    }
+
+                    property.IsStatic = let.STATIC() is not null;
+                    property.Setter = (GetVisibility(let.visibility()), new CSharpBlockStatement(GetBlock(let.block())), arguments[0].Variable);
+                }
+
+                else if (element.enumerationStmt() is EnumerationStmtContext enums) {
+                    c.Enums.Add(GetEnum(enums));
+                }
+                else if (element.typeStmt() is TypeStmtContext type) {
+                    c.Structs.Add(GetStruct(type));
+                }
+
+
                 else {
                     NotSupported(element);
                 }
@@ -113,9 +150,9 @@ partial class CSharpModelConverter()
         return c;
     }
 
-    CSharpEnumStatement GetEnum(EnumerationStmtContext e)
+    CSharpEnum GetEnum(EnumerationStmtContext e)
     {
-        var enumm = new CSharpEnumStatement();
+        var enumm = new CSharpEnum();
 
         if (e.publicPrivateVisibility() is PublicPrivateVisibilityContext v) {
             enumm.Visibility = GetVisibility(v);
@@ -133,28 +170,22 @@ partial class CSharpModelConverter()
 
         return enumm;
     }
-    /*
-    CSharpGenericStatement WriteType(TypeStmtContext type)
+
+    CSharpStruct GetStruct(TypeStmtContext type)
     {
-        if (type.visibility() is VisibilityContext visibility) {
-            WriteVisibility(visibility);
-        }
-
-        sb.Write(" struct ");
-        WriteIdentifier(type.ambiguousIdentifier());
-        sb.StartBlock(" {");
-
-        foreach (var t in type.typeStmt_Element()) {
-            sb.Write("public ");
-            WriteAsTypeClause(t.asTypeClause());
-            sb.Write(" ");
-            WriteIdentifier(t.ambiguousIdentifier());
-            sb.WriteLine(";");
-        }
-
-        sb.EndBlock("}");
+        return new CSharpStruct() {
+            Visibility = GetVisibility(type.visibility()),
+            Name = GetIdentifier(type.ambiguousIdentifier()),
+            Members = type.typeStmt_Element().Select(e => {
+                return new CSharpVariable(
+                    Name: GetIdentifier(e.ambiguousIdentifier()),
+                    Type: GetType(e.asTypeClause())
+                );
+            }).ToArray()
+        };
     }
 
+    /*
     CSharpGenericStatement WriteDeclare(DeclareStmtContext declare)
     {
         Write("[DllImport(");
@@ -268,6 +299,10 @@ partial class CSharpModelConverter()
     {
         using var _ = new TraceMethod(block);
 
+        if (block is null) {
+            return [];
+        }
+
         var list = new List<CSharpStatement>();
         PushContext(block: list);
         try {
@@ -286,10 +321,7 @@ partial class CSharpModelConverter()
     {
         using var _ = new TraceMethod(stmt);
 
-        if (stmt.commentStmt() is CommentStmtContext comment) {
-            return [new CSharpGenericStatement($"// {comment.COMMENT()}")];
-        }
-        else if (stmt.lineLabel() is LineLabelContext label) {
+        if (stmt.lineLabel() is LineLabelContext label) {
             if (label.ambiguousIdentifier() is AmbiguousIdentifierContext identifier) {
                 var text = GetIdentifier(identifier);
 
@@ -314,8 +346,9 @@ partial class CSharpModelConverter()
             return GetVariables(var);
         }
 
-        
-
+        else if (stmt.redimStmt() is RedimStmtContext redim) {
+            return GetRedim(redim);
+        }
 
         else if (stmt.implicitCallStmt_InBlock() is ImplicitCallStmt_InBlockContext implicitStmt) {
             return [GetImplicitCall(implicitStmt)];
@@ -341,6 +374,9 @@ partial class CSharpModelConverter()
         else if (stmt.forNextStmt() is ForNextStmtContext forNext) {
             return [GetForNext(forNext)];
         }
+        else if (stmt.forEachStmt() is ForEachStmtContext forEach) {
+            return [GetForEach(forEach)];
+        }
 
         else if (stmt.withStmt() is WithStmtContext with) {
             return [GetWith(with)];
@@ -357,6 +393,13 @@ partial class CSharpModelConverter()
         }
         else if (stmt.eraseStmt() is EraseStmtContext erase) {
             return GetErase(erase);
+        }
+
+        else if (stmt.loadStmt() is LoadStmtContext load) {
+            return [new CSharpGenericStatement($"// {load.GetText()}")];
+        }
+        else if (stmt.unloadStmt() is UnloadStmtContext unload) {
+            return [new CSharpGenericStatement($"// {unload.GetText()}")];
         }
 
         else if (stmt.exitStmt() is ExitStmtContext exit) {
@@ -387,6 +430,32 @@ partial class CSharpModelConverter()
         else {
             Trace.TraceWarning("Unknown statement: \r\n{0}", new ConsoleVisitor().Visit(stmt));
             return [new CSharpGenericStatement(stmt.GetText())];
+        }
+    }
+
+    CSharpForEachStatement GetForEach(ForEachStmtContext forEach)
+    {
+        using var _ = new TraceMethod(forEach);
+
+        return new CSharpForEachStatement() {
+            Variable = GetIdentifierReference(forEach.ambiguousIdentifier(0), forEach.typeHint()),
+            Enumerator = GetValue(forEach.valueStmt()),
+            Statements = new CSharpBlockStatement(GetBlock(forEach.block()))
+        };
+    }
+
+    
+
+    IEnumerable<CSharpRedimStatement> GetRedim(RedimStmtContext redim)
+    {
+        using var _ = new TraceMethod(redim);
+
+        foreach (var stmt in redim.redimSubStmt()) {
+            yield return new CSharpRedimStatement() {
+                Variable = GetImplicitCall(stmt.implicitCallStmt_InStmt()),
+                Type = GetType(stmt.asTypeClause()),
+                Subscripts = stmt.subscripts().subscript().Select(s => GetValue(s.valueStmt(1))).ToList()
+            };
         }
     }
 
@@ -570,7 +639,7 @@ partial class CSharpModelConverter()
         if (ifthen is BlockIfThenElseContext @if) {
             if (@if.ifBlockStmt() is IfBlockStmtContext ifBlock) {
                 csif.Condition = GetValue(ifBlock.ifConditionStmt().valueStmt());
-                csif.Then = ifBlock.block() is BlockContext block ? GetBlock(block) : [];
+                csif.Then = GetBlock(ifBlock.block());
             }
 
             CSharpIfStatement cselse = csif;
@@ -659,7 +728,7 @@ partial class CSharpModelConverter()
 
         foreach (var caseStmt in select.sC_Case()) {
             var block = GetBlock(caseStmt.block());
-
+            
             if (caseStmt.sC_Cond() is CaseCondExprContext expr) {
                 foreach (var condition in expr.sC_CondExpr()) {
                     if (condition is CaseCondExprValueContext valueCond) {
@@ -982,11 +1051,11 @@ partial class CSharpModelConverter()
             throw NotSupported(type);
         }
 
-        var identifier = GetIdentifier(call.ambiguousIdentifier(), call.typeHint());
-        var variable   = _contexts.Peek().Variables.TryGetValue(identifier, out var info) == true ? info : null;
+        var identifier = GetIdentifierReference(call.ambiguousIdentifier(), call.typeHint());
+        var variable   = _contexts.Peek().Variables.TryGetValue(identifier.Name, out var info) == true ? info : null;
 
         var cscall = new CSharpCallValue {
-            Callee = new CSharpExpression(identifier),
+            Callee = identifier,
             Type = variable?.ArrayDimensions > 0 ? CSharpCallValue.CallType.Array : CSharpCallValue.CallType.Method
         };
 
@@ -1064,6 +1133,15 @@ partial class CSharpModelConverter()
         }
         else if (lit.DOUBLELITERAL() is ITerminalNode @double) {
             return @double.GetText().TrimEnd(['&']);
+        }
+        else if (lit.STRINGLITERAL() is ITerminalNode @string) {
+            string str = @string.GetText();
+
+            if (str.Contains('\\')) {
+                str = str.Replace("\\", "\\\\");
+            }
+
+            return str;
         }
         else {
             return lit.GetText();
@@ -1144,7 +1222,7 @@ partial class CSharpModelConverter()
         }
     }
 
-    static string GetIdentifier(AmbiguousIdentifierContext identifier, TypeHintContext typeHint = null)
+    static CSharpIdentifierExpression GetIdentifierReference(AmbiguousIdentifierContext identifier, TypeHintContext typeHint)
     {
         if (identifier is null) {
             throw new ArgumentNullException(nameof(identifier));
@@ -1152,23 +1230,41 @@ partial class CSharpModelConverter()
 
         using var _ = new TraceMethod(identifier);
 
-        string cast = "";
+        return new CSharpIdentifierExpression(GetIdentifier(identifier), GetType(typeHint));
+    }
+
+    static string GetIdentifier(AmbiguousIdentifierContext identifier)
+    {
+        if (identifier is null) {
+            throw new ArgumentNullException(nameof(identifier));
+        }
+
+        using var _ = new TraceMethod(identifier);
+
+        var text = identifier.GetText();
+        if (string.Equals(text, "Me", StringComparison.InvariantCultureIgnoreCase)) {
+            text = "this";
+        }
+        else if (string.Equals(text, "vbNullString", StringComparison.InvariantCultureIgnoreCase)) {
+            text = "string.Empty";
+        }
+
+        return text;
+    }
+
+    static CSharpType GetType(TypeHintContext typeHint)
+    {
         if (typeHint is not null) {
             if (typeHint.DOLLAR() is not null) {
-                cast = "(string)";
+                return CSharpType.String;
             }
             else {
                 throw NotSupported(typeHint);
             }
         }
-
-        string text = identifier.GetText();
-
-        if (text == "vbNullString") {
-            text = "string.Empty";
+        else {
+            return CSharpType.Unknown;
         }
-        
-        return cast + text;
     }
 
     static string GetIdentifier(CertainIdentifierContext certain)
@@ -1187,7 +1283,7 @@ partial class CSharpModelConverter()
     {
         public TraceMethod(ParserRuleContext ctx, [CallerMemberName] string procedure = null)
         {
-            Trace.TraceInformation($"{procedure} {ctx.GetType().Name} {ctx.Start}");
+            Trace.TraceInformation($"{procedure} {ctx?.GetType().Name} {ctx.Start}");
             Trace.Indent();
         }
 

@@ -14,7 +14,7 @@ namespace VB6Converter.CSharpModel
 
             b.StartBlock("{");
             foreach (var statement in Statements) {
-                b.WriteLine(statement.ToString());
+                b.AppendLine(statement.ToString());
             }
             b.EndBlock("}");
 

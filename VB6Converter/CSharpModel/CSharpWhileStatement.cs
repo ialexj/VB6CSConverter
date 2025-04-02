@@ -18,11 +18,11 @@ namespace VB6Converter.CSharpModel
             sb.StartBlock($"while ({Condition}) {{");
 
             foreach (var statement in Statements) {
-                sb.WriteLine(statement.ToString());
+                sb.AppendLine(statement.ToString());
             }
 
             sb.EndBlock();
-            sb.Write("}");
+            sb.Append("}");
             return sb.ToString();
         }
     }

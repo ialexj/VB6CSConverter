@@ -78,7 +78,7 @@ moduleBody
    ;
 
 moduleBodyElement
-   : moduleBlock
+   : (moduleBlock
    | moduleOption
    | declareStmt
    | enumerationStmt
@@ -89,7 +89,8 @@ moduleBodyElement
    | propertySetStmt
    | propertyLetStmt
    | subStmt
-   | typeStmt
+   | typeStmt)
+   COMMENT?
    ;
 
 // controls ----------------------------------
@@ -101,10 +102,11 @@ controlProperties
 cp_Properties
 	: cp_SingleProperty
 	| cp_NestedProperty
-	| controlProperties;
+	| controlProperties
+	;
 
 cp_SingleProperty
-	: WS? implicitCallStmt_InStmt WS? EQ WS? '$'? cp_PropertyValue FRX_OFFSET? NEWLINE+
+	: WS? implicitCallStmt_InStmt WS? EQ WS? '$'? cp_PropertyValue FRX_OFFSET? COMMENT? NEWLINE+
 	;
 
 cp_PropertyName
@@ -138,7 +140,7 @@ attributeStmt
    ;
 
 block
-   : ( WS? COLON )? blockStmt ((NEWLINE | WS? COLON) + WS? blockStmt)*
+   : blockStmt COMMENT? (NEWLINE + WS? blockStmt)* NEWLINE? 
    ;
 
 blockStmt
@@ -166,6 +168,7 @@ blockStmt
    | goToStmt
    | ifThenElseStmt
    | implementsStmt
+   | implicitCallStmt_InBlock
    | inputStmt
    | killStmt
    | letStmt
@@ -208,10 +211,8 @@ blockStmt
    | widthStmt
    | withStmt
    | writeStmt
-   | implicitCallStmt_InBlock
-   )
+   | COMMENT)
    COMMENT?
-   | commentStmt
    ;
 
 // statements ----------------------------------
@@ -510,7 +511,7 @@ selectCaseStmt
    ;
 
 sC_Case
-   : CASE WS sC_Cond WS? block
+   : CASE WS sC_Cond WS? (COLON? NEWLINE* | NEWLINE +) (block NEWLINE +)?
    ;
 
 // ELSE first, so that it is not interpreted as a variable call
@@ -2077,12 +2078,12 @@ LINE_CONTINUATION
 
 
 NEWLINE
-   : WS? BR WS?
+   : WS? ( BR | (COLON ' ') | (COLON BR) ) WS?
    ;
 
 
 COMMENT
-   : WS? ('\'' | COLON? REM ' ') (LINE_CONTINUATION | ~ ('\n' | '\r'))*
+   : WS? ('\'' | COLON? REM ' ') (LINE_CONTINUATION | ~ ('\n' | '\r'))* -> channel(HIDDEN)
    ;
 
 

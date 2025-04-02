@@ -16,7 +16,7 @@ partial class CSharpModelConverter
 
             sb.StartBlock($"case {Condition}:");
             foreach (var statement in Statements) {
-                sb.WriteLine(statement.ToString());
+                sb.AppendLine(statement.ToString());
             }
 
             sb.EndBlock();

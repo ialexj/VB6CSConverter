@@ -17,29 +17,29 @@ namespace VB6Converter.CSharpModel
             sb.StartBlock($"if ({Condition}) {{");
 
             foreach (var statement in Then) {
-                sb.WriteLine(statement.ToString());
+                sb.AppendLine(statement.ToString());
             }
 
             sb.EndBlock();
-            sb.Write("}");
+            sb.Append("}");
 
             if (Else.Count > 0) {
-                sb.Write(" else ");
+                sb.Append(" else ");
 
                 if (Else.Count == 1 && Else[0] is CSharpIfStatement @else) {
-                    sb.Write(@else.ToString());
+                    sb.Append(@else.ToString());
                 }
                 else {
                     sb.StartBlock("{");
                     foreach (var statement in Else) {
-                        sb.WriteLine(statement.ToString());
+                        sb.AppendLine(statement.ToString());
                     }
                     sb.EndBlock();
-                    sb.Write("}");
+                    sb.Append("}");
                 }
             }
 
-            sb.WriteLine();
+            sb.AppendLine();
 
             return sb.ToString();
         }

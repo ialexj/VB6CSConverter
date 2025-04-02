@@ -55,7 +55,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
                 NotSupported(element);
             }
 
-            sb.WriteLine();
+            sb.AppendLine();
         }
 
         sb.EndBlock("}");
@@ -108,19 +108,19 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             WriteVisibility(visibility);
         }
 
-        sb.Write(" enum ");
+        sb.Append(" enum ");
         WriteIdentifier(e.ambiguousIdentifier());
         sb.StartBlock(" {");
 
         var constants = e.enumerationStmt_Constant().Select(c => AsString(() => {
             WriteIdentifier(c.ambiguousIdentifier());
             if (c.valueStmt() is ValueStmtContext value) {
-                sb.Write(" = ");
+                sb.Append(" = ");
                 WriteValue(value);
             }
         }));
 
-        sb.WriteLine(string.Join(Environment.NewLine, constants));
+        sb.AppendLine(string.Join(Environment.NewLine, constants));
 
         sb.EndBlock("}");
     }
@@ -131,16 +131,16 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             WriteVisibility(visibility);
         }
 
-        sb.Write(" struct ");
+        sb.Append(" struct ");
         WriteIdentifier(type.ambiguousIdentifier());
         sb.StartBlock(" {");
 
         foreach (var t in type.typeStmt_Element()) {
-            sb.Write("public ");
+            sb.Append("public ");
             WriteAsTypeClause(t.asTypeClause());
-            sb.Write(" ");
+            sb.Append(" ");
             WriteIdentifier(t.ambiguousIdentifier());
-            sb.WriteLine(";");
+            sb.AppendLine(";");
         }
 
         sb.EndBlock("}");
@@ -152,7 +152,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
         Write(declare.STRINGLITERAL(0).GetText());
         Write(", EntryPoint = \"");
         WriteIdentifier(declare.ambiguousIdentifier());
-        sb.WriteLine("\")]");
+        sb.AppendLine("\")]");
 
         if (declare.visibility() is VisibilityContext visibility) {
             WriteVisibility(visibility);
@@ -177,7 +177,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
         }
 
         WriteArgList(declare.argList());
-        sb.WriteLine(";");
+        sb.AppendLine(";");
     }
 
     
@@ -193,7 +193,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
     {
         if (_lastBlockStatement != null) {
             if (stmt.Start.Line > _lastBlockStatement.Stop.Line + 1) {
-                sb.WriteLine("");
+                sb.AppendLine("");
             }
         }
 
@@ -231,11 +231,11 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             WriteForNext(forNext);
         }
         else if (stmt.loadStmt() is LoadStmtContext load) {
-            sb.Write("// Load ");
+            sb.Append("// Load ");
             WriteValue(load.valueStmt());
         }
         else if (stmt.unloadStmt() is UnloadStmtContext unload) {
-            sb.Write("// Unload ");
+            sb.Append("// Unload ");
             WriteValue(unload.valueStmt());
         }
         else if (stmt.openStmt() is OpenStmtContext open) {
@@ -257,36 +257,33 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             WriteRedim(redim);
         }
         else if (stmt.goToStmt() is GoToStmtContext go) {
-            sb.Write("goto ");
+            sb.Append("goto ");
             WriteValue(go.valueStmt());
-            sb.Write(";");
+            sb.Append(";");
         }
         else if (stmt.exitStmt() is ExitStmtContext exit) {
             if (exit.EXIT_FUNCTION() != null || exit.EXIT_SUB() != null || exit.EXIT_PROPERTY != null) {
-                sb.Write("return;");
+                sb.Append("return;");
             }
             else if (exit.EXIT_DO() != null || exit.EXIT_FOR() != null) {
-                sb.Write("break;");
+                sb.Append("break;");
             }
         }
         else if (stmt.lineLabel() is LineLabelContext label) {
             WriteIdentifier(label.ambiguousIdentifier());
             Write(":");
         }
-        else if (stmt.commentStmt() is CommentStmtContext comment) {
-            WriteComment(comment.COMMENT());
-        }
         else {
             NotSupported(stmt);
         }
 
-        if (stmt.COMMENT() is ITerminalNode lineComment) {
-            sb.Write(" ");
-            WriteComment(lineComment);
+        foreach (var comment in stmt.COMMENT()) {
+            sb.Append(" ");
+            WriteComment(comment);
         }
 
         if (!sb.IsLineStart) {
-            sb.WriteLine();
+            sb.AppendLine();
         }
 
         _lastBlockStatement = stmt;
@@ -396,7 +393,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             Write("File.Delete(");
             WriteValue(value);
             Write(");");
-            sb.WriteLine();
+            sb.AppendLine();
         }
     }
 
@@ -448,7 +445,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             
             var value = AsString(() => WriteValue(sub.valueStmt()));
 
-            sb.WriteLine($"{(isPublic ? "public" : "private")} const {variable.Type} {variable.Name} = {value};");
+            sb.AppendLine($"{(isPublic ? "public" : "private")} const {variable.Type} {variable.Name} = {value};");
 
             _variables.Add(variable.Name, variable);
         }
@@ -488,19 +485,19 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
 
             _variables.TryAdd(info.Name, info);
 
-            sb.WriteLine($"{info.Type}{array} {info.Name}{init};");
+            sb.AppendLine($"{info.Type}{array} {info.Name}{init};");
         }
     }
 
     void WriteResume(ResumeStmtContext resume)
     {
         if (resume.INTEGERLITERAL() is ITerminalNode literal) {
-            sb.Write($"// goto {literal.GetText()};");
+            sb.Append($"// goto {literal.GetText()};");
         }
         else if (resume.ambiguousIdentifier() is AmbiguousIdentifierContext identifier) {
-            sb.Write("goto ");
+            sb.Append("goto ");
             WriteIdentifier(resume.ambiguousIdentifier());
-            sb.Write(";");
+            sb.Append(";");
         }
         else if (resume.NEXT() is ITerminalNode terminal) {
             return;
@@ -513,7 +510,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
     void WriteAsTypeClause(AsTypeClauseContext asType)
     {
         if (asType is null) {
-            sb.Write("object");
+            sb.Append("object");
             return;
         }
 
@@ -521,12 +518,12 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             NotSupported(field);
         }
 
-        sb.Write(ConvertType(asType.type()));
+        sb.Append(ConvertType(asType.type()));
     }
 
     private void WriteDoLoop(DoLoopStmtContext doloop)
     {
-        sb.Write("while (");
+        sb.Append("while (");
 
         if (doloop.valueStmt() is ValueStmtContext val) {
             WriteValue(val);
@@ -544,15 +541,15 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
 
     private void WriteSelect(SelectCaseStmtContext select)
     {
-        sb.Write("switch (");
+        sb.Append("switch (");
         WriteValue(select.valueStmt());
         sb.StartBlock(") {");
 
         foreach (var cs in select.sC_Case()) {
-            sb.Write("case ");
+            sb.Append("case ");
             var condition = cs.sC_Cond();
-            sb.Write(condition.GetText());
-            sb.Write(":");
+            sb.Append(condition.GetText());
+            sb.Append(":");
 
             if (cs.block() is BlockContext block) {
                 sb.StartBlock("");
@@ -567,16 +564,16 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
 
     private void WriteComment(ITerminalNode comment)
     {
-        sb.Write("//");
-        sb.Write(comment.GetText().TrimStart().TrimStart('\''));
+        sb.Append("//");
+        sb.Append(comment.GetText().TrimStart().TrimStart('\''));
     }
 
     private void WriteSet(SetStmtContext set)
     {
         WriteImplicitCall(set.implicitCallStmt_InStmt());
-        sb.Write(" = ");
+        sb.Append(" = ");
         WriteValue(set.valueStmt());
-        sb.Write(";");
+        sb.Append(";");
     }
 
     void WriteIfThenElse(IfThenElseStmtContext ifthen)
@@ -660,7 +657,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
                 NotSupported(dic);
             }
 
-            sb.Write($"{callee}.{procedure}{arguments};");
+            sb.Append($"{callee}.{procedure}{arguments};");
         }
         else if (callInBlock.iCS_B_ProcedureCall() is ICS_B_ProcedureCallContext procedure) {
             string arguments = string.Empty;
@@ -670,7 +667,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             }
 
             if (procedure.certainIdentifier() is CertainIdentifierContext certain) {
-                sb.Write($"{certain.GetText()}{arguments}");
+                sb.Append($"{certain.GetText()}{arguments}");
             }
             else {
                 NotSupported(procedure);
@@ -727,7 +724,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
 
         if (membersCall.iCS_S_MemberCall() is ICS_S_MemberCallContext[] members && members.Length > 0) {
             foreach (var member in members) {
-                sb.Write(".");
+                sb.Append(".");
                 WriteMemberCall(member);
             }
         }
@@ -790,9 +787,9 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
 
     void WriteDictionaryCall(DictionaryCallStmtContext stmt)
     {
-        sb.Write("[\"");
+        sb.Append("[\"");
         WriteIdentifier(stmt.ambiguousIdentifier());
-        sb.Write("\"]");
+        sb.Append("\"]");
     }
 
     string WriteIdentifier(AmbiguousIdentifierContext identifier)
@@ -804,10 +801,10 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
         string text = identifier.GetText();
 
         if (text == "vbNullString") {
-            sb.Write("string.Empty");
+            sb.Append("string.Empty");
         }
         else {
-            sb.Write(text);
+            sb.Append(text);
         }
 
         return text;
@@ -828,7 +825,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
 
     void WriteOnError(OnErrorStmtContext var)
     {
-        sb.WriteLine($"// {var.GetText()}");
+        sb.AppendLine($"// {var.GetText()}");
     }
 
     void WriteLet(LetStmtContext let)
@@ -848,7 +845,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
         }
         else {
             Write(target);
-            sb.Write(" = ");
+            sb.Append(" = ");
         }
 
 
@@ -859,7 +856,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             NotSupported(let);
         }
 
-        sb.Write(";");
+        sb.Append(";");
     }
 
     void WriteArgs(ArgsCallContext args, bool dictionary)
@@ -868,10 +865,10 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
         string[] arguments = args.argCall().Select(GetArg).ToArray();
 
         if (dictionary) {
-            sb.Write($"[{string.Join(", ", arguments)}]");
+            sb.Append($"[{string.Join(", ", arguments)}]");
         }
         else {
-            sb.Write($"({string.Join(", ", arguments)})");
+            sb.Append($"({string.Join(", ", arguments)})");
         }
     }
 
@@ -885,11 +882,11 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
         }
         else if (value is VsAssignContext assign) {
             WriteImplicitCall(assign.implicitCallStmt_InStmt());
-            sb.Write(": ");
+            sb.Append(": ");
             WriteValue(assign.valueStmt());
         }
         else if (value is VsNotContext not) {
-            sb.Write("!");
+            sb.Append("!");
             WriteValue(not.valueStmt());
         }
         else if (value is VsStructContext vsstruct) {
@@ -944,7 +941,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
         void WriteValueList(ValueStmtContext[] values, string separator)
         {
             var strings = values.Select(v => AsString(() => WriteValue(v))).ToArray();
-            sb.Write(string.Join(separator, strings));
+            sb.Append(string.Join(separator, strings));
         }
     }
 
@@ -956,35 +953,35 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
             var col = System.Drawing.Color.FromArgb(System.Convert.ToInt32(hex, 16));
 
             if (col.IsNamedColor) {
-                sb.Write($"Color.FromName(\"{col.Name}\")");
+                sb.Append($"Color.FromName(\"{col.Name}\")");
             }
             else if (col.A == 255) {
-                sb.Write($"Color.FromArgb({col.R}, {col.G}, {col.B})");
+                sb.Append($"Color.FromArgb({col.R}, {col.G}, {col.B})");
             }
             else {
-                sb.Write($"Color.FromArgb({col.A}, {col.R}, {col.G}, {col.B})");
+                sb.Append($"Color.FromArgb({col.A}, {col.R}, {col.G}, {col.B})");
             }
         }
         else if (lit.FILENUMBER() is ITerminalNode file) {
-            sb.Write(file.GetText().TrimStart('#'));
+            sb.Append(file.GetText().TrimStart('#'));
         }
         else if (lit.TRUE() is ITerminalNode @true) {
-            sb.Write("true");
+            sb.Append("true");
         }
         else if (lit.FALSE() is ITerminalNode @false) {
-            sb.Write("false");
+            sb.Append("false");
         }
         else if (lit.NOTHING() is ITerminalNode @nothing || lit.NULL() is ITerminalNode @null) {
-            sb.Write("null");
+            sb.Append("null");
         }
         else if (lit.INTEGERLITERAL() is ITerminalNode @short) {
-            sb.Write(@short.GetText());
+            sb.Append(@short.GetText());
         }
         else if (lit.DOUBLELITERAL() is ITerminalNode @double) {
-            sb.Write(@double.GetText().TrimEnd(['&']));
+            sb.Append(@double.GetText().TrimEnd(['&']));
         }
         else {
-            sb.Write(lit.GetText());
+            sb.Append(lit.GetText());
         }
     }
 
@@ -992,10 +989,10 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
     void WriteVisibility(PublicPrivateVisibilityContext v)
     {
         if (v.PRIVATE() != null) {
-            sb.Write("private");
+            sb.Append("private");
         }
         else if (v.PUBLIC() != null) {
-            sb.Write("public");
+            sb.Append("public");
         }
         else {
             NotSupported(v);
@@ -1005,13 +1002,13 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
     void WriteVisibility(VisibilityContext v)
     {
         if (v.PRIVATE() != null) {
-            sb.Write("private");
+            sb.Append("private");
         }
         else if (v.PUBLIC() != null || v.GLOBAL() != null) {
-            sb.Write("public");
+            sb.Append("public");
         }
         else if (v.FRIEND() != null) {
-            sb.Write("internal");
+            sb.Append("internal");
         }
         else {
             NotSupported(v);
@@ -1073,7 +1070,7 @@ class CSharpConverter(StatementBuilder sb, IEnumerable<VariableInfo> variables =
         throw new NotSupportedException($"Not supported from {caller}: '{context.GetText()}'\r\n{new ConsoleVisitor().Visit(context)}");
     }
 
-    void Write(string str) => sb.Write(str);
+    void Write(string str) => sb.Append(str);
 
     string AsString(Action act)
     {
