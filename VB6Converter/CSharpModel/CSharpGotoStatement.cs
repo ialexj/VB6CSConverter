@@ -1,6 +1,6 @@
 ﻿namespace VB6Converter.CSharpModel;
 
-public class CSharpGotoStatement : CSharpStatement
+public class CSharpGotoStatement : ICSharpStatement
 {
     public ICSharpExpression Label { get; set; }
 

@@ -2,12 +2,12 @@
 
 namespace VB6Converter.CSharpModel;
 
-public class CSharpTryBlock : CSharpStatement
+public class CSharpTryBlock : ICSharpStatement
 {
     public string CatchLabel { get; set; }
-    public List<CSharpStatement> TryStatements { get; set; } = [];
+    public List<ICSharpStatement> TryStatements { get; set; } = [];
 
-    public List<CSharpStatement> CatchStatements { get; set; } = [];
+    public List<ICSharpStatement> CatchStatements { get; set; } = [];
 
     public override string ToString()
     {

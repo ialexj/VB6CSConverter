@@ -1,29 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
 namespace VB6Converter.CSharpModel;
 
-public class CSharpStruct
+public class CSharpStruct(CSharpVisibility vis, string name, CSharpVariable[] variables) : CSharpNamespaceMember(vis, name), ICSharpClassMember
 {
-    public CSharpVisibility Visibility { get; set; }
+    public CSharpVariable[] Variables { get; set; } = variables;
 
-    public string Name { get; set; }
+    protected override string GetDeclaration() => "struct";
 
-    public CSharpVariable[] Members { get; set; }
-
-    public override string ToString()
-    {
-        var sb = new StatementBuilder();
-        sb.StartBlock($"{Visibility} struct {Name} {{");
-
-        foreach (var member in Members) {
-            sb.AppendLine(member.ToString());
-        }
-
-        sb.EndBlock("}");
-        return sb.ToString();
-    }
+    protected override IEnumerable<object> GetBody() => Variables;
 }

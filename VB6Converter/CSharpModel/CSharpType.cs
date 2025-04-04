@@ -8,6 +8,8 @@
 
         public static readonly CSharpType String = new("string");
 
+        public static readonly CSharpType Object = new("object");
+
         public override string ToString() => Name ?? "object";
     }
 }

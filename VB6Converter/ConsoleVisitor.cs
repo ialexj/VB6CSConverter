@@ -5,7 +5,7 @@ namespace VB6Converter
     using Antlr4.Runtime.Tree;
     using System.Text;
 
-    class ConsoleVisitor : VisualBasic6BaseVisitor<string>
+    class ConsoleVisitor : VB6Parser.VisualBasic6BaseVisitor<string>
     {
         public StringBuilder sb = new();
         int indent = 0;

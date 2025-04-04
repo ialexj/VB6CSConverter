@@ -4,9 +4,9 @@ using System.Text;
 
 namespace VB6Converter.CSharpModel
 {
-    public class CSharpRedimStatement : CSharpStatement
+    public class CSharpRedimStatement : ICSharpStatement
     {
-        public CSharpCallValue Variable { get; internal set; }
+        public CSharpCallExpression Variable { get; internal set; }
         
         public CSharpType Type { get; internal set; }
 

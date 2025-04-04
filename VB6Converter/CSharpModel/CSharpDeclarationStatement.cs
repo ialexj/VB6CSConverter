@@ -6,7 +6,7 @@ namespace VB6Converter.CSharpModel
         CSharpVariable variable, ICSharpExpression value, 
         CSharpDeclarationOption option = CSharpDeclarationOption.Default,
         CSharpVisibility visibility = CSharpVisibility.Private) 
-        : CSharpStatement
+        : ICSharpStatement, ICSharpClassMember
     {
         public CSharpVisibility Visibility { get; } = visibility;
 
@@ -26,7 +26,18 @@ namespace VB6Converter.CSharpModel
             }
 
             if (Option != CSharpDeclarationOption.Default) {
-                sb.Append(Option.ToCodeString());
+                if (Option == CSharpDeclarationOption.Const) {
+                    if (Variable.Type.ToString() == "object") {
+                        sb.Append("static readonly");
+                    }
+                    else {
+                        sb.Append("const");
+                    }
+                }
+                else if (Option == CSharpDeclarationOption.Static) {
+                    sb.Append("static");
+                }
+
                 sb.Append(' ');
             }
 
@@ -47,15 +58,5 @@ namespace VB6Converter.CSharpModel
         Default,
         Static,
         Const
-    }
-
-    public static class CSharpDeclarationOptions
-    {
-        public static string ToCodeString(this CSharpDeclarationOption option)
-            => option switch {
-                CSharpDeclarationOption.Static => "static",
-                CSharpDeclarationOption.Const => "const",
-                _ => ""
-            };
     }
 }

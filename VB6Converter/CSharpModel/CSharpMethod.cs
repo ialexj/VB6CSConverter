@@ -2,7 +2,7 @@
 
 namespace VB6Converter.CSharpModel
 {
-    public class CSharpMethod(string name) : CSharpClassMember
+    public class CSharpMethod(string name) : ICSharpClassMember
     {
         public string Name { get; } = name;
 
@@ -10,14 +10,14 @@ namespace VB6Converter.CSharpModel
 
         public CSharpType ReturnType { get; set; }
 
-        public List<CSharpStatement> Statements { get; set; } = [];
+        public CSharpBlockStatement Statements { get; set; } = [];
 
         public List<CSharpArgument> Arguments { get; internal set; }
 
         public override string ToString()
         {
             var b = new StatementBuilder();
-            b.StartBlock($"{Visibility.ToCodeString()} {ReturnType} {Name} ({Arguments.ToArgumentsString()}) {{");
+            b.StartBlock($"{Visibility.ToCodeString()} {ReturnType} {Name}({Arguments.ToArgumentsString()}) {{");
 
             foreach (var statement in Statements) {
                 b.AppendLine(statement.ToString());

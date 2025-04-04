@@ -2,7 +2,7 @@
 {
     public interface ICSharpExpression { }
 
-    public class CSharpExpression(string text) : ICSharpExpression
+    public class CSharpGenericExpression(string text) : ICSharpExpression
     {
         public string Value { get; } = text;
 

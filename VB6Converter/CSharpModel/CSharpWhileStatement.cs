@@ -6,24 +6,12 @@ using System.Threading.Tasks;
 
 namespace VB6Converter.CSharpModel
 {
-    class CSharpWhileStatement : CSharpStatement
+    class CSharpWhileStatement : ICSharpStatement
     {
-        public ICSharpExpression Condition { get; set; } = new CSharpExpression("true");
+        public ICSharpExpression Condition { get; set; } = new CSharpGenericExpression("true");
 
-        public List<CSharpStatement> Statements { get; set; } = [];
+        public CSharpBlockStatement Statements { get; set; } = [];
 
-        public override string ToString()
-        {
-            var sb = new StatementBuilder();
-            sb.StartBlock($"while ({Condition}) {{");
-
-            foreach (var statement in Statements) {
-                sb.AppendLine(statement.ToString());
-            }
-
-            sb.EndBlock();
-            sb.Append("}");
-            return sb.ToString();
-        }
+        public override string ToString() => $"while ({Condition}) {Statements}";
     }
 }

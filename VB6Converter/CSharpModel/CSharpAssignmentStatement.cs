@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace VB6Converter.CSharpModel
 {
-    class CSharpAssignmentStatement(ICSharpExpression target, ICSharpExpression value) : CSharpStatement
+    class CSharpAssignmentStatement(ICSharpExpression target, ICSharpExpression value) : ICSharpStatement
     {
         public ICSharpExpression Target { get; } = target;
 

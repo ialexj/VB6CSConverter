@@ -1,6 +1,6 @@
 ﻿namespace VB6Converter.CSharpModel;
 
-public record class CSharpIdentifierExpression(string Name, CSharpType Type = default) : ICSharpExpression
+public record class CSharpIdentifierExpression(string Name, CSharpType Type = default, IdentifierType IdentifierType = IdentifierType.Unknown) : ICSharpExpression
 {
     public override string ToString()
     {
@@ -11,4 +11,13 @@ public record class CSharpIdentifierExpression(string Name, CSharpType Type = de
             return Name;
         }
     }
+}
+
+public enum IdentifierType
+{
+    Unknown,
+    Variable,
+    Method,
+    Array,
+    Dictionary
 }

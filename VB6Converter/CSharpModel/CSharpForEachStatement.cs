@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace VB6Converter.CSharpModel
 {
-    public class CSharpForEachStatement : CSharpStatement
+    public class CSharpForEachStatement : ICSharpStatement
     {
         public CSharpIdentifierExpression Variable { get; internal set; }
 
