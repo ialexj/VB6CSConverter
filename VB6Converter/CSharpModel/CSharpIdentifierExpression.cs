@@ -1,11 +1,11 @@
 ﻿namespace VB6Converter.CSharpModel;
 
-public record class CSharpIdentifierExpression(string Name, CSharpType Type = default, IdentifierType IdentifierType = IdentifierType.Unknown) : ICSharpExpression
+public record class CSharpIdentifierExpression(string Name, CSharpType CastType = default, IdentifierType IdentifierType = IdentifierType.Unknown) : ICSharpExpression
 {
     public override string ToString()
     {
-        if (Type != CSharpType.Unknown) {
-            return $"({Type}) {Name}";
+        if (CastType != CSharpType.Unknown) {
+            return $"({CastType}) {Name}";
         }
         else {
             return Name;

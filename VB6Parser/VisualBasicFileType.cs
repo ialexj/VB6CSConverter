@@ -1,6 +1,4 @@
-﻿using System.IO;
-
-namespace VB6Converter;
+﻿namespace VB6Parser;
 
 public enum VisualBasicFileType
 {

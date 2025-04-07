@@ -10,16 +10,9 @@ public static class Program
     {
         Trace.Listeners.Add(new TextWriterTraceListener("Input.log"));
 
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
-        //await VisualBasic6Converter.ConvertProject(
-            //@"C:\Users\aj\source\repos\OptiwareVB6\Optiware\Optiware98.vbp", 
-            //["frmBancosBarra"],
-            //"./Optiware98");
-
-        VisualBasic6Converter.ConvertFile("Input.txt", ".");
-
-        //Convert(@"C:\Users\aj\source\repos\OptiwareVB6\Optiware\modMain.bas", "Output.cs");
-        //Convert(@"Input.txt", "Output.cs");
+        //await VB6ToCSharpConverter.ConvertProject(
+        //    @"C:\Users\aj\source\repos\OptiwareVB6\Optiware\Optiware98.vbp", 
+        //    ["modMain"],
+        //    "./Optiware98");
     }
 }

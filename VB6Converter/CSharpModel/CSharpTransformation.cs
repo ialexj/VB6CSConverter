@@ -1,142 +1,111 @@
 ﻿using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using VB6Parser;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter.CSharpModel;
 
-partial class CSharpTransformer()
+public class CSharpTransformation
 {
-    readonly Stack<CSharpClass> _class = [];
-    readonly Stack<CSharpMethod> _method = [];
-    readonly Stack<CSharpBlockStatement> _block = [];
     readonly Stack<CSharpCallExpression> _with = [];
 
-    CSharpVariable FindVariable(string name)
+    public static CompilationUnitSyntax Create(ModuleContext module, string name, string ns, VisualBasicFileType type = VisualBasicFileType.Module)
     {
-        foreach (var block in _block) {
-            foreach (var dec in block.GetDeclarations()) {
-                if (dec.Variable.Name == name) {
-                    return dec.Variable;
-                }
-            }
-        }
-
-        foreach (var m in _method) {
-            foreach (var dec in m.Arguments) {
-                if (dec.Variable.Name == name) {
-                    return dec.Variable;
-                }
-            }
-        }
-
-        foreach (var c in _class) {
-            foreach (var dec in c.Members.OfType<CSharpDeclarationStatement>()) {
-                if (dec.Variable.Name == name) {
-                    return dec.Variable;
-                }
-            }
-        }
-
-        return null;
+        var t = new CSharpTransformation();
+        return t.GetCompilationUnit(module, name, ns, type);
     }
 
-       
-
-    public CSharpClass GetClass(ModuleContext module, string name)
+    public CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string name, string ns, VisualBasicFileType type = VisualBasicFileType.Module)
     {
         using var _ = new TraceMethod(module);
 
-        var c = new CSharpClass(CSharpVisibility.Public, name) { 
-            IsPartial = true, 
-            IsStatic = true 
-        };
+        var cu = CompilationUnit()
+            .AddUsings(
+                UsingDirective(ParseName("System")),
+                UsingDirective(ParseName("System.Collections.Generic")));
+
+        var @namespace = FileScopedNamespaceDeclaration(IdentifierName(ns ?? name));
 
         var body = module.moduleBody();
+        @namespace = @namespace
+            .WithMembers(
+                SingletonList<MemberDeclarationSyntax>(
+                    GetClass(body, name,
+                        @static: type == VisualBasicFileType.Module)));
+
+        return cu.WithMembers(SingletonList<MemberDeclarationSyntax>(@namespace)).NormalizeWhitespace();
+            
+    }
+    
+    public ClassDeclarationSyntax GetClass(ModuleBodyContext body, string name, bool @static = false)
+    {
+        using var _ = new TraceMethod(body);
+
+        var c = ClassDeclaration(name)
+            .WithModifiers(
+                TokenList(
+                    new SyntaxToken?[] {
+                        Token(SyntaxKind.PublicKeyword),
+                        Token(SyntaxKind.PartialKeyword),
+                        @static ? Token(SyntaxKind.StaticKeyword) : null
+                    }.OfType<SyntaxToken>()));
+
         var bodyElements = body.moduleBodyElement();
 
-        // Collect sub-objects
-        foreach (var e in bodyElements) {
-            if (e.enumerationStmt() is EnumerationStmtContext enumCtx) {
-                c.Members.Add(GetEnum(enumCtx));
-            }
-            else if (e.typeStmt() is TypeStmtContext typeCtx) {
-                c.Members.Add(GetStruct(typeCtx));
-            }
-        }
-        
-        // Collect all declarations first
-        foreach (var block in bodyElements.Select(e => e.moduleBlock()).OfType<ModuleBlockContext>()) {
-            var statements = GetBlock(block.block());
-            foreach (var statement in statements) {
-                if (statement is CSharpDeclarationStatement decl) {
-                    c.Members.Add(decl);
-                }
-                else {
-                    throw new NotSupportedException("Class statement not supported.");
-                }
-            }
+        void AddMembers(object member)
+        {
+            var memberSyntax = ParseMemberDeclaration(member.ToString());
+            c = c.AddMembers(memberSyntax);
         }
 
         foreach (var e in bodyElements) {
-            if (e.moduleBlock() is not null) {
-                continue; // Already processed
+            if (e.moduleBlock() is ModuleBlockContext block) {
+                foreach (var statement in GetBlock(block.block())) {
+                    if (statement is CSharpDeclarationStatement decl) {
+                        AddMembers(decl);
+                    }
+                    else {
+                        throw NotSupported(statement);
+                    }
+                }
             }
-            else if (e.enumerationStmt() is EnumerationStmtContext) {
-                continue; // Handled by namespace
+            else if (e.enumerationStmt() is EnumerationStmtContext enumCtx) {
+                AddMembers(GetEnum(enumCtx));
             }
-            else if (e.typeStmt() is TypeStmtContext) {
-                continue; // Handled by namespace
+            else if (e.typeStmt() is TypeStmtContext typeCtx) {
+                c = c.AddMembers(GetStruct(typeCtx));
             }
 
             else if (e.subStmt() is SubStmtContext sub) {
-                c.Members.Add(GetMethod(sub));
+                c = c.AddMembers(GetMethod(sub, @static));
             }
             else if (e.functionStmt() is FunctionStmtContext func) {
-                c.Members.Add(GetMethod(func));
+                c = c.AddMembers(GetMethod(func, @static));
             }
             else if (e.declareStmt() is DeclareStmtContext declare) {
-                c.Members.Add(GetExtern(declare));
+                AddMembers(GetExtern(declare));
             }
 
-            else if (e.propertyGetStmt() is PropertyGetStmtContext get) {
-                var propName = GetIdentifier(get.ambiguousIdentifier());
-                var property = c.GetOrCreateProperty(propName);
-
-                property.IsStatic = get.STATIC() is not null;
-                property.Type = GetType(get.asTypeClause());
-                property.Getter = (GetVisibility(get.visibility()), new CSharpBlockStatement(GetBlock(get.block())));
-            }
-            else if (e.propertySetStmt() is PropertySetStmtContext set) {
-                var propName = GetIdentifier(set.ambiguousIdentifier());
-                var property = c.GetOrCreateProperty(propName);
-
-                var arguments = GetMethodArguments(set.argList());
-                if (arguments.Count > 0) {
-                    property.Type = arguments[0].Variable.Type;
+            else if (e.propertyAccessor() is IPropertyContext prop) {
+                var property = GetProperty(prop, @static);
+                var existing = c.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => Equals(p.Identifier.Text, property.Identifier.Text));
+                if (existing != null) {
+                    var replace = existing.AddAccessorListAccessors([.. property.AccessorList.Accessors]);
+                    c = c.ReplaceNode(existing, replace);
                 }
-
-                property.IsStatic = set.STATIC() is not null;
-                property.Setter = (GetVisibility(set.visibility()), new CSharpBlockStatement(GetBlock(set.block())), arguments[0].Variable);
-            }
-            else if (e.propertyLetStmt() is PropertyLetStmtContext let) {
-                var propName = GetIdentifier(let.ambiguousIdentifier());
-                var property = c.GetOrCreateProperty(propName);
-
-                var arguments = GetMethodArguments(let.argList());
-                if (arguments.Count > 0) {
-                    property.Type = arguments[0].Variable.Type;
+                else {
+                    c = c.AddMembers(property);
                 }
-
-                property.IsStatic = let.STATIC() is not null;
-                property.Setter = (GetVisibility(let.visibility()), new CSharpBlockStatement(GetBlock(let.block())), arguments[0].Variable);
             }
 
             else {
@@ -147,18 +116,21 @@ partial class CSharpTransformer()
         return c;
     }
 
-    CSharpStruct GetStruct(TypeStmtContext type)
+    RecordDeclarationSyntax GetStruct(TypeStmtContext type)
     {
         using var _ = new TraceMethod(type);
-        return new(
-            GetVisibility(type.visibility()),
-            GetIdentifier(type.ambiguousIdentifier()),
-            type.typeStmt_Element().Select(e => {
-                return new CSharpVariable(
-                    Name: GetIdentifier(e.ambiguousIdentifier()),
-                    Type: GetType(e.asTypeClause())
-                );
-            }).ToArray());
+
+        return RecordDeclaration(Token(SyntaxKind.RecordKeyword), GetIdentifier(type.ambiguousIdentifier()))
+            .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword)))
+            .WithClassOrStructKeyword(Token(SyntaxKind.StructKeyword))
+            .WithParameterList(
+                ParameterList(
+                    SeparatedList(
+                        type.typeStmt_Element().Select(e =>
+                            Parameter(GetIdentifierToken(e.ambiguousIdentifier()))
+                                .WithType(GetTypeRoslyn(e.asTypeClause())))
+                        .ToArray())));
+        
     }
 
     CSharpEnum GetEnum(EnumerationStmtContext e)
@@ -179,53 +151,77 @@ partial class CSharpTransformer()
 
     // Methods
 
-    CSharpMethod GetMethod(SubStmtContext sub)
+    
+
+    
+
+    MethodDeclarationSyntax GetMethod(IMethodContext methodCtx, bool @static = false)
     {
-        using var _ = new TraceMethod(sub);
+        using var _ = new TraceMethod(methodCtx);
 
-        var name = GetIdentifier(sub.ambiguousIdentifier());
-        var visb = GetVisibility(sub.visibility());
-        var args = GetMethodArguments(sub.argList());
+        var type = GetTypeRoslyn(methodCtx.asTypeClause());
+        var name = GetIdentifier(methodCtx.ambiguousIdentifier());
+        var visb = GetVisibilityKeyword(methodCtx.visibility());
+        var args = GetMethodArguments(methodCtx.argList());
+        var body = GetBlockRoslyn(methodCtx.block());
 
-        var method = new CSharpMethod(name) {
-            ReturnType = CSharpType.Void,
-            Visibility = visb,
-            Arguments  = args
-        };
+        // Rewrite return style
+        body = ReturnValueRewriter.RewriteMethodReturn(type, name, body);
 
-        _method.Push(method);
-        try {
-            method.Statements = GetBlock(sub.block());
-            return method;
-        }
-        finally {
-            _method.Pop();
-        }
+        return MethodDeclaration(type, name)
+            .WithModifiers(TokenList(new SyntaxToken?[] {
+                Token(visb),
+                @static ? Token(SyntaxKind.StaticKeyword) : null
+            }.OfType<SyntaxToken>()))
+            .WithParameterList(GetMethodParameters(methodCtx.argList()))
+            .WithBody(body);
     }
 
-    CSharpMethod GetMethod(FunctionStmtContext func)
+    PropertyDeclarationSyntax GetProperty(IPropertyContext propCtx, bool @static = false)
     {
-        using var _ = new TraceMethod(func);
+        var vis = GetVisibilityKeyword(propCtx.visibility());
+        var name = GetIdentifier(propCtx.ambiguousIdentifier());
+        var body = GetBlockRoslyn(propCtx.block());
 
-        var name = GetIdentifier(func.ambiguousIdentifier());
-        var visb = GetVisibility(func.visibility());
-        var args = GetMethodArguments(func.argList());
+        SyntaxKind kind;
+        TypeSyntax type;
 
-        var method = new CSharpMethod(name) {
-            ReturnType = GetType(func.asTypeClause()),
-            Visibility = visb,
-            Arguments  = args
-        };
-
-        _method.Push(method);
-        try {
-            method.Statements = GetBlock(func.block());
-            return method;
+        if (propCtx is PropertyGetStmtContext get) {
+            kind = SyntaxKind.GetAccessorDeclaration;
+            type = GetTypeRoslyn(get.asTypeClause());
+            body = ReturnValueRewriter.RewriteMethodReturn(type, name, body);
         }
-        finally {
-            _method.Pop();
+        else if (propCtx is IPropertySetContext set) {
+            kind = SyntaxKind.SetAccessorDeclaration;
+
+            var parameters = GetMethodParameters(set.argList());
+            if (parameters.Parameters.Count != 1) {
+                throw NotSupported(set, "Expected one parameter for setter.");
+            }
+
+            type = parameters.Parameters[0].Type;
+
+            var identifier = parameters.Parameters[0].Identifier.ValueText;
+            if (!Equals(identifier, "value")) {
+                var renamer = new SimpleIdentifierRenamer(identifier, "value");
+                body = (BlockSyntax)renamer.Visit(body);
+            }
         }
+        else {
+            throw NotSupported(propCtx);
+        }
+
+        return PropertyDeclaration(type, name)
+            .WithModifiers(TokenList(new SyntaxToken?[] {
+                Token(vis),
+                @static || propCtx.STATIC() is not null ? Token(SyntaxKind.StaticKeyword) : null,
+            }.OfType<SyntaxToken>()))
+            .WithAccessorList(AccessorList(
+                SingletonList(AccessorDeclaration(kind)
+                    .WithBody(body))));
     }
+
+
 
     CSharpExtern GetExtern(DeclareStmtContext declare)
     {
@@ -239,6 +235,29 @@ partial class CSharpTransformer()
             Alias = declare.STRINGLITERAL(1)?.GetText()?.Trim('"'),
             Arguments = [.. GetMethodArguments(declare.argList())]
         };
+    }
+
+    ParameterListSyntax GetMethodParameters(ArgListContext argsContext)
+    {
+        using var _ = new TraceMethod(argsContext);
+
+        ParameterSyntax GetParameter(ArgContext arg)
+        {
+            var parameter = Parameter(Identifier(GetIdentifier(arg.ambiguousIdentifier())))
+                .WithType(GetTypeRoslyn(arg.asTypeClause()));
+
+            if (arg.argDefaultValue() is ArgDefaultValueContext def) {
+                parameter = parameter.WithDefault(
+                    EqualsValueClause(
+                        ParseExpression(GetValue(def.valueStmt()).ToString())));
+            }
+
+            return parameter;
+        }
+
+        return ParameterList(
+            SeparatedList(
+                argsContext.arg().Select(GetParameter).ToArray()));
     }
 
     List<CSharpArgument> GetMethodArguments(ArgListContext argListContext)
@@ -258,6 +277,25 @@ partial class CSharpTransformer()
 
     // Statements
 
+    BlockSyntax GetBlockRoslyn(BlockContext block)
+    {
+        using var _ = new TraceMethod(block);
+
+        var blockSyntax = Block();
+
+        if (block is not null) {
+            foreach (var stmt in block.blockStmt()) {
+                var statements = GetBlockStatements(stmt);
+                foreach (var statement in statements) {
+                    var statementSyntax = ParseStatement(statement.ToString());
+                    blockSyntax = blockSyntax.AddStatements(statementSyntax);
+                }
+            }
+        }
+
+        return blockSyntax;
+    }
+
     CSharpBlockStatement GetBlock(BlockContext blockCtx)
     {
         using var _ = new TraceMethod(blockCtx);
@@ -268,17 +306,11 @@ partial class CSharpTransformer()
 
         var block = new CSharpBlockStatement();
 
-        _block.Push(block);
-        try {
-            foreach (var stmt in blockCtx.blockStmt()) {
-                block.Statements.AddRange(GetBlockStatements(stmt));
-            }
+        foreach (var stmt in blockCtx.blockStmt()) {
+            block.Statements.AddRange(GetBlockStatements(stmt));
+        }
 
-            return block;
-        }
-        finally {
-            _block.Pop();
-        }
+        return block;
     }
 
     IEnumerable<ICSharpStatement> GetBlockStatements(BlockStmtContext stmt)
@@ -358,7 +390,7 @@ partial class CSharpTransformer()
         }
 
         else if (stmt.exitStmt() is ExitStmtContext exit) {
-            return [new CSharpGenericStatement($"return;")];
+            return [new CSharpReturnStatement()];
         }
         else if (stmt.resumeStmt() is ResumeStmtContext resume) {
             return [GetResume(resume)];
@@ -585,7 +617,7 @@ partial class CSharpTransformer()
         return new CSharpForEachStatement() {
             Variable = GetIdentifierReference(forEach.ambiguousIdentifier(0), forEach.typeHint()),
             Enumerator = GetValue(forEach.valueStmt()),
-            Statements = new CSharpBlockStatement(GetBlock(forEach.block()))
+            Statements = new(GetBlock(forEach.block()))
         };
     }
 
@@ -1048,6 +1080,25 @@ partial class CSharpTransformer()
         return new CSharpIdentifierExpression(GetIdentifier(identifier), GetType(typeHint));
     }
 
+    static SyntaxToken GetIdentifierToken(IIdentifierContext identifier)
+    {
+        if (identifier is null) {
+            throw new ArgumentNullException(nameof(identifier));
+        }
+
+        using var _ = new TraceMethod(identifier);
+
+        var text = identifier.GetText();
+        if (string.Equals(text, "Me", StringComparison.InvariantCultureIgnoreCase)) {
+            text = "this";
+        }
+        else if (string.Equals(text, "vbNullString", StringComparison.InvariantCultureIgnoreCase)) {
+            text = "string.Empty";
+        }
+
+        return Identifier(text);
+    }
+
     static string GetIdentifier(IIdentifierContext identifier)
     {
         if (identifier is null) {
@@ -1068,6 +1119,17 @@ partial class CSharpTransformer()
     }
 
 
+    static TypeSyntax GetTypeRoslyn(AsTypeClauseContext asType)
+    {
+        if (asType == null) {
+            return PredefinedType(Token(SyntaxKind.VoidKeyword));
+        }
+        if (asType.fieldLength() is FieldLengthContext length) {
+            throw NotSupported(length);
+        }
+        return GetTypeRoslyn(asType.type());
+    }
+
     static CSharpType GetType(AsTypeClauseContext asType)
     {
         if (asType == null) {
@@ -1079,6 +1141,43 @@ partial class CSharpTransformer()
         }
 
         return GetType(asType.type());
+    }
+
+
+    static TypeSyntax GetTypeRoslyn(TypeContext type)
+    {
+        static PredefinedTypeSyntax Predefined(SyntaxKind kind) => PredefinedType(Token(kind));
+        
+        TypeSyntax ts;
+        if (type.complexType() is ComplexTypeContext complex) {
+            ts = ParseTypeName(complex.GetText());
+        }
+        else if (type.baseType() is BaseTypeContext baseType) {
+            var typeSymbol = ((ITerminalNode)baseType.GetChild(0)).Symbol;
+            ts = typeSymbol.Type switch {
+                BOOLEAN => Predefined(SyntaxKind.BoolKeyword),
+                BYTE => Predefined(SyntaxKind.ByteKeyword),
+                COLLECTION => ParseTypeName("System.Collections.List<object>"),
+                DATE => ParseTypeName("System.DateTime"),
+                DOUBLE => Predefined(SyntaxKind.DoubleKeyword),
+                INTEGER => Predefined(SyntaxKind.ShortKeyword),
+                LONG => Predefined(SyntaxKind.IntKeyword),
+                SINGLE => Predefined(SyntaxKind.FloatKeyword),
+                STRING => Predefined(SyntaxKind.StringKeyword),
+                OBJECT => Predefined(SyntaxKind.ObjectKeyword),
+                VARIANT => Predefined(SyntaxKind.ObjectKeyword),
+                _ => ParseTypeName(typeSymbol.Text)
+            };
+        }
+        else {
+            throw NotSupported(type);
+        }
+
+        if (type.LPAREN() != null || type.RPAREN() != null) {
+            ts = ArrayType(ts);
+        }
+
+        return ts;
     }
 
     static CSharpType GetType(TypeContext type)
@@ -1141,6 +1240,25 @@ partial class CSharpTransformer()
         }
     }
 
+    static SyntaxKind GetVisibilityKeyword(IVisibilityContext v)
+    {
+        if (v is null) {
+            return SyntaxKind.PrivateKeyword;
+        }
+        else if (v.PRIVATE() != null) {
+            return SyntaxKind.PrivateKeyword;
+        }
+        else if (v.PUBLIC() != null || v.GLOBAL() != null) {
+            return SyntaxKind.PublicKeyword;
+        }
+        else if (v.FRIEND() != null) {
+            return SyntaxKind.InternalKeyword;
+        }
+        else {
+            throw NotSupported(v);
+        }
+    }
+
     static CSharpVisibility GetVisibility(VisibilityContext v)
     {
         if (v is null) {
@@ -1162,13 +1280,16 @@ partial class CSharpTransformer()
 
 
     [DebuggerHidden]
-    static Exception NotSupported(object context, [CallerMemberName] string caller = null)
+    static Exception NotSupported(object context, string message = null, [CallerMemberName] string caller = null)
     {
+        if (string.IsNullOrEmpty(message)) {
+            message = "Not supported";
+        }
         if (context is ParserRuleContext parser) {
-            throw new NotSupportedException($"Not supported from {caller}: '{parser.GetText()}'\r\n{new ConsoleVisitor().Visit(parser)}");
+            throw new NotSupportedException($"{message} from {caller}: '{parser.GetText()}'\r\n{new ConsoleVisitor().Visit(parser)}");
         }
         else {
-            throw new NotSupportedException($"Not supported from {caller}: '{context.GetType().Name}'");
+            throw new NotSupportedException($"{message} from {caller}: '{context.GetType().Name}'");
         }
     }
 

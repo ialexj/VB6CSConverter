@@ -1,8 +1,4 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Text;
-
-namespace VB6Converter;
+﻿namespace VB6Parser;
 
 public class VisualBasicProject
 {
@@ -17,7 +13,7 @@ public class VisualBasicProject
         const string ClassMarker = "Class";
         const string UserControlMarker = "UserControl";
 
-        using var reader = new StreamReader(path, Encoding.GetEncoding(1252));
+        using var reader = new StreamReader(path, VisualBasic6Encoding.Encoding);
 
         var basePath = Path.GetDirectoryName(path);
         string GetFullPath(string path) => Path.Combine(basePath, path.Trim());
