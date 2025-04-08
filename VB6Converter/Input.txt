@@ -1,5 +1,0 @@
-﻿Public Sub HelloWorld()
-	With variable
-		.abc = 1
-	End With
-End Sub

@@ -10,9 +10,9 @@ public static class Program
     {
         Trace.Listeners.Add(new TextWriterTraceListener("Input.log"));
 
-        //await VB6ToCSharpConverter.ConvertProject(
-        //    @"C:\Users\aj\source\repos\OptiwareVB6\Optiware\Optiware98.vbp", 
-        //    ["modMain"],
-        //    "./Optiware98");
+        await VB6ToCSharpConverter.ConvertProject(
+            @"C:\Users\aj\source\repos\OptiwareVB6\Optiware\Optiware98.vbp", 
+            ["modMain"],
+            "./Optiware98");
     }
 }

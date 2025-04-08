@@ -21,7 +21,7 @@ public static class VB6ToCSharpConverter
     public static async Task<CompilationUnitSyntax> ConvertFile(string path, string name, string nsName, VisualBasicFileType type, string output)
     {
         using var reader = VisualBasic6Lexer.OpenFile(path);
-        var cu = GetCompilationUnit(reader, name, name, type, output);
+        var cu = GetCompilationUnit(reader, name, nsName, type, output);
         await File.WriteAllTextAsync(output, cu.ToFullString());
         return cu;
     }
@@ -69,10 +69,12 @@ public static class VB6ToCSharpConverter
             project.Files.Select(file => Task.Run(
                 async () => {
                     try {
-                        var cu = await ConvertFile(file.Path, file.Name, project.Name, file.Type, outDir);
+                        var output = Path.Combine(outDir, $"{file.Name}.cs");
+                        var cu = await ConvertFile(file.Path, file.Name, project.Name, file.Type, output);
                         return new Conversion(file.Name, cu, null);
                     }
                     catch (Exception ex) {
+                        Console.WriteLine($"Error: {ex.Message}");
                         return new Conversion(file.Name, null, ex);
                     }
                 })));
