@@ -11,6 +11,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using VB6Parser;
+using static Antlr4.Runtime.Atn.SemanticContext;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Parser.VisualBasic6Parser;
 
@@ -159,7 +160,7 @@ public class CSharpTransformation
             var name = GetIdentifier(methodCtx.ambiguousIdentifier());
             var visb = GetVisibilityKeyword(methodCtx.visibility());
             var args = GetMethodArguments(methodCtx.argList());
-            var body = GetBlockRoslyn(methodCtx.block());
+            var body = GetBlockSyntax(methodCtx.block());
 
             // Rewrite return style
             body = ReturnValueRewriter.RewriteMethodReturn(type, name, body);
@@ -177,7 +178,7 @@ public class CSharpTransformation
         {
             var vis = GetVisibilityKeyword(propCtx.visibility());
             var name = GetIdentifier(propCtx.ambiguousIdentifier());
-            var body = GetBlockRoslyn(propCtx.block());
+            var body = GetBlockSyntax(propCtx.block());
 
             SyntaxKind kind;
             TypeSyntax type;
@@ -346,34 +347,46 @@ public class CSharpTransformation
 
     // Statements
 
-    BlockSyntax GetBlockRoslyn(BlockContext block)
+    
+
+    BlockSyntax GetBlockSyntax(BlockContext block) => GetBlockSyntax(block, GetMethodStatement);
+    
+    BlockSyntax GetBlockSyntax(BlockContext block, Func<BlockStmtContext, StatementSyntax> statements)
     {
         using var _ = new TraceMethod(block);
-
-        if (block is null)
-            return Block();
-
-        return Block().WithStatements(List(block.blockStmt().SelectMany(GetStatement)));
+        return Block(block?.blockStmt().Select(statements) ?? []);
     }
 
-    IEnumerable<StatementSyntax> GetStatement(BlockStmtContext stmt)
+    StatementSyntax GetMethodStatement(BlockStmtContext stmt)
     {
         using var _ = new TraceMethod(stmt);
 
         if (stmt.call() is ICallContext call) {
-            return [ GetCallStatement(call) ];
+            return GetCallStatement(call);
         }
         else if (stmt.assignment() is IAssignmentContext assignment) {
-            return [ ExpressionStatement(GetAssignment(assignment)) ];
+            return ExpressionStatement(GetAssignment(assignment));
         }
         else if (stmt.withStmt() is WithStmtContext with) {
-            return [ GetWith(with) ];
+            return GetWith(with);
         }
         else if (stmt.ifThenElseStmt() is IfThenElseStmtContext ifthen) {
-            return [ GetIf(ifthen) ];
+            return GetIf(ifthen);
+        }
+        else if (stmt.forNextStmt() is ForNextStmtContext fornext) {
+            return GetForNext(fornext);
         }
         else {
-            return GetBlockStatements(stmt).Select(s => ParseStatement(s.ToString()));
+            var legacy = GetBlockStatements(stmt).Select(s => ParseStatement(s.ToString())).ToArray();
+            if (legacy.Length == 0) {
+                return EmptyStatement();
+            }
+            else if (legacy.Length == 1) {
+                return legacy[0];
+            }
+            else {
+                return Block(legacy);
+            }
         }
     }
 
@@ -424,9 +437,6 @@ public class CSharpTransformation
 
         else if (stmt.doLoopStmt() is DoLoopStmtContext doLoop) {
             return [GetDoLoop(doLoop)];
-        }
-        else if (stmt.forNextStmt() is ForNextStmtContext forNext) {
-            return [GetForNext(forNext)];
         }
         else if (stmt.forEachStmt() is ForEachStmtContext forEach) {
             return [GetForEach(forEach)];
@@ -489,7 +499,7 @@ public class CSharpTransformation
 
         _with.Push(with.implicitCallStmt_InStmt());
         try {
-            var block = GetBlockRoslyn(with.block());
+            var block = GetBlockSyntax(with.block());
 
             if (block.Statements.Count == 0) {
                 return EmptyStatement();
@@ -498,7 +508,7 @@ public class CSharpTransformation
                 return block.Statements[0];
             }
             else {
-                return GetBlockRoslyn(with.block());
+                return GetBlockSyntax(with.block());
             }
         }
         finally {
@@ -548,7 +558,7 @@ public class CSharpTransformation
 
         var invocation = segments.LastOrDefault();
         foreach (var s in segments) {
-            var id = GetIdentifierNameToken(s.identifier());
+            var id = GetIdentifierName(s);
 
             if (expr is not null) {
                 expr = MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, expr, id);
@@ -575,6 +585,8 @@ public class CSharpTransformation
         return expr;
     }
 
+    IdentifierNameSyntax GetIdentifierName(ICallTargetContext target)
+        => GetIdentifierNameToken(target.identifier()); // todo: handle cast
 
 
     IEnumerable<CSharpRedimStatement> GetRedim(RedimStmtContext redim)
@@ -692,7 +704,7 @@ public class CSharpTransformation
         if (ifthen is BlockIfThenElseContext @if) {
             if (@if.ifBlockStmt() is IfBlockStmtContext ifBlock) {
                 var condition = GetValueSyntax(ifBlock.ifConditionStmt().valueStmt());
-                var then = GetBlockRoslyn(ifBlock.block());
+                var then = GetBlockSyntax(ifBlock.block());
 
                 root = IfStatement(condition, then);
                 current = root;
@@ -701,7 +713,7 @@ public class CSharpTransformation
             if (@if.ifElseIfBlockStmt() is IfElseIfBlockStmtContext[] elseifs) {
                 foreach (var elseif in elseifs) {
                     var condition = GetValueSyntax(elseif.ifConditionStmt().valueStmt());
-                    var then = GetBlockRoslyn(elseif.block());
+                    var then = GetBlockSyntax(elseif.block());
 
                     var next = IfStatement(condition, then);
                     current = current.WithElse(ElseClause(next));
@@ -710,20 +722,18 @@ public class CSharpTransformation
             }
 
             if (@if.ifElseBlockStmt() is IfElseBlockStmtContext @else) {
-                var block = GetBlockRoslyn(@else.block());
+                var block = GetBlockSyntax(@else.block());
                 current = current.WithElse(ElseClause(block));
             }
         }
         else if (ifthen is InlineIfThenElseContext inline && inline.ifConditionStmt() is IfConditionStmtContext ifcond) {
             var condition = GetValueSyntax(ifcond.valueStmt());
-            var statements = GetStatement(inline.blockStmt(0)).ToArray();
-            var statement = statements.Length == 1 ? statements[0] : Block(statements);
+            var statement = GetMethodStatement(inline.blockStmt(0));
 
             root = IfStatement(condition, statement);
 
             if (inline.blockStmt(1) is BlockStmtContext elseBlock) {
-                var elseStatements = GetStatement(elseBlock).ToArray();
-                var elseStatement = elseStatements.Length == 1 ? elseStatements[0] : Block(elseStatements);
+                var elseStatement = GetMethodStatement(elseBlock);
                 root = root.WithElse(ElseClause(elseStatement));
             }
         }
@@ -735,44 +745,54 @@ public class CSharpTransformation
     }
 
 
-    CSharpGenericStatement GetForNext(ForNextStmtContext forNext)
+    StatementSyntax GetForNext(ForNextStmtContext forNext)
     {
-        var sb = new StringBuilder();
-        sb.Append("for (");
+        var type = forNext.asTypeClause() is AsTypeClauseContext asType
+            ? GetTypeRoslyn(asType)
+            : PredefinedType(Token(SyntaxKind.IntKeyword));
 
-        if (forNext.asTypeClause() is AsTypeClauseContext asType) {
-            sb.Append(GetType(asType));
-            sb.Append(' ');
+        var id = GetIdentifierName(forNext.iCS_S_VariableOrProcedureCall());
+
+        var start = GetValueSyntax(forNext.valueStmt(0));
+        var end   = GetValueSyntax(forNext.valueStmt(1));
+        var step  = GetValueSyntax(forNext.valueStmt(2));
+
+        bool stepIsOne = true, stepIsNegative = false;
+        if (step is LiteralExpressionSyntax literal && literal.Token.Value is int istep) {
+            stepIsOne = istep == 1 || istep == -1;
+            stepIsNegative = istep < 0;
+            if (stepIsNegative) {
+                step = LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(-istep));
+            }
         }
 
-        sb.Append(GetVariableOrProcedureCall(forNext.iCS_S_VariableOrProcedureCall(), CallType.Unspecified));
-        sb.Append(" = ");
-        sb.Append(GetValue(forNext.valueStmt(0)));
-        sb.Append("; ");
+        var decl = VariableDeclaration(type)
+            .WithVariables(SingletonSeparatedList(
+                VariableDeclarator(id.Identifier).WithInitializer(EqualsValueClause(start))));
 
-        sb.Append(GetValue(forNext.valueStmt(0)));
-        sb.Append(" < ");
-        sb.Append(GetValue(forNext.valueStmt(1)));
-        sb.Append("; ");
+        var ops = stepIsNegative
+            ? (SyntaxKind.PostDecrementExpression, SyntaxKind.SubtractAssignmentExpression, SyntaxKind.GreaterThanOrEqualExpression)
+            : (SyntaxKind.PostIncrementExpression, SyntaxKind.AddAssignmentExpression, SyntaxKind.LessThanOrEqualExpression);
 
-        sb.Append(GetValue(forNext.valueStmt(0)));
+        
 
-        if (forNext.valueStmt(2) is ValueStmtContext step) {
-            sb.Append(" += ");
-            sb.Append(GetValue(step));
-        }
-        else {
-            sb.Append("++");
-        }
+        ExpressionSyntax incrementor = stepIsOne
+            ? PostfixUnaryExpression(ops.Item1, id) 
+            : AssignmentExpression(ops.Item2, id, step);
 
-        sb.Append(") ");
-        sb.Append(new CSharpBlockStatement(GetBlock(forNext.block())).ToString());
+        var block = GetBlockSyntax(forNext.block(), stmt => {
+            if (stmt.exitStmt() is ExitStmtContext exit && exit.EXIT_FOR() is not null) {
+                return BreakStatement();
+            }
+            else {
+                return GetMethodStatement(stmt);
+            }
+        });
 
-        if (forNext.typeHint().Length > 0) {
-            NotSupported(forNext.typeHint()[0]);
-        }
-
-        return new CSharpGenericStatement(sb.ToString());
+        return ForStatement(block)
+            .WithDeclaration(decl)
+            .WithCondition(BinaryExpression(ops.Item3, id, GetValueSyntax(forNext.valueStmt(1))))
+            .WithIncrementors(SingletonSeparatedList(incrementor));
     }
     
     CSharpForEachStatement GetForEach(ForEachStmtContext forEach)
@@ -1001,14 +1021,23 @@ public class CSharpTransformation
 
     ExpressionSyntax GetValueSyntax(ValueStmtContext valueCtx)
     {
-        if (valueCtx is VsICSContext vsics) {
+        using var _ = new TraceMethod(valueCtx);
+
+        if (valueCtx is null) {
+            return LiteralExpression(SyntaxKind.NullLiteralExpression);
+        }
+        else if (valueCtx is VsICSContext vsics) {
             return GetCallInvocationExpression(vsics.implicitCallStmt_InStmt());
+        }
+        else if (valueCtx is VsLiteralContext literal) {
+            return GetLiteralSyntax(literal.literal());
         }
         else {
             return ParseExpression(GetValue(valueCtx).ToString());
         }
     }
 
+    
 
     ICSharpExpression GetValue(ValueStmtContext value)
     {
@@ -1088,7 +1117,96 @@ public class CSharpTransformation
         ICSharpExpression GetOperator(ValueStmtContext[] values, string separator)
             => new CSharpOperatorExpression(separator, values.Select(GetValue).ToArray());
     }
-    
+
+
+    static ExpressionSyntax GetLiteralSyntax(LiteralContext lit)
+    {
+        if (lit.TRUE() is not null) {
+            return LiteralExpression(SyntaxKind.TrueLiteralExpression);
+        }
+        else if (lit.FALSE() is not null) {
+            return LiteralExpression(SyntaxKind.FalseLiteralExpression);
+        }
+        else if (lit.NOTHING() is not null || lit.NULL() is not null) {
+            return LiteralExpression(SyntaxKind.NullLiteralExpression);
+        }
+        else if (lit.INTEGERLITERAL() is ITerminalNode @short) {
+            return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(Convert.ToInt16(@short.Symbol.Text)));
+        }
+        else if (lit.DOUBLELITERAL() is ITerminalNode @double) {
+            return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(Convert.ToDouble(@double.GetText().TrimEnd(['&']))));
+        }
+        else if (lit.STRINGLITERAL() is ITerminalNode @string) {
+            string str = @string.GetText();
+            if (str.Contains('\\')) {
+                str = str.Replace("\\", "\\\\");
+            }
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(str));
+        }
+        else if (lit.FILENUMBER() is ITerminalNode file) {
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(file.GetText().TrimStart('#')));
+        }
+        else if (lit.COLORLITERAL() is ITerminalNode color) {
+            var hex = "0x" + color.Symbol.Text[2..].TrimEnd(['&']).PadLeft(6, '0').PadLeft(8, 'F');
+            var col = System.Drawing.Color.FromArgb(Convert.ToInt32(hex, 16));
+
+            if (col.IsNamedColor) {
+                return InvocationExpression(
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName("Color"), IdentifierName("FromName")
+                    ))
+                    .WithArgumentList(ArgumentList(
+                        LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(col.Name))
+                    ));
+            }
+            else if (col.A == 255) {
+                return InvocationExpression(
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName("Color"), IdentifierName("FromArgb")
+                    ))
+                    .WithArgumentList(ArgumentList(
+                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.R)),
+                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.G)),                                
+                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.B))
+                    ));
+            }
+            else {
+                return InvocationExpression(
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName("Color"), IdentifierName("FromArgb")
+                    ))
+                    .WithArgumentList(ArgumentList(
+                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.A)),
+                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.R)),
+                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.G)),
+                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.B))
+                    ));
+            }
+        }
+        else {
+            throw NotSupported(lit);
+        }
+    }
+
+    static ArgumentListSyntax ArgumentList(params ExpressionSyntax[] args)
+    {
+        if (args is null || args.Length == 0) {
+            return SyntaxFactory.ArgumentList();
+        }
+        else if (args.Length == 1) {
+            return SyntaxFactory.ArgumentList(SingletonSeparatedList(Argument(args[0])));
+        }
+        else {
+            return SyntaxFactory.ArgumentList(SeparatedList<ArgumentSyntax>(
+                new SyntaxNodeOrTokenList(args
+                    .Select(a => (SyntaxNodeOrToken)Argument(a))
+                    .Intersperse(Token(SyntaxKind.CommaToken)))));
+        }
+    }
+
     static string GetLiteral(LiteralContext lit)
     {
         if (lit.COLORLITERAL() is ITerminalNode color) {
@@ -1157,7 +1275,7 @@ public class CSharpTransformation
         }
     }
 
-    ArgumentListSyntax GetArgumentList(ArgsCallContext args) => ArgumentList(GetArgumentListCore(args));
+    ArgumentListSyntax GetArgumentList(ArgsCallContext args) => SyntaxFactory.ArgumentList(GetArgumentListCore(args));
 
     BracketedArgumentListSyntax GetBracketedArgumentList(ArgsCallContext args) => BracketedArgumentList(GetArgumentListCore(args));
 

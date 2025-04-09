@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Runtime.CompilerServices;
 using System.Text;
+using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests;
 
@@ -10,7 +11,7 @@ namespace VB6Converter.Tests;
 public class CallTests
 {
     [TestMethod]
-    public void CallStatement() => ValidateMemberMatches(
+    public void CallStatement() => ValidateBodyMatches(
         """
         MyFunction1 1, 2, 3, a:= 4
         Call MyFunction2(1, 2, 3, a:= 4)
@@ -21,7 +22,7 @@ public class CallTests
         """);
 
     [TestMethod]
-    public void CallStatementWithNoParameters() => ValidateMemberMatches(
+    public void CallStatementWithNoParameters() => ValidateBodyMatches(
         """
         MyFunction1
         Call MyFunction2
@@ -32,7 +33,7 @@ public class CallTests
         """);
 
     [TestMethod]
-    public void CallSingleMemberStatement() => ValidateMemberMatches(
+    public void CallSingleMemberStatement() => ValidateBodyMatches(
         """
         obj.MyFunction 1, 2, 3, a:= 4
         Call obj.MyFunction(1, 2, 3, a:= 4)
@@ -43,7 +44,7 @@ public class CallTests
         """);
 
     [TestMethod]
-    public void CallMultiMemberStatement() => ValidateMemberMatches(
+    public void CallMultiMemberStatement() => ValidateBodyMatches(
         """
         one.two.MyFunction 1, 2, 3, a:= 4
         Call one.two.MyFunction(1, 2, 3, a:= 4)
@@ -55,120 +56,100 @@ public class CallTests
 
 
     [TestMethod]
-    public void CallExpression() => ValidateMemberMatches(
+    public void CallExpression() => ValidateBodyMatches(
         "x = MyFunction(1, 2, 3, a:= 4)",
         "x = MyFunction(1, 2, 3, a: 4);"
     );
 
     [TestMethod]
-    public void CallSingleMemberExpression() => ValidateMemberMatches(
+    public void CallSingleMemberExpression() => ValidateBodyMatches(
         "x = obj.MyFunction(1, 2, 3, a:= 4)",
         "x = obj.MyFunction(1, 2, 3, a: 4);"
     );
 
     [TestMethod]
-    public void CallMultiMemberExpression() => ValidateMemberMatches(
+    public void CallMultiMemberExpression() => ValidateBodyMatches(
         "x = one.two.MyFunction(1, 2, 3, a:= 4)",
         "x = one.two.MyFunction(1, 2, 3, a: 4);"
     );
 
 
     [TestMethod]
-    public void ArrayToFunctionAssignmentExpression() => ValidateMemberMatches(
+    public void ArrayToFunctionAssignmentExpression() => ValidateBodyMatches(
         "arr(1) = MyFunction(1, 2, 3, a:= 4)",
         "arr[1] = MyFunction(1, 2, 3, a: 4);"
     );
 
     [TestMethod]
-    public void ArrayMemberToFunctionAssignmentExpression() => ValidateMemberMatches(
+    public void ArrayMemberToFunctionAssignmentExpression() => ValidateBodyMatches(
         "one.arr(1) = MyFunction(1, 2, 3, a:= 4)",
         "one.arr[1] = MyFunction(1, 2, 3, a: 4);"
     );
 
     [TestMethod]
-    public void ArraySubMemberToFunctionAssignmentExpression() => ValidateMemberMatches(
+    public void ArraySubMemberToFunctionAssignmentExpression() => ValidateBodyMatches(
         "one.two.arr(1) = MyFunction(1, 2, 3, a:= 4)",
         "one.two.arr[1] = MyFunction(1, 2, 3, a: 4);"
     );
 
 
     [TestMethod]
-    public void AssignArrayPresumesFunction() => ValidateMemberMatches(
+    public void AssignArrayPresumesFunction() => ValidateBodyMatches(
         "x = arr(1, 2)",
         "x = arr(1, 2);"
     );
 
 
     [TestMethod]
-    public void AssignValue() => ValidateMemberMatches(
+    public void AssignValue() => ValidateBodyMatches(
         "x = y",
         "x = y;"
     );
 
     [TestMethod]
-    public void AssignValueMember() => ValidateMemberMatches(
+    public void AssignValueMember() => ValidateBodyMatches(
         "x = one.y",
         "x = one.y;"
     );
 
 
     [TestMethod]
-    public void AssignToDictionary() => ValidateMemberMatches(
+    public void AssignToDictionary() => ValidateBodyMatches(
         "x!key = v",
         "x[\"key\"] = v;"
     );
 
     [TestMethod]
-    public void AssignToMemberDictionary() => ValidateMemberMatches(
+    public void AssignToMemberDictionary() => ValidateBodyMatches(
         "one.x!key = v",
         "one.x[\"key\"] = v;"
     );
 
     [TestMethod]
-    public void AssignToSubMemberDictionary() => ValidateMemberMatches(
+    public void AssignToSubMemberDictionary() => ValidateBodyMatches(
         "one.two.x!key = v",
         "one.two.x[\"key\"] = v;"
     );
 
     [TestMethod]
-    public void AssignDictionaryToValue() => ValidateMemberMatches(
+    public void AssignDictionaryToValue() => ValidateBodyMatches(
         "v = x!key",
         "v = x[\"key\"];"
     );
 
     [TestMethod]
-    public void AssignMemberDictionaryToValue() => ValidateMemberMatches(
+    public void AssignMemberDictionaryToValue() => ValidateBodyMatches(
         "v = one.x!key",
         "v = one.x[\"key\"];"
     );
 
     [TestMethod]
-    public void AssignSubMemberDictionaryToValue() => ValidateMemberMatches(
+    public void AssignSubMemberDictionaryToValue() => ValidateBodyMatches(
         "v = one.two.x!key",
         "v = one.two.x[\"key\"];"
     );
 
 
 
-    static void ValidateMemberMatches(string vb, string cs, [CallerMemberName] string? name = null)
-    {
-        var wrapper = $"""
-            Sub Test()
-                {vb}
-            End Sub
-            """;
-
-        var cu = VB6ToCSharpConverter.GetCompilationUnit(wrapper, name);
-        var ns = (FileScopedNamespaceDeclarationSyntax)cu.Members[0];
-        var cls = (ClassDeclarationSyntax)ns.Members[0];
-        var met = (MethodDeclarationSyntax)cls.Members[0];
-
-        var sb = new StringBuilder();
-        foreach (var m in met.Body!.Statements) {
-            sb.AppendLine(m.NormalizeWhitespace().ToFullString());
-        }
-
-        string converted = sb.ToString().TrimEnd(Environment.NewLine.ToCharArray());
-        converted.Should().Be(cs);
-    }
+    
 }
