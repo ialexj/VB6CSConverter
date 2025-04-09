@@ -48,7 +48,7 @@ public static class VB6ToCSharpConverter
             throw new Exception($"error parsing {name}.");
         }
 
-        var transform = new CSharpTransformation();
+        var transform = new CSharpTransformation(failOnError: false);
         return transform.GetCompilationUnit(parser.module(), name, nsName, type);
     }
 
@@ -61,23 +61,38 @@ public static class VB6ToCSharpConverter
             Directory.CreateDirectory(outDir);
         }
 
-        if (filter != null) {
-            project.Files = project.Files.Where(f => filter.Contains(f.Name)).ToList();
-        }
+        var files = filter != null ? project.Files.Where(f => filter.Contains(f.Name)) : project.Files;
 
-        return await Task.WhenAll(
-            project.Files.Select(file => Task.Run(
+        var conversions = await Task.WhenAll(
+            files.Select(file => Task.Run(
                 async () => {
                     try {
+                        Console.WriteLine($"{file.Name} Converting...");
                         var output = Path.Combine(outDir, $"{file.Name}.cs");
                         var cu = await ConvertFile(file.Path, file.Name, project.Name, file.Type, output);
+                        Console.WriteLine($"{file.Name} Converted.");
                         return new Conversion(file.Name, cu, null);
                     }
                     catch (Exception ex) {
-                        Console.WriteLine($"Error: {ex.Message}");
+                        Console.WriteLine($"{file.Name} ERROR: {ex.Message}");
                         return new Conversion(file.Name, null, ex);
                     }
                 })));
+
+        string projectPath = Path.Combine(outDir, $"{project.Name}.csproj");
+        if (!File.Exists(projectPath)) {
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType>
+                    <TargetFramework>net9.0</TargetFramework>
+                    <LangVersion>latest</LangVersion>
+                  </PropertyGroup>
+                </Project>
+                """);
+        }
+
+        return conversions;
     }
 
     public record struct Conversion(string Name, CompilationUnitSyntax CompilationUnit, Exception Error) { }

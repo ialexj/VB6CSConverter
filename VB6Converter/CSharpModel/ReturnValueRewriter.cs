@@ -12,10 +12,10 @@ public class ReturnValueRewriter(IdentifierNameSyntax identifier) : CSharpSyntax
         return ReturnStatement(identifier).WithTriviaFrom(node);
     }
 
-    public static BlockSyntax RewriteMethodReturn(TypeSyntax methodType, string methodName, BlockSyntax body)
+    public static BlockSyntax RewriteMethodReturn(TypeSyntax methodType, string methodName, StatementSyntax body)
     {
         if (methodType is PredefinedTypeSyntax predefined && predefined.Keyword.IsKind(SyntaxKind.VoidKeyword)) {
-            return body;
+            return body is BlockSyntax bs ? bs : Block(new[] { body });
         }
 
         var block = Block()
@@ -31,7 +31,9 @@ public class ReturnValueRewriter(IdentifierNameSyntax identifier) : CSharpSyntax
 
         var rewriter = new ReturnValueRewriter(returnIdentifier);
 
-        foreach (var statement in body.Statements) {
+        var statements = body is BlockSyntax b ? b.Statements : [body];
+
+        foreach (var statement in statements) {
             var newStatement = (StatementSyntax)rewriter.Visit(statement);
             block = block.AddStatements(newStatement);
         }

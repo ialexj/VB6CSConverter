@@ -9,17 +9,23 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
 using VB6Parser;
-using static Antlr4.Runtime.Atn.SemanticContext;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter.CSharpModel;
 
-public class CSharpTransformation
+public class CSharpTransformation(bool failOnError = true)
 {
+    readonly CSharpLegacyTransformation _legacy = new(failOnError);
     readonly Stack<ImplicitCallStmt_InStmtContext> _with = [];
+    readonly List<ComReference> _comReferences = [];
+
+    readonly List<IMethodRewriter> _rewriters = [
+        new MsgBoxRewriter()
+        ];
+
+    public IReadOnlyList<ComReference> ComReferences => _comReferences;
 
 
     public CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string name, string ns, VisualBasicFileType type = VisualBasicFileType.Module)
@@ -123,7 +129,7 @@ public class CSharpTransformation
                     List<MemberDeclarationSyntax>(
                         type.typeStmt_Element().Select(e =>
                             FieldDeclaration(
-                                VariableDeclaration(GetTypeRoslyn(e.asTypeClause()))
+                                VariableDeclaration(GetType(e.asTypeClause()))
                                     .WithVariables(
                                         SingletonSeparatedList(
                                             VariableDeclarator(GetIdentifierToken(e.ambiguousIdentifier())))))
@@ -145,7 +151,7 @@ public class CSharpTransformation
                         e.enumerationStmt_Constant().Select(c => {
                             var m = EnumMemberDeclaration(Identifier(GetIdentifier(c.ambiguousIdentifier())));
                             if (c.valueStmt() is ValueStmtContext v) {
-                                m = m.WithEqualsValue(EqualsValueClause(GetValueSyntax(v)));
+                                m = m.WithEqualsValue(EqualsValueClause(GetValue(v)));
                             }
                             return m;
                         }))
@@ -156,10 +162,9 @@ public class CSharpTransformation
         {
             using var _ = new TraceMethod(methodCtx);
 
-            var type = GetTypeRoslyn(methodCtx.asTypeClause());
+            var type = GetType(methodCtx.asTypeClause());
             var name = GetIdentifier(methodCtx.ambiguousIdentifier());
             var visb = GetVisibilityKeyword(methodCtx.visibility());
-            var args = GetMethodArguments(methodCtx.argList());
             var body = GetBlockSyntax(methodCtx.block());
 
             // Rewrite return style
@@ -185,7 +190,7 @@ public class CSharpTransformation
 
             if (propCtx is PropertyGetStmtContext get) {
                 kind = SyntaxKind.GetAccessorDeclaration;
-                type = GetTypeRoslyn(get.asTypeClause());
+                type = GetType(get.asTypeClause());
                 body = ReturnValueRewriter.RewriteMethodReturn(type, name, body);
             }
             else if (propCtx is IPropertySetContext set) {
@@ -234,7 +239,7 @@ public class CSharpTransformation
             }
 
             return MethodDeclaration(
-                GetTypeRoslyn(declare.asTypeClause()),
+                GetType(declare.asTypeClause()),
                 GetIdentifier(declare.ambiguousIdentifier()))
                 .WithModifiers(TokenList(
                     Token(GetVisibilityKeyword(declare.visibility())),
@@ -256,10 +261,10 @@ public class CSharpTransformation
             ParameterSyntax GetParameter(ArgContext arg)
             {
                 var parameter = Parameter(Identifier(GetIdentifier(arg.ambiguousIdentifier())))
-                    .WithType(GetTypeRoslyn(arg.asTypeClause()));
+                    .WithType(GetType(arg.asTypeClause()));
 
                 if (arg.argDefaultValue() is ArgDefaultValueContext def) {
-                    parameter = parameter.WithDefault(EqualsValueClause(GetValueSyntax(def.valueStmt())));
+                    parameter = parameter.WithDefault(EqualsValueClause(GetValue(def.valueStmt())));
                 }
 
                 return parameter;
@@ -289,11 +294,11 @@ public class CSharpTransformation
     {
         using var _ = new TraceMethod(@const);
 
-        return @const.constSubStmt().Select(sub => VariableDeclaration(GetTypeRoslyn(sub.asTypeClause()))
+        return @const.constSubStmt().Select(sub => VariableDeclaration(GetType(sub.asTypeClause()))
             .WithVariables(
                 SingletonSeparatedList(
                     VariableDeclarator(Identifier(GetIdentifier(sub.ambiguousIdentifier())))
-                        .WithInitializer(EqualsValueClause(GetValueSyntax(sub.valueStmt())))
+                        .WithInitializer(EqualsValueClause(GetValue(sub.valueStmt())))
                 )
             ));
     }
@@ -324,7 +329,7 @@ public class CSharpTransformation
                 }
             }
 
-            var baseType = GetTypeRoslyn(sub.asTypeClause());
+            var baseType = GetType(sub.asTypeClause());
             var type = isArray
                 ? ArrayType(baseType, SingletonList(ArrayRankSpecifier(SeparatedList<ExpressionSyntax>(omittedExpressions))))
                 : baseType;
@@ -347,21 +352,38 @@ public class CSharpTransformation
 
     // Statements
 
-    
+    BlockSyntax GetBlockSyntax(BlockContext block) => (BlockSyntax)GetBlockSyntax(block, false, GetMethodStatement);
 
-    BlockSyntax GetBlockSyntax(BlockContext block) => GetBlockSyntax(block, GetMethodStatement);
-    
-    BlockSyntax GetBlockSyntax(BlockContext block, Func<BlockStmtContext, StatementSyntax> statements)
+    StatementSyntax GetBlockSyntax(BlockContext block, bool allowCollapse, Func<BlockStmtContext, StatementSyntax> statementFactory)
+        => GetBlockSyntax(block?.blockStmt().Select(statementFactory).ToArray() ?? [], allowCollapse);
+
+    StatementSyntax GetBlockSyntax(StatementSyntax[] statements, bool allowCollapse)
     {
-        using var _ = new TraceMethod(block);
-        return Block(block?.blockStmt().Select(statements) ?? []);
+        if (allowCollapse) {
+            if (statements is null || statements.Length == 0) {
+                return EmptyStatement();
+            }
+            else if (statements.Length == 1) {
+                return statements[0];
+            }
+            else {
+                return Block(statements);
+            }
+        }
+        else {
+            return Block(statements ?? []);
+        }
     }
+
 
     StatementSyntax GetMethodStatement(BlockStmtContext stmt)
     {
         using var _ = new TraceMethod(stmt);
 
-        if (stmt.call() is ICallContext call) {
+        if (stmt.redimStmt() is RedimStmtContext redim) {
+            return GetRedim(redim);
+        }
+        else if (stmt.call() is ICallContext call) {
             return GetCallStatement(call);
         }
         else if (stmt.assignment() is IAssignmentContext assignment) {
@@ -376,8 +398,13 @@ public class CSharpTransformation
         else if (stmt.forNextStmt() is ForNextStmtContext fornext) {
             return GetForNext(fornext);
         }
+
+        else if (stmt.printStmt() is PrintStmtContext print) {
+            return GetPrint(print);
+        }
+
         else {
-            var legacy = GetBlockStatements(stmt).Select(s => ParseStatement(s.ToString())).ToArray();
+            var legacy = _legacy.GetBlockStatements(stmt).Select(s => ParseStatement(s.ToString())).ToArray();
             if (legacy.Length == 0) {
                 return EmptyStatement();
             }
@@ -391,105 +418,12 @@ public class CSharpTransformation
     }
 
 
-    CSharpBlockStatement GetBlock(BlockContext blockCtx)
+    AssignmentExpressionSyntax GetAssignment(IAssignmentContext assignment)
     {
-        using var _ = new TraceMethod(blockCtx);
-
-        if (blockCtx is null) {
-            return CSharpBlockStatement.Empty;
-        }
-
-        var block = new CSharpBlockStatement();
-
-        foreach (var stmt in blockCtx.blockStmt()) {
-            block.Statements.AddRange(GetBlockStatements(stmt));
-        }
-
-        return block;
-    }
-
-    IEnumerable<ICSharpStatement> GetBlockStatements(BlockStmtContext stmt)
-    {
-        using var _ = new TraceMethod(stmt);
-
-        if (stmt.lineLabel() is LineLabelContext label) {
-            string name = label.ambiguousIdentifier() is AmbiguousIdentifierContext id ? GetIdentifier(id) : label.GetText();
-            return [new CSharpLabelStatement { Name = name }];
-        }
-
-
-        else if (stmt.constStmt() is ConstStmtContext @const) {
-            return GetConstants(@const);
-        }
-        else if (stmt.variableStmt() is VariableStmtContext var) {
-            return GetVariables(var);
-        }
-
-        else if (stmt.redimStmt() is RedimStmtContext redim) {
-            return GetRedim(redim);
-        }
-
-
-        
-        else if (stmt.selectCaseStmt() is SelectCaseStmtContext select) {
-            return [GetSelect(select)];
-        }
-
-        else if (stmt.doLoopStmt() is DoLoopStmtContext doLoop) {
-            return [GetDoLoop(doLoop)];
-        }
-        else if (stmt.forEachStmt() is ForEachStmtContext forEach) {
-            return [GetForEach(forEach)];
-        }
-
-        
-
-        else if (stmt.openStmt() is OpenStmtContext open) {
-            return [GetOpen(open)];
-        }
-        else if (stmt.printStmt() is PrintStmtContext print) {
-            return [GetPrint(print)];
-        }
-        else if (stmt.closeStmt() is CloseStmtContext close) {
-            return [GetClose(close)];
-        }
-        else if (stmt.eraseStmt() is EraseStmtContext erase) {
-            return GetErase(erase);
-        }
-
-        else if (stmt.loadStmt() is LoadStmtContext load) {
-            return [new CSharpGenericStatement($"// {load.GetText()}")];
-        }
-        else if (stmt.unloadStmt() is UnloadStmtContext unload) {
-            return [new CSharpGenericStatement($"// {unload.GetText()}")];
-        }
-
-        else if (stmt.exitStmt() is ExitStmtContext exit) {
-            return [new CSharpReturnStatement()];
-        }
-        else if (stmt.resumeStmt() is ResumeStmtContext resume) {
-            return [GetResume(resume)];
-        }
-
-        else if (stmt.goToStmt() is GoToStmtContext gotoCtx) {
-            return [GetGoto(gotoCtx)];
-        }
-
-        else if (stmt.onErrorStmt() is OnErrorStmtContext onerror) {
-            return [new CSharpGenericStatement($"// {onerror.GetText()}")];
-        }
-
-        else if (stmt.endStmt() is EndStmtContext endStmt) {
-            return [new CSharpGenericStatement("Application.Exit();")];
-        }
-
-        else if (stmt.sendkeysStmt() is SendkeysStmtContext sendKeys) {
-            return sendKeys.valueStmt().Select(v => new CSharpGenericStatement($"SendKeys.Send(\"{v}\");"));
-        }
-
-        else {
-            throw NotSupported(stmt);
-        }
+        using var _ = new TraceMethod(assignment);
+        var identifier = GetCallIdentifierExpression(assignment.implicitCallStmt_InStmt(), true);
+        var value = GetValue(assignment.valueStmt());
+        return AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, identifier, value);
     }
 
 
@@ -527,10 +461,18 @@ public class CSharpTransformation
     {
         using var _ = new TraceMethod(call);
 
-        var expression = GetCallIdentifierExpression(call);
-
         var invocation = call.segments().LastOrDefault();
         var args = invocation?.args().FirstOrDefault();
+
+        IMethodRewriter rewriter = null;
+
+        var identifier = GetCallIdentifierExpression(call);
+        foreach (var r in _rewriters) {
+            if (r.RewriteIdentifier(identifier) is ExpressionSyntax rewritten) {
+                identifier = rewritten;
+                rewriter = r;
+            }
+        }
 
         if (invocation is ICS_S_ProcedureOrArrayCallContext 
             || invocation is ECS_ProcedureCallContext
@@ -538,10 +480,17 @@ public class CSharpTransformation
             || invocation is ICS_B_ProcedureCallContext 
             || invocation is ICS_B_MemberProcedureCallContext 
             || args?.ChildCount > 0) {
-            return InvocationExpression(expression).WithArgumentList(GetArgumentList(args));
+
+            var argList = GetArgumentList(args);
+
+            if (rewriter is not null) {
+                argList = rewriter.RewriteArguments(argList, identifier);
+            }
+
+            return InvocationExpression(identifier).WithArgumentList(argList);
         }
         else {
-            return expression;
+            return identifier;
         }
     }
 
@@ -589,110 +538,68 @@ public class CSharpTransformation
         => GetIdentifierNameToken(target.identifier()); // todo: handle cast
 
 
-    IEnumerable<CSharpRedimStatement> GetRedim(RedimStmtContext redim)
+    StatementSyntax GetRedim(RedimStmtContext redim)
     {
         using var _ = new TraceMethod(redim);
 
-        foreach (var stmt in redim.redimSubStmt()) {
-            yield return new CSharpRedimStatement() {
-                Variable   = GetExpressionCall(stmt.implicitCallStmt_InStmt()),
-                Type       = GetType(stmt.asTypeClause()),
-                Subscripts = stmt.subscripts().subscript().Select(s => GetValue(s.valueStmt(0))).ToList()
-            };
-        }
-    }
+        var statements = redim.redimSubStmt().Select(rd => {
+            var variable = GetCallIdentifierExpression(rd.implicitCallStmt_InStmt());
+            
+            var type = GetType(rd.asTypeClause()) 
+                ?? throw NotSupported(redim, "Inferred array type not supported.");
 
-    CSharpGotoStatement GetGoto(GoToStmtContext gotoCtx)
-    {
-        using var _ = new TraceMethod(gotoCtx);
+            var subscripts = rd.subscripts().subscript().Select(s => GetValue(s.valueStmt(0)));
 
-        return new CSharpGotoStatement() {
-            Label = GetValue(gotoCtx.valueStmt())
-        };
-    }
+            var arrayType = ArrayType(type, SingletonList(ArrayRankSpecifier(SeparatedList(subscripts))));
 
-
-    IEnumerable<CSharpDeclarationStatement> GetConstants(ConstStmtContext @const)
-    {
-        using var _ = new TraceMethod(@const);
-
-        var visibility = CSharpVisibility.Private;
-
-        if (@const.publicPrivateGlobalVisibility() is PublicPrivateGlobalVisibilityContext vis) {
-            if (vis.PUBLIC() != null || vis.GLOBAL() != null) {
-                visibility = CSharpVisibility.Public;
+            if (redim.PRESERVE() is not null) {
+                throw NotSupported(redim, "Preserve not supported");
             }
+            else {
+                return AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
+                    variable, ArrayCreationExpression(arrayType));
+            }
+        }).Select(ExpressionStatement).ToArray();
+        
+        if (statements.Length > 1) {
+            return Block(statements);
         }
-
-        foreach (var sub in @const.constSubStmt()) {
-            var variable = new CSharpVariable(
-                Name: GetIdentifier(sub.ambiguousIdentifier()),
-                Type: GetType(sub.asTypeClause()));
-
-            var value = GetValue(sub.valueStmt());
-
-            yield return new CSharpDeclarationStatement(variable, value, CSharpDeclarationOption.Const, visibility);
+        else {
+            return statements[0];
         }
     }
 
-    IEnumerable<CSharpDeclarationStatement> GetVariables(VariableStmtContext var)
+    StatementSyntax GetPrint(PrintStmtContext print)
     {
-        using var _ = new TraceMethod(var);
+        using var _ = new TraceMethod(print);
 
-        var visibility = GetVisibility(var.visibility());
-        var option = CSharpDeclarationOption.Default;
-        if (var.STATIC() != null) {
-            option = CSharpDeclarationOption.Static;
-        }
+        var target = GetValue(print.valueStmt());
 
-        foreach (var sub in var.variableListStmt().variableSubStmt()) {
-            List<string> arrayDimensions = [];
-
-            if (sub.subscripts() is SubscriptsContext subscripts) {
-                foreach (var subscript in subscripts.subscript()) {
-                    var from = GetValue(subscript.valueStmt(0));
-                    var to = subscript.valueStmt(1) is ValueStmtContext v ? GetValue(v) : null;
-                    arrayDimensions.Add($"{from} + 1");
-                }
+        var outputs = print.outputList().outputList_Expression().Select(o => {
+            if (o.SPC() is ITerminalNode) {
+                throw NotSupported(o);
+            }
+            if (o.TAB() is ITerminalNode) {
+                throw NotSupported(o);
             }
 
-            var variable = new CSharpVariable(
-                Name: GetIdentifier(sub.ambiguousIdentifier()),
-                Type: GetType(sub.asTypeClause()),
-                ArrayDimensions: arrayDimensions.Count);
-
-            CSharpGenericExpression value = null;
-            if (arrayDimensions.Count > 0) {
-                value = new CSharpGenericExpression("new " + variable.Type + "[" + string.Join(", ", arrayDimensions) + "]");
+            if (o.valueStmt() is ValueStmtContext value) {
+                return GetValue(value);
             }
+            else {
+                throw NotSupported(o);
+            }
+        }).ToArray();
 
-            yield return new CSharpDeclarationStatement(variable, value, option, visibility);
-        }
+        var statements = outputs.Select(o => ExpressionStatement(
+            InvocationExpression(
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, target, IdentifierName("Write")))
+                    .WithArgumentList(RoslynHelpers.ArgumentList(outputs))))
+            .ToArray();
+
+        return GetBlockSyntax(statements, true);
     }
 
-
-    List<CSharpArgument> GetMethodArguments(ArgListContext argListContext)
-    {
-        using var _ = new TraceMethod(argListContext);
-
-        CSharpArgument GetArgument(ArgContext arg) => new(
-            Variable: new CSharpVariable(
-                Name: GetIdentifier(arg.ambiguousIdentifier()),
-                Type: GetType(arg.asTypeClause())),
-            DefaultValue: arg.argDefaultValue() is ArgDefaultValueContext def ? GetValue(def.valueStmt()) : null
-        );
-
-        return argListContext.arg().Select(GetArgument).ToList();
-    }
-
-
-    AssignmentExpressionSyntax GetAssignment(IAssignmentContext assignment)
-    {
-        using var _ = new TraceMethod(assignment);
-        var identifier = GetCallIdentifierExpression(assignment.implicitCallStmt_InStmt(), true);
-        var value = GetValueSyntax(assignment.valueStmt());
-        return AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, identifier, value);
-    }
 
     IfStatementSyntax GetIf(IfThenElseStmtContext ifthen)
     {
@@ -703,7 +610,7 @@ public class CSharpTransformation
 
         if (ifthen is BlockIfThenElseContext @if) {
             if (@if.ifBlockStmt() is IfBlockStmtContext ifBlock) {
-                var condition = GetValueSyntax(ifBlock.ifConditionStmt().valueStmt());
+                var condition = GetValue(ifBlock.ifConditionStmt().valueStmt());
                 var then = GetBlockSyntax(ifBlock.block());
 
                 root = IfStatement(condition, then);
@@ -712,7 +619,7 @@ public class CSharpTransformation
 
             if (@if.ifElseIfBlockStmt() is IfElseIfBlockStmtContext[] elseifs) {
                 foreach (var elseif in elseifs) {
-                    var condition = GetValueSyntax(elseif.ifConditionStmt().valueStmt());
+                    var condition = GetValue(elseif.ifConditionStmt().valueStmt());
                     var then = GetBlockSyntax(elseif.block());
 
                     var next = IfStatement(condition, then);
@@ -727,7 +634,7 @@ public class CSharpTransformation
             }
         }
         else if (ifthen is InlineIfThenElseContext inline && inline.ifConditionStmt() is IfConditionStmtContext ifcond) {
-            var condition = GetValueSyntax(ifcond.valueStmt());
+            var condition = GetValue(ifcond.valueStmt());
             var statement = GetMethodStatement(inline.blockStmt(0));
 
             root = IfStatement(condition, statement);
@@ -744,18 +651,17 @@ public class CSharpTransformation
         return root;
     }
 
-
-    StatementSyntax GetForNext(ForNextStmtContext forNext)
+    ForStatementSyntax GetForNext(ForNextStmtContext forNext)
     {
         var type = forNext.asTypeClause() is AsTypeClauseContext asType
-            ? GetTypeRoslyn(asType)
+            ? GetType(asType)
             : PredefinedType(Token(SyntaxKind.IntKeyword));
 
         var id = GetIdentifierName(forNext.iCS_S_VariableOrProcedureCall());
 
-        var start = GetValueSyntax(forNext.valueStmt(0));
-        var end   = GetValueSyntax(forNext.valueStmt(1));
-        var step  = GetValueSyntax(forNext.valueStmt(2));
+        var start = GetValue(forNext.valueStmt(0));
+        var end   = GetValue(forNext.valueStmt(1));
+        var step  = GetValue(forNext.valueStmt(2));
 
         bool stepIsOne = true, stepIsNegative = false;
         if (step is LiteralExpressionSyntax literal && literal.Token.Value is int istep) {
@@ -780,7 +686,7 @@ public class CSharpTransformation
             ? PostfixUnaryExpression(ops.Item1, id) 
             : AssignmentExpression(ops.Item2, id, step);
 
-        var block = GetBlockSyntax(forNext.block(), stmt => {
+        var block = GetBlockSyntax(forNext.block(), true, stmt => {
             if (stmt.exitStmt() is ExitStmtContext exit && exit.EXIT_FOR() is not null) {
                 return BreakStatement();
             }
@@ -791,235 +697,12 @@ public class CSharpTransformation
 
         return ForStatement(block)
             .WithDeclaration(decl)
-            .WithCondition(BinaryExpression(ops.Item3, id, GetValueSyntax(forNext.valueStmt(1))))
+            .WithCondition(BinaryExpression(ops.Item3, id, GetValue(forNext.valueStmt(1))))
             .WithIncrementors(SingletonSeparatedList(incrementor));
     }
     
-    CSharpForEachStatement GetForEach(ForEachStmtContext forEach)
-    {
-        using var _ = new TraceMethod(forEach);
 
-        return new CSharpForEachStatement() {
-            Variable = GetIdentifierReference(forEach.ambiguousIdentifier(0), forEach.typeHint()),
-            Enumerator = GetValue(forEach.valueStmt()),
-            Statements = new(GetBlock(forEach.block()))
-        };
-    }
-
-    CSharpWhileStatement GetDoLoop(DoLoopStmtContext doloop) => new() {
-        Condition = GetValue(doloop.valueStmt()),
-        Statements = GetBlock(doloop.block())
-    };
-
-    CSharpSelectStatement GetSelect(SelectCaseStmtContext select)
-    {
-        var csselect = new CSharpSelectStatement {
-            Condition = GetValue(select.valueStmt())
-        };
-
-        foreach (var caseStmt in select.sC_Case()) {
-            var block = GetBlock(caseStmt.block());
-            
-            if (caseStmt.sC_Cond() is CaseCondExprContext expr) {
-                foreach (var condition in expr.sC_CondExpr()) {
-                    if (condition is CaseCondExprValueContext valueCond) {
-                        csselect.Cases.Add(new CSharpSelectCaseStatement {
-                            Condition = GetValue(valueCond.valueStmt()),
-                            Statements = block
-                        });
-                    }
-                    else if (condition is CaseCondExprIsContext isCond) {
-                        throw NotSupported(isCond);
-                    }
-                    else if (condition is CaseCondExprToContext toCond) {
-                        throw NotSupported(toCond);
-                    }
-                    else {
-                        throw NotSupported(condition);
-                    }
-                }
-            }
-            else if (caseStmt.sC_Cond() is CaseCondElseContext @else) {
-                csselect.Default = block;
-            }
-            else {
-                NotSupported(caseStmt);
-            }
-        }
-
-        return csselect;
-    }
-
-
-
-    CSharpGenericStatement GetResume(ResumeStmtContext resume)
-    {
-        if (resume.INTEGERLITERAL() is ITerminalNode literal) {
-            return new CSharpGenericStatement($"// goto {literal.GetText()};");
-        }
-        else if (resume.ambiguousIdentifier() is AmbiguousIdentifierContext identifier) {
-            return new CSharpGenericStatement($"goto {GetIdentifier(identifier)};");
-        }
-        else if (resume.NEXT() is ITerminalNode terminal) {
-            return new CSharpGenericStatement("// Resume Next;");
-        }
-        else {
-            throw NotSupported(resume);
-        }
-    }
-
-
-    CSharpGenericStatement GetOpen(OpenStmtContext open)
-    {
-        var sb = new StringBuilder();
-
-        sb.Append("var ");
-        sb.Append(GetValue(open.valueStmt(1)));
-        sb.Append(" = new StreamWriter(File.Open(");
-
-        sb.Append(GetValue(open.valueStmt(0)));
-
-        if (open.READ_WRITE() != null) {
-            sb.Append(", FileAccess.ReadWrite, ");
-        }
-        else if (open.READ() != null) {
-            sb.Append(", FileAccess.Read, ");
-        }
-        else if (open.WRITE() != null) {
-            sb.Append(", FileAccess.Write, ");
-        }
-
-        if (open.LOCK_READ_WRITE() != null) {
-            sb.Append(", FileShare.None");
-        }
-        else if (open.LOCK_WRITE() != null) {
-            sb.Append(", FileShare.Read");
-        }
-        else if (open.LOCK_READ() != null) {
-            sb.Append(", FileShare.Write");
-        }
-        else if (open.SHARED() != null) {
-            sb.Append(", FileShare.ReadWrite");
-        }
-
-        sb.Append("));");
-        return new CSharpGenericStatement(sb.ToString());
-    }
-
-    IEnumerable<CSharpGenericStatement> GetErase(EraseStmtContext erase)
-    {
-        foreach (var value in erase.valueStmt()) {
-            var sb = new StringBuilder();
-            sb.Append("File.Delete(");
-            sb.Append(GetValue(value));
-            sb.Append(");");
-            yield return new CSharpGenericStatement(sb.ToString());
-        }
-    }
-
-    CSharpPrintStatement GetPrint(PrintStmtContext print) => new() {
-        Target = GetValue(print.valueStmt()),
-
-        Outputs = print.outputList().outputList_Expression().SelectMany(o => {
-            if (o.valueStmt() is ValueStmtContext value) {
-                return [GetValue(value)];
-            }
-            else if (o.argsCall() is ArgsCallContext argsCall) {
-                return GetArgsCall(argsCall).Cast<ICSharpExpression>();
-            }
-            else {
-                throw NotSupported(o);
-            }
-        }).ToList()
-    };
-
-    CSharpGenericStatement GetClose(CloseStmtContext close)
-    {
-        var sb = new StringBuilder();
-        sb.Append(GetValue(close.valueStmt(0)));
-        sb.Append(".Dispose()");
-        return new CSharpGenericStatement(sb.ToString());
-    }
-
-
-    
-
-    CSharpCallExpression GetExpressionCall(ImplicitCallStmt_InStmtContext call)
-    {
-        using var _ = new TraceMethod(call);
-
-        if (call.iCS_S_VariableOrProcedureCall() is ICS_S_VariableOrProcedureCallContext vpcall) {
-            return GetVariableOrProcedureCall(vpcall);
-        }
-        else if (call.iCS_S_MembersCall() is ICS_S_MembersCallContext membersCall) {
-            return GetMembersCallExpression(membersCall, CallType.Invoke);
-        }
-        else if (call.iCS_S_ProcedureOrArrayCall() is ICS_S_ProcedureOrArrayCallContext pacall) {
-            return GetProcedureArray(pacall);
-        }
-        else {
-            throw NotSupported(call);
-        }
-    }
-
-
-    // calling a variable or procedure directly
-    CSharpCallExpression GetVariableOrProcedureCall(ICallTargetContext proc, CallType type = CallType.Unspecified)
-    {
-        using var _ = new TraceMethod(proc);        
-        var target = GetIdentifierReference(proc.identifier(), proc.typeHint());
-        return GetCall(proc, target, null, type);
-    }   
-
-    CSharpCallExpression GetMembersCallExpression(ICS_S_MembersCallContext membersCall, CallType type = CallType.Unspecified)
-    {
-        using var _ = new TraceMethod(membersCall);
-
-        throw NotSupported(membersCall);
-    }
-
-    CSharpCallExpression GetProcedureArray(ICS_S_ProcedureOrArrayCallContext call, CallType type = CallType.Unspecified)
-    {
-        using var _ = new TraceMethod(call);
-
-        if (call.iCS_S_NestedProcedureCall() is ICS_S_NestedProcedureCallContext nested) {
-            throw NotSupported(nested);
-        }
-        if (call.baseType() is BaseTypeContext baseType) {
-            throw NotSupported(baseType);
-        }
-
-        return GetVariableOrProcedureCall(call, type);
-    }
-
-    CSharpCallExpression GetCall(ICallTargetContext proc, CSharpIdentifierExpression target, CSharpCallExpression callee, CallType type)
-    {
-        using var _ = new TraceMethod(proc);
-
-        if (target is null) {
-            throw new ArgumentNullException(nameof(target));
-        }
-
-        var call = new CSharpCallExpression(target) { Type = type, Callee = callee };
-
-        foreach (var args in proc.args()) {
-            call.Arguments.AddRange(GetArgsCall(args));
-        }
-
-        if (proc.dictionaryCallStmt() is DictionaryCallStmtContext dc) {
-            var identifier = GetIdentifierReference(dc.ambiguousIdentifier(), dc.typeHint());
-
-            call.Type = CallType.Dictionary;
-            call.Arguments = [
-                new CSharpArgumentCall(identifier)
-            ];
-        }
-
-        return call;
-    }
-
-
-    ExpressionSyntax GetValueSyntax(ValueStmtContext valueCtx)
+    ExpressionSyntax GetValue(ValueStmtContext valueCtx)
     {
         using var _ = new TraceMethod(valueCtx);
 
@@ -1033,91 +716,9 @@ public class CSharpTransformation
             return GetLiteralSyntax(literal.literal());
         }
         else {
-            return ParseExpression(GetValue(valueCtx).ToString());
+            return ParseExpression(_legacy.GetValue(valueCtx).ToString());
         }
     }
-
-    
-
-    ICSharpExpression GetValue(ValueStmtContext value)
-    {
-        using var _ = new TraceMethod(value);
-
-        if (value is VsNewContext @new) {
-            return new CSharpNewExpression() {
-                Type = GetValue(@new.valueStmt())
-            };
-        }
-
-        else if (value is VsLiteralContext literal) {
-            return new CSharpGenericExpression(GetLiteral(literal.literal()));
-        }
-        else if (value is VsNotContext not) {
-            return new CSharpGenericExpression("!" + GetValue(not.valueStmt()).ToString());
-        }
-
-        else if (value is VsStructContext vsstruct) {
-            return GetOperator(vsstruct.valueStmt(), ", ");
-        }
-
-        else if (value is VsAmpContext amp) {
-            return GetOperator(amp.valueStmt(), " + ");
-        }
-        else if (value is VsEqContext eq) {
-            return GetOperator(eq.valueStmt(), " == ");
-        }
-        else if (value is VsNeqContext neq) {
-            return GetOperator(neq.valueStmt(), " != ");
-        }
-        else if (value is VsGeqContext geq) {
-            return GetOperator(geq.valueStmt(), " >= ");
-        }
-        else if (value is VsGtContext gt) {
-            return GetOperator(gt.valueStmt(), " > ");
-        }
-        else if (value is VsLeqContext leq) {
-            return GetOperator(leq.valueStmt(), " <= ");
-        }
-        else if (value is VsLtContext lt) {
-            return GetOperator(lt.valueStmt(), " < ");
-        }
-        else if (value is VsAddContext add) {
-            return GetOperator(add.valueStmt(), " + ");
-        }
-        else if (value is VsMinusContext min) {
-            return GetOperator(min.valueStmt(), " - ");
-        }
-        else if (value is VsMultContext mul) {
-            return GetOperator(mul.valueStmt(), " * ");
-        }
-        else if (value is VsDivContext div) {
-            return GetOperator(div.valueStmt(), " / ");
-        }
-        else if (value is VsOrContext or) {
-            return GetOperator(or.valueStmt(), " || ");
-        }
-        else if (value is VsAndContext and) {
-            return GetOperator(and.valueStmt(), " && ");
-        }
-        else if (value is VsXorContext xor) {
-            return GetOperator(xor.valueStmt(), " ^ ");
-        }
-        else if (value is VsModContext mod) {
-            return GetOperator(mod.valueStmt(), " % ");
-        }
-        else if (value is VsIsContext vsis) {
-            return GetOperator(vsis.valueStmt(), " is ");
-        }
-
-        else {
-            Trace.TraceWarning("Unknown value: {0} {1}", value.GetType().Name, value.GetText());
-            return new CSharpGenericExpression(value.GetText());
-        }
-
-        ICSharpExpression GetOperator(ValueStmtContext[] values, string separator)
-            => new CSharpOperatorExpression(separator, values.Select(GetValue).ToArray());
-    }
-
 
     static ExpressionSyntax GetLiteralSyntax(LiteralContext lit)
     {
@@ -1137,7 +738,8 @@ public class CSharpTransformation
             return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(Convert.ToDouble(@double.GetText().TrimEnd(['&']))));
         }
         else if (lit.STRINGLITERAL() is ITerminalNode @string) {
-            string str = @string.GetText();
+            string str = @string.Symbol.Text;
+            str = str.Trim('"');
             if (str.Contains('\\')) {
                 str = str.Replace("\\", "\\\\");
             }
@@ -1156,7 +758,7 @@ public class CSharpTransformation
                         SyntaxKind.SimpleMemberAccessExpression,
                         IdentifierName("Color"), IdentifierName("FromName")
                     ))
-                    .WithArgumentList(ArgumentList(
+                    .WithArgumentList(RoslynHelpers.ArgumentList(
                         LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(col.Name))
                     ));
             }
@@ -1166,7 +768,7 @@ public class CSharpTransformation
                         SyntaxKind.SimpleMemberAccessExpression,
                         IdentifierName("Color"), IdentifierName("FromArgb")
                     ))
-                    .WithArgumentList(ArgumentList(
+                    .WithArgumentList(RoslynHelpers.ArgumentList(
                         LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.R)),
                         LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.G)),                                
                         LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.B))
@@ -1178,7 +780,7 @@ public class CSharpTransformation
                         SyntaxKind.SimpleMemberAccessExpression,
                         IdentifierName("Color"), IdentifierName("FromArgb")
                     ))
-                    .WithArgumentList(ArgumentList(
+                    .WithArgumentList(RoslynHelpers.ArgumentList(
                         LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.A)),
                         LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.R)),
                         LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(col.G)),
@@ -1191,89 +793,6 @@ public class CSharpTransformation
         }
     }
 
-    static ArgumentListSyntax ArgumentList(params ExpressionSyntax[] args)
-    {
-        if (args is null || args.Length == 0) {
-            return SyntaxFactory.ArgumentList();
-        }
-        else if (args.Length == 1) {
-            return SyntaxFactory.ArgumentList(SingletonSeparatedList(Argument(args[0])));
-        }
-        else {
-            return SyntaxFactory.ArgumentList(SeparatedList<ArgumentSyntax>(
-                new SyntaxNodeOrTokenList(args
-                    .Select(a => (SyntaxNodeOrToken)Argument(a))
-                    .Intersperse(Token(SyntaxKind.CommaToken)))));
-        }
-    }
-
-    static string GetLiteral(LiteralContext lit)
-    {
-        if (lit.COLORLITERAL() is ITerminalNode color) {
-            var hex = "0x" + color.Symbol.Text[2..].TrimEnd(['&']).PadLeft(6, '0').PadLeft(8, 'F');
-
-            var col = System.Drawing.Color.FromArgb(Convert.ToInt32(hex, 16));
-
-            if (col.IsNamedColor) {
-                return $"Color.FromName(\"{col.Name}\")";
-            }
-            else if (col.A == 255) {
-                return $"Color.FromArgb({col.R}, {col.G}, {col.B})";
-            }
-            else {
-                return $"Color.FromArgb({col.A}, {col.R}, {col.G}, {col.B})";
-            }
-        }
-        else if (lit.FILENUMBER() is ITerminalNode file) {
-            return file.GetText().TrimStart('#');
-        }
-        else if (lit.TRUE() is not null) {
-            return "true";
-        }
-        else if (lit.FALSE() is not null) {
-            return "false";
-        }
-        else if (lit.NOTHING() is not null || lit.NULL() is not null) {
-            return "null";
-        }
-        else if (lit.INTEGERLITERAL() is ITerminalNode @short) {
-            return @short.GetText();
-        }
-        else if (lit.DOUBLELITERAL() is ITerminalNode @double) {
-            return @double.GetText().TrimEnd(['&']);
-        }
-        else if (lit.STRINGLITERAL() is ITerminalNode @string) {
-            string str = @string.GetText();
-
-            if (str.Contains('\\')) {
-                str = str.Replace("\\", "\\\\");
-            }
-
-            return str;
-        }
-        else {
-            return lit.GetText();
-        }
-    }
-
-
-    IEnumerable<CSharpArgumentCall> GetArgsCall(ArgsCallContext args)
-    {
-        if (args is null) yield break;
-
-        foreach (var arg in args.argCall()) {
-            if (arg.valueStmt() is VsAssignContext assign) {
-                yield return new CSharpArgumentCall(
-                    value: GetValue(assign.valueStmt()),
-                    name: GetExpressionCall(assign.implicitCallStmt_InStmt())
-                );
-
-            }
-            else {
-                yield return new CSharpArgumentCall(GetValue(arg.valueStmt()));
-            }
-        }
-    }
 
     ArgumentListSyntax GetArgumentList(ArgsCallContext args) => SyntaxFactory.ArgumentList(GetArgumentListCore(args));
 
@@ -1287,30 +806,18 @@ public class CSharpTransformation
         IEnumerable<ArgumentSyntax> GetArgsCore()
             => args.argCall().Select(arg => {
                 if (arg.valueStmt() is VsAssignContext assign) {
-                    var argName = GetExpressionCall(assign.implicitCallStmt_InStmt()).ToString(); // TODO: look at this
-                    var value = ParseExpression(GetValue(assign.valueStmt()).ToString());
-                    return Argument(value).WithNameColon(NameColon(IdentifierName(argName)));
+                    var argName = GetCallIdentifierExpression(assign.implicitCallStmt_InStmt());
+                    var value = GetValue(assign.valueStmt());
+                    return Argument(value).WithNameColon(NameColon((IdentifierNameSyntax)argName));
                 }
                 else {
-                    return Argument(GetValueSyntax(arg.valueStmt()));
+                    return Argument(GetValue(arg.valueStmt()));
                 }
             });
 
         return SeparatedList<ArgumentSyntax>(GetArgsCore()
             .Select(a => (SyntaxNodeOrToken)a)
             .Intersperse(Token(SyntaxKind.CommaToken)));
-    }
-
-
-    static CSharpIdentifierExpression GetIdentifierReference(IIdentifierContext identifier, TypeHintContext typeHint)
-    {
-        if (identifier is null) {
-            throw new ArgumentNullException(nameof(identifier));
-        }
-
-        using var _ = new TraceMethod(identifier);
-
-        return new CSharpIdentifierExpression(GetIdentifier(identifier), GetType(typeHint));
     }
 
     static SyntaxToken GetIdentifierToken(IIdentifierContext identifier)
@@ -1357,7 +864,7 @@ public class CSharpTransformation
     }
 
   
-    static TypeSyntax GetTypeRoslyn(AsTypeClauseContext asType)
+    static TypeSyntax GetType(AsTypeClauseContext asType)
     {
         if (asType == null) {
             return PredefinedType(Token(SyntaxKind.VoidKeyword));
@@ -1365,24 +872,10 @@ public class CSharpTransformation
         if (asType.fieldLength() is FieldLengthContext length) {
             throw NotSupported(length);
         }
-        return GetTypeRoslyn(asType.type());
-    }
-
-    static CSharpType GetType(AsTypeClauseContext asType)
-    {
-        if (asType == null) {
-            return CSharpType.Unknown;
-        }
-
-        if (asType.fieldLength() is FieldLengthContext length) {
-            throw NotSupported(length);
-        }
-
         return GetType(asType.type());
     }
 
-
-    static TypeSyntax GetTypeRoslyn(TypeContext type)
+    static TypeSyntax GetType(TypeContext type)
     {
         static PredefinedTypeSyntax Predefined(SyntaxKind kind) => PredefinedType(Token(kind));
         
@@ -1418,50 +911,6 @@ public class CSharpTransformation
         return ts;
     }
 
-    static CSharpType GetType(TypeContext type)
-    {
-        var isArray = type.LPAREN() != null || type.RPAREN() != null;
-
-        if (type.complexType() is ComplexTypeContext complex) {
-            return new CSharpType(complex.GetText(), isArray);
-        }
-        else {
-            var baseType = type.baseType();
-            var typeSymbol = ((ITerminalNode)baseType.GetChild(0)).Symbol;
-            var typeName = typeSymbol.Type switch {
-                BOOLEAN    => "bool",
-                BYTE       => "byte",
-                COLLECTION => "System.Collections.ICollection",
-                DATE       => "DateTime",
-                DOUBLE     => "double",
-                INTEGER    => "short",
-                LONG       => "int",
-                SINGLE     => "float",
-                STRING     => "string",
-                OBJECT     => "object",
-                VARIANT    => "object",
-                _ => typeSymbol.Text
-            };
-
-            return new CSharpType(typeName, isArray);
-        }
-    }
-
-    static CSharpType GetType(TypeHintContext typeHint)
-    {
-        if (typeHint is not null) {
-            if (typeHint.DOLLAR() is not null) {
-                return CSharpType.String;
-            }
-            else {
-                throw NotSupported(typeHint);
-            }
-        }
-        else {
-            return CSharpType.Unknown;
-        }
-    }
-
     static SyntaxKind GetVisibilityKeyword(IVisibilityContext v)
     {
         if (v is null) {
@@ -1475,25 +924,6 @@ public class CSharpTransformation
         }
         else if (v.FRIEND() != null) {
             return SyntaxKind.InternalKeyword;
-        }
-        else {
-            throw NotSupported(v);
-        }
-    }
-
-    static CSharpVisibility GetVisibility(VisibilityContext v)
-    {
-        if (v is null) {
-            return CSharpVisibility.Private;
-        }
-        else if (v.PRIVATE() != null) {
-            return CSharpVisibility.Private;
-        }
-        else if (v.PUBLIC() != null || v.GLOBAL() != null) {
-            return CSharpVisibility.Public;
-        }
-        else if (v.FRIEND() != null) {
-            return CSharpVisibility.Internal;
         }
         else {
             throw NotSupported(v);
