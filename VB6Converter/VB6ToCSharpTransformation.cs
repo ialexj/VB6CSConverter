@@ -465,10 +465,10 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
             }
 
             else if (stmt.loadStmt() is LoadStmtContext load) {
-                yield return EmptyStatement().WithTrailingTrivia(Comment(load.GetText()));
+                yield return EmptyStatement().WithTrailingTrivia(Comment($"// {load.GetText()}"));
             }
             else if (stmt.unloadStmt() is UnloadStmtContext unload) {
-                yield return EmptyStatement().WithTrailingTrivia(Comment(unload.GetText()));
+                yield return EmptyStatement().WithTrailingTrivia(Comment($"// {unload.GetText()}"));
             }
 
             else if (stmt.openStmt() is OpenStmtContext open) {
@@ -493,7 +493,7 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                 yield return GetResume(resume);
             }
             else if (stmt.onErrorStmt() is OnErrorStmtContext onerror) {
-                yield return EmptyStatement().WithTrailingTrivia(TriviaList(Comment(onerror.GetText())));
+                yield return EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {onerror.GetText()}")));
             }
 
             else if (stmt.exitStmt() is ExitStmtContext exit) {
@@ -512,28 +512,39 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                     );
                 }
             }
-
-            if (failOnError) {
-                throw NotSupported(stmt);
-            }
             else {
-                yield return ParseStatement(stmt.GetText());
-            }
-        }
-
-        if (stmt.lineLabel() is LineLabelContext label) {
-            _label = GetIdentifier(label.ambiguousIdentifier());
-        }
-        else {
-            foreach (var s in GetStatements()) {
-                if (_label is SyntaxToken l) {
-                    yield return LabeledStatement(l, s);
-                    _label = null;
+                if (failOnError) {
+                    throw NotSupported(stmt);
                 }
                 else {
-                    yield return s;
+                    yield return ParseStatement(stmt.GetText());
                 }
             }
+        }
+
+        IEnumerable<StatementSyntax> GetStatementsWithLabels()
+        {
+            if (stmt.lineLabel() is LineLabelContext label) {
+                _label = GetIdentifier(label.ambiguousIdentifier());
+            }
+            else {
+                foreach (var s in GetStatements()) {
+                    if (_label is SyntaxToken l) {
+                        yield return LabeledStatement(l, s);
+                        _label = null;
+                    }
+                    else {
+                        yield return s;
+                    }
+                }
+            }
+        }
+
+        try {
+            return GetStatementsWithLabels().ToArray();
+        }
+        catch (Exception ex) when (!failOnError) {
+            return [EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {ex.Message}")))];
         }
     }
 
@@ -750,7 +761,7 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
             ? GetType(asType)
             : PredefinedType(Token(SyntaxKind.IntKeyword));
 
-        var id = GetIdentifierName(forNext.iCS_S_VariableOrProcedureCall());
+        var variable = GetIdentifierName(forNext.iCS_S_VariableOrProcedureCall());
 
         var start = GetValue(forNext.valueStmt(0));
         var end = GetValue(forNext.valueStmt(1));
@@ -765,19 +776,16 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
             }
         }
 
-        var decl = VariableDeclaration(type)
-            .WithVariables(SingletonSeparatedList(
-                VariableDeclarator(id.Identifier).WithInitializer(EqualsValueClause(start))));
+        var decl = AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, variable, start);
 
         var ops = stepIsNegative
             ? (SyntaxKind.PostDecrementExpression, SyntaxKind.SubtractAssignmentExpression, SyntaxKind.GreaterThanOrEqualExpression)
             : (SyntaxKind.PostIncrementExpression, SyntaxKind.AddAssignmentExpression, SyntaxKind.LessThanOrEqualExpression);
 
 
-
         ExpressionSyntax incrementor = stepIsOne
-            ? PostfixUnaryExpression(ops.Item1, id)
-            : AssignmentExpression(ops.Item2, id, step);
+            ? PostfixUnaryExpression(ops.Item1, variable)
+            : AssignmentExpression(ops.Item2, variable, step);
 
         var block = GetBlock(forNext.block(), false, stmt => {
             if (stmt.exitStmt() is ExitStmtContext exit && exit.EXIT_FOR() is not null) {
@@ -789,8 +797,8 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
         });
 
         return ForStatement(block)
-            .WithDeclaration(decl)
-            .WithCondition(BinaryExpression(ops.Item3, id, GetValue(forNext.valueStmt(1))))
+            .WithInitializers(SingletonSeparatedList<ExpressionSyntax>(decl))
+            .WithCondition(BinaryExpression(ops.Item3, variable, GetValue(forNext.valueStmt(1))))
             .WithIncrementors(SingletonSeparatedList(incrementor));
     }
 
@@ -984,7 +992,8 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
             InvocationExpression(
                 MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, 
                     value, IdentifierName("Dispose")),
-                ArgumentList()));
+                ArgumentList()))
+            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
     }
 
 

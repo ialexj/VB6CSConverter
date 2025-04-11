@@ -13,7 +13,7 @@ public static class Program
         await VB6ToCSharpConverter.ConvertProject(
             @"C:\Users\aj\source\repos\OptiwareVB6\Optiware\Optiware98.vbp",
             null,
-            //["frmPosMain"],
+            //["frmStocksEtiquetagem"],
             //["modCommon", "modMain", "BaseDados"],
             "./Optiware98");
     }
