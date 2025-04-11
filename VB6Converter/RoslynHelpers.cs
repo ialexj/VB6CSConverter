@@ -5,7 +5,7 @@ using System.Collections;
 using System.Linq;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace VB6Converter.CSharpModel
+namespace VB6Converter
 {
     internal static class RoslynHelpers
     {

@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace VB6Converter.CSharpModel;
+namespace VB6Converter;
 
 class SimpleIdentifierRenamer(string from, string to) : CSharpSyntaxRewriter
 {

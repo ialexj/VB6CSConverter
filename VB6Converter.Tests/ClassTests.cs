@@ -10,6 +10,23 @@ namespace VB6Converter.Tests;
 public sealed class ClassTests
 {
     [TestMethod]
+    public void InferConst() => ValidateClassMatches(
+        """
+        Public Const opNone = 0
+        Public Const opTest = "String"
+        """,
+
+        """
+        public static partial class Test
+        {
+            public const int opNone = 0;
+            public const string opTest = "String";
+        }
+        """,
+
+        "Test");
+
+    [TestMethod]
     public void Struct() => ValidateMemberMatches(
         """
         Private Type INITCOMMONCONTROLSEX_TYPE
@@ -98,7 +115,7 @@ public sealed class ClassTests
     );
 
     [TestMethod]
-    public void PropertyGetSet() => ValidateMemberMatches(
+    public void PropertyExpression() => ValidateMemberMatches(
         """
         Public Property Get Test() As String
             Test = testVar
@@ -111,10 +128,64 @@ public sealed class ClassTests
         """
         public static string Test
         {
+            get => testVar;
+            set
+            {
+                testVar = value;
+            }
+        }
+        """);
+
+    [TestMethod]
+    public void PropertyMethodLastReturn() => ValidateMemberMatches(
+        """
+        Public Property Get Test() As String
+            SomeMethod
+            Test = testVar
+        End Property
+            
+        Public Property Let Test(ByVal someValue As String)
+            testVar = someValue
+        End Property
+        """,
+        """
+        public static string Test
+        {
+            get
+            {
+                SomeMethod();
+                return testVar;
+            }
+
+            set
+            {
+                testVar = value;
+            }
+        }
+        """);
+
+    [TestMethod]
+    public void PropertyMethodFull() => ValidateMemberMatches(
+        """
+        Public Property Get Test() As String
+            SomeMethod
+            Test = testVar
+            SomeMethod
+        End Property
+            
+        Public Property Let Test(ByVal someValue As String)
+            testVar = someValue
+        End Property
+        """,
+        """
+        public static string Test
+        {
             get
             {
                 string Test = default;
+                SomeMethod();
                 Test = testVar;
+                SomeMethod();
                 return Test;
             }
 
@@ -135,7 +206,7 @@ public sealed class ClassTests
         Public arr3(1 To 10, 1 To 20) As Long
         """,
         """
-        public partial static class Variables
+        public static partial class Variables
         {
             private static string str;
             private static int int1;

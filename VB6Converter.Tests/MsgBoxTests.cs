@@ -19,5 +19,32 @@ namespace VB6Converter.Tests
             MessageBox.Show("This is a test!", "Cópia Periódica", MessageBoxButtons.OK, MessageBoxIcon.Information);
             """);
 
+        [TestMethod]
+        public void Replace() => ValidateBodyMatches(
+            """
+            x = Replace$(s, "a", "b");
+            """,
+            """
+            x = ((string)s).Replace("a", "b");
+            """
+        );
+
+        [TestMethod]
+        public void Replace2() => ValidateMemberMatches(
+            """
+            Function SqlStr(ByVal s As String)
+                SqlStr = "'" & Replace$(s, "'", "''") & "'"
+            End Function
+            """,
+            """
+            private static object SqlStr(string s) => "'" + ((string)s).Replace("'", "''") + "'";
+            """);
+
+        [TestMethod]
+        public void IsNull() => ValidateBodyMatches(
+            "x = IsNull(z)",
+            "x = (z is null);");
+
     }
+
 }

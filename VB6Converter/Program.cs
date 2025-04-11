@@ -11,8 +11,10 @@ public static class Program
         //Trace.Listeners.Add(new TextWriterTraceListener("Input.log"));
 
         await VB6ToCSharpConverter.ConvertProject(
-            @"C:\Users\aj\source\repos\OptiwareVB6\Optiware\Optiware98.vbp", 
-            ["modCommon", "modMain", "BaseDados"],
+            @"C:\Users\aj\source\repos\OptiwareVB6\Optiware\Optiware98.vbp",
+            null,
+            //["frmPosMain"],
+            //["modCommon", "modMain", "BaseDados"],
             "./Optiware98");
     }
 }

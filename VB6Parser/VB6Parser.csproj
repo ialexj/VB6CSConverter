@@ -14,6 +14,8 @@
   <ItemGroup>
     <Antlr4 Include="VisualBasic6.g4" >
       <Package>VB6Parser</Package>
+      <Listener>false</Listener>
+      <Visitor>false</Visitor>
     </Antlr4>
   </ItemGroup>
 

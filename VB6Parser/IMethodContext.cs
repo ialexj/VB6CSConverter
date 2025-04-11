@@ -9,6 +9,8 @@ namespace VB6Parser
 {
     public interface IMethodContext
     {
+        bool IsFunction { get; }
+
         VisibilityContext visibility();
 
         AmbiguousIdentifierContext ambiguousIdentifier();
@@ -24,11 +26,14 @@ namespace VB6Parser
     {
         public partial class SubStmtContext : IMethodContext
         {
+            public bool IsFunction => false;
+
             AsTypeClauseContext IMethodContext.asTypeClause() => null;
         }
 
         public partial class FunctionStmtContext : IMethodContext
         {
+            public bool IsFunction => true;
         }
     }
 }

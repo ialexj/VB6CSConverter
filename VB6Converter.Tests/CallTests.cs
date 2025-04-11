@@ -11,6 +11,21 @@ namespace VB6Converter.Tests;
 public class CallTests
 {
     [TestMethod]
+    public void DbOpenTable() => ValidateBodyMatches(
+        "Set rsMovimentosCaixa = dbo.OpenRecordset(\"MovimentosCaixa\", dbOpenTable)",
+        "rsMovimentosCaixa = dbo.OpenRecordset(\"MovimentosCaixa\", RecordsetTypeEnum.dbOpenTable);"
+    );
+
+    [TestMethod]
+    public void CallStatementWithTypeHint() => ValidateBodyMatches(
+        """
+        x = Test$(y, "a", "b")
+        """,
+        """
+        x = Test(y, "a", "b");
+        """);
+
+    [TestMethod]
     public void CallStatement() => ValidateBodyMatches(
         """
         MyFunction1 1, 2, 3, a:= 4

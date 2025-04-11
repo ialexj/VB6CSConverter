@@ -1,0 +1,262 @@
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+using static VB6Converter.RoslynHelpers;
+
+namespace VB6Converter;
+
+public class VBFunctionRewriter : CSharpSyntaxRewriter
+{
+    public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
+    {
+        if (node.Identifier.Text == "vbNullString") {
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(string.Empty));
+        }
+
+
+        if (node.Identifier.Text == "vbCr") {
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\r"));
+        }
+        else if (node.Identifier.Text == "vbLf") {
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\n"));
+        }
+        else if (node.Identifier.Text == "vbCrLf") {
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\r\n"));
+        }
+        else if (node.Identifier.Text == "vbFormFeed") {
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\f"));
+        }
+        else if (node.Identifier.Text == "vbBack") {
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal('\b'));
+        }
+
+        else if (node.Identifier.Text == "vbTab") {
+            return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal('\t'));
+        }
+
+        // DAO
+
+        else if (node.Identifier.Text == "DAO") {
+            return ParseExpression("_DAO");
+        }
+
+        string[] RecordsetOptionEnum = [
+            "dbDenyWrite",
+            "dbDenyRead",
+            "dbReadOnly",
+            "dbAppendOnly",
+            "dbInconsistent",
+            "dbConsistent",
+            "dbSQLPassThrough",
+            "dbFailOnError",
+            "dbForwardOnly ",
+            "dbSeeChanges",
+            "dbRunAsync",
+            "dbExecDirect"
+        ];
+
+        if (RecordsetOptionEnum.Contains(node.Identifier.Text)) {
+            return ParseExpression("RecordsetOptionEnum." + node.Identifier.Text);
+        }
+
+        string[] RecordsetTypeEnum = [
+            "dbOpenTable",
+            "dbOpenSnapshot",
+            "dbOpenForwardOnly",
+            "dbOpenDynamic",
+            "dbOpenDynaset",
+            "dbOpenKeyset"
+        ];
+
+        if (RecordsetTypeEnum.Contains(node.Identifier.Text)) {
+            return ParseExpression("RecordsetTypeEnum." + node.Identifier.Text);
+        }
+
+        return base.VisitIdentifierName(node);
+    }
+
+
+    public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
+    {
+        if (node.Expression is not IdentifierNameSyntax name)
+            return base.VisitInvocationExpression(node);
+
+        return name.Identifier.Text switch {
+            "Replace" => ConvertReplace(node),
+            "IsNull" => ConvertIsNull(node),
+            "UBound" => ConvertUBound(node),
+
+            "DateSerial" => ConvertDateSerial(node),
+
+            "Hour" => ConvertDateTimePart(node),
+            "Minute" => ConvertDateTimePart(node),
+            "Second" => ConvertDateTimePart(node),
+            "Year" => ConvertDateTimePart(node),
+            "Month" => ConvertDateTimePart(node),
+            "Day" => ConvertDateTimePart(node),
+
+            "Len" => ConvertLen(node),
+            "Left" => ConvertLeft(node),
+
+            "MsgBox" => ConvertMsgBox(node),
+            _ => base.VisitInvocationExpression(node),
+        };
+    }
+
+    private SyntaxNode ConvertDateTimePart(InvocationExpressionSyntax node)
+    {
+        if (node.Expression is IdentifierNameSyntax name) {
+            var value = node.ArgumentList.Arguments[0];
+            return MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                (value.Expression as IdentifierNameSyntax),
+                name);
+        }
+        else {
+            return node;
+        }
+    }
+
+    private SyntaxNode ConvertDateSerial(InvocationExpressionSyntax node)
+    {
+        var year = node.ArgumentList.Arguments[0];
+        var month = node.ArgumentList.Arguments[1];
+        var day = node.ArgumentList.Arguments[2];
+
+        return ObjectCreationExpression(
+            IdentifierName("DateTime"),
+            ArgumentList(year, month, day),
+            null);
+    }
+
+    private SyntaxNode ConvertLeft(InvocationExpressionSyntax node)
+    {
+        var str = node.ArgumentList.Arguments[0];
+        var len = node.ArgumentList.Arguments[1];
+
+        return InvocationExpression(
+            MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                ParenthesizedExpression(CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression)),
+                IdentifierName("Substring")),
+            ArgumentList(
+                Argument(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0))),
+                len));        
+    }
+
+    private SyntaxNode ConvertLen(InvocationExpressionSyntax node)
+    {
+        var str = node.ArgumentList.Arguments[0];
+
+        return MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+            ParenthesizedExpression(CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression)),
+            IdentifierName("Length"));
+    }
+
+    private SyntaxNode ConvertUBound(InvocationExpressionSyntax node)
+    {
+        var array = node.ArgumentList.Arguments[0];
+
+        return MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+            ParenthesizedExpression(CastExpression(IdentifierName("Array"), array.Expression)),
+            IdentifierName("Length"));
+    }
+
+    static SyntaxNode ConvertReplace(InvocationExpressionSyntax node)
+    {
+        var str      = node.ArgumentList.Arguments[0];
+        var oldValue = node.ArgumentList.Arguments[1];
+        var newValue = node.ArgumentList.Arguments[2];
+
+        return InvocationExpression(
+            MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                ParenthesizedExpression(CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression)),
+                IdentifierName("Replace")),
+            ArgumentList(oldValue, newValue)
+        );
+    }
+
+    static SyntaxNode ConvertIsNull(InvocationExpressionSyntax node)
+    {
+        var value = node.ArgumentList.Arguments[0];
+
+        return ParenthesizedExpression(
+            IsPatternExpression(node.ArgumentList.Arguments[0].Expression, ConstantPattern(
+                    LiteralExpression(
+                        SyntaxKind.NullLiteralExpression
+                    )
+                )
+            ));
+    }
+
+    SyntaxNode ConvertMsgBox(InvocationExpressionSyntax node)
+    {
+        var arguments = node.ArgumentList;
+        var message = arguments.Arguments.Count >= 1 ? arguments.Arguments[0] : null;
+        var buttons = arguments.Arguments.Count >= 2 ? arguments.Arguments[1] : null;
+        var title = arguments.Arguments.Count >= 3 ? arguments.Arguments[2] : null;
+        var helpfile = arguments.Arguments.Count >= 4 ? arguments.Arguments[3] : null;
+        var context = arguments.Arguments.Count >= 5 ? arguments.Arguments[4] : null;
+
+        List<string> options = [];
+
+        if (buttons?.Expression is BinaryExpressionSyntax binary) {
+            if (binary.Left is IdentifierNameSyntax l) {
+                options.Add(l.Identifier.Text);
+            }
+            if (binary.Right is IdentifierNameSyntax r) {
+                options.Add(r.Identifier.Text);
+            }
+        }
+        else if (buttons?.Expression is IdentifierNameSyntax b) {
+            options.Add(b.Identifier.Text);
+        }
+
+        string buttonArg = null;
+        string iconArg = null;
+
+        foreach (var option in options) {
+            switch (option) {
+                case "vbOkOnly": buttonArg = "MessageBoxButtons.OK"; break;
+                case "vbOkCancel": buttonArg = "MessageBoxButtons.OKCancel"; break;
+                case "vbYesNo": buttonArg = "MessageBoxButtons.YesNo"; break;
+                case "vbYesNoCancel": buttonArg = "MessageBoxButtons.YesNoCancel"; break;
+                case "vbRetryCancel": buttonArg = "MessageBoxButtons.RetryCancel"; break;
+                case "vbAbortRetryIgnore": buttonArg = "MessageBoxButtons.AbortRetryIgnore"; break;
+
+                case "vbInformation": iconArg = "MessageBoxIcon.Information"; break;
+                case "vbQuestion": iconArg = "MessageBoxIcon.Question"; break;
+                case "vbExclamation": iconArg = "MessageBoxIcon.Exclamation"; break;
+                case "vbWarning": iconArg = "MessageBoxIcon.Warning"; break;
+                case "vbCritical": iconArg = "MessageBoxIcon.Error"; break;
+            }
+        }
+
+        IEnumerable<ArgumentSyntax> GetFinalArgs()
+        {
+            yield return message;
+            if (title != null) {
+                yield return title;
+            }
+            if (buttonArg != null) {
+                yield return Argument(ParseName(buttonArg));
+            }
+            if (iconArg != null) {
+                yield return Argument(ParseName(iconArg));
+            }
+        }
+
+        return InvocationExpression(
+            MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName("MessageBox"), IdentifierName("Show")))
+            .WithArgumentList(ArgumentList(GetFinalArgs().ToArray()));
+    }
+}

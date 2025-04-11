@@ -1,10 +1,12 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using Antlr4.Runtime;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
-using VB6Converter.CSharpModel;
 using VB6Parser;
 
 namespace VB6Converter;
@@ -20,7 +22,7 @@ public static class VB6ToCSharpConverter
 
     public static async Task<CompilationUnitSyntax> ConvertFile(string path, string name, string nsName, VisualBasicFileType type, string output)
     {
-        using var reader = VisualBasic6Lexer.OpenFile(path);
+        using var reader = VisualBasic6Parser.OpenFile(path);
         var cu = GetCompilationUnit(reader, name, nsName, type, output);
         await File.WriteAllTextAsync(output, cu.ToFullString());
         return cu;
@@ -41,15 +43,17 @@ public static class VB6ToCSharpConverter
 
     public static CompilationUnitSyntax GetCompilationUnit(TextReader reader, string name, string nsName, VisualBasicFileType type, string outputPath = null)
     {
-        var lexer = VisualBasic6Lexer.Lex(reader, name, outputPath != null ? $"{outputPath}.tokens" : null);
-        var parser = VisualBasic6Parser.Parse(lexer, name, outputPath != null ? $"{outputPath}.syntax.lisp" : null);
+        var parse = VisualBasic6Parser.Parse(reader);
 
-        if (parser.NumberOfSyntaxErrors > 0) {
-            throw new Exception($"error parsing {name}.");
+        if (parse.HasErrors && outputPath != null) {
+            parse.WriteTokens($"{outputPath}.tokens", true);
+            parse.WriteTree($"{outputPath}.syntax.lisp", true);
+            parse.WriteErrors($"{outputPath}.log", true);
+            throw new Exception("Parse errors found. See log file for details.");
         }
 
-        var transform = new CSharpTransformation(failOnError: false);
-        return transform.GetCompilationUnit(parser.module(), name, nsName, type);
+        var transform = new VB6ToCSharpTransformation(failOnError: false);
+        return transform.GetCompilationUnit(parse.Parser.module(), name, nsName, type == VisualBasicFileType.Module);
     }
 
     public static async Task<Conversion[]> ConvertProject(string path, string[] filter, string outDir)
@@ -73,11 +77,19 @@ public static class VB6ToCSharpConverter
                         Console.WriteLine($"{file.Name} Converted.");
                         return new Conversion(file.Name, cu, null);
                     }
-                    catch (Exception ex) {
+                    catch (Exception ex) when (!Debugger.IsAttached) {
                         Console.WriteLine($"{file.Name} ERROR: {ex.Message}");
                         return new Conversion(file.Name, null, ex);
                     }
                 })));
+
+        //StringBuilder globalUsings = new();
+        //foreach (var file in files) {
+        //    globalUsings.AppendLine($"global using static {project.Name}.{file.Name};");
+        //}
+
+        //var globalUsingsPath = Path.Combine(outDir, "_VB6Usings.cs");
+        //File.WriteAllText(globalUsingsPath, globalUsings.ToString());
 
         string projectPath = Path.Combine(outDir, $"{project.Name}.csproj");
         if (!File.Exists(projectPath)) {

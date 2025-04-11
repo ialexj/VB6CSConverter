@@ -2078,7 +2078,7 @@ LINE_CONTINUATION
 
 
 NEWLINE
-   : WS? ( BR | (COLON ' ') | (COLON BR) ) WS?
+   : WS? (BR | COLON ' ') WS?
    ;
 
 
