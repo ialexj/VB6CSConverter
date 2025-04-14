@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Runtime.CompilerServices;
 using System.Text;
+using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests;
 
@@ -10,7 +11,7 @@ namespace VB6Converter.Tests;
 public class WithCallTests
 {
     [TestMethod]
-    public void CallSingleMemberStatement() => ValidateMemberMatches(
+    public void CallSingleMemberStatement() => ValidateBodyMatches(
         """
         With obj
             .MyFunction 1, 2, 3, a:= 4
@@ -25,7 +26,7 @@ public class WithCallTests
         """);
 
     [TestMethod]
-    public void CallMultiMemberStatement() => ValidateMemberMatches(
+    public void CallMultiMemberStatement() => ValidateBodyMatches(
         """
         With one.two
             .MyFunction 1, 2, 3, a:= 4
@@ -42,7 +43,7 @@ public class WithCallTests
 
 
     [TestMethod]
-    public void CallSingleMemberExpression() => ValidateMemberMatches(
+    public void CallSingleMemberExpression() => ValidateBodyMatches(
         """
         With obj
             x = .MyFunction(1, 2, 3, a:= 4)
@@ -52,7 +53,7 @@ public class WithCallTests
     );
 
     [TestMethod]
-    public void CallMultiMemberExpression() => ValidateMemberMatches(
+    public void CallMultiMemberExpression() => ValidateBodyMatches(
         """
         With one.two
             x = .MyFunction(1, 2, 3, a:= 4)
@@ -63,7 +64,7 @@ public class WithCallTests
 
 
     [TestMethod]
-    public void ArrayMemberToFunctionAssignmentExpression() => ValidateMemberMatches(
+    public void ArrayMemberToFunctionAssignmentExpression() => ValidateBodyMatches(
         """
         With one
             .arr(1) = MyFunction(1, 2, 3, a:= 4)
@@ -73,7 +74,7 @@ public class WithCallTests
     );
 
     [TestMethod]
-    public void ArraySubMemberToFunctionAssignmentExpression() => ValidateMemberMatches(
+    public void ArraySubMemberToFunctionAssignmentExpression() => ValidateBodyMatches(
         """
         With one.two
             .arr(1) = MyFunction(1, 2, 3, a:= 4)
@@ -85,7 +86,7 @@ public class WithCallTests
 
 
     [TestMethod]
-    public void AssignValueMember() => ValidateMemberMatches(
+    public void AssignValueMember() => ValidateBodyMatches(
         """
         With one
             x = .y
@@ -96,7 +97,7 @@ public class WithCallTests
 
 
     [TestMethod]
-    public void AssignToDictionary() => ValidateMemberMatches(
+    public void AssignToDictionary() => ValidateBodyMatches(
         """
         With x
             !key = v
@@ -106,7 +107,7 @@ public class WithCallTests
     );
 
     [TestMethod]
-    public void AssignToMemberDictionary() => ValidateMemberMatches(
+    public void AssignToMemberDictionary() => ValidateBodyMatches(
         """
         With one.x
             !key = v
@@ -116,7 +117,7 @@ public class WithCallTests
     );
 
     [TestMethod]
-    public void AssignToSubMemberDictionary() => ValidateMemberMatches(
+    public void AssignToSubMemberDictionary() => ValidateBodyMatches(
         """
         With one.two.x
             !key = v
@@ -126,7 +127,7 @@ public class WithCallTests
     );
 
     [TestMethod]
-    public void AssignDictionaryToValue() => ValidateMemberMatches(
+    public void AssignDictionaryToValue() => ValidateBodyMatches(
         """
         With x
             v = !key
@@ -136,7 +137,7 @@ public class WithCallTests
     );
 
     [TestMethod]
-    public void AssignMemberDictionaryToValue() => ValidateMemberMatches(
+    public void AssignMemberDictionaryToValue() => ValidateBodyMatches(
         """
         With one.x
             v = !key
@@ -146,7 +147,7 @@ public class WithCallTests
     );
 
     [TestMethod]
-    public void AssignSubMemberDictionaryToValue() => ValidateMemberMatches(
+    public void AssignSubMemberDictionaryToValue() => ValidateBodyMatches(
         """
         With one.two.x
             v = !key
@@ -155,25 +156,18 @@ public class WithCallTests
         "v = one.two.x[\"key\"];"
     );
 
-    static void ValidateMemberMatches(string vb, string cs, [CallerMemberName] string? name = null)
-    {
-        var wrapper = $"""
-            Sub Test()
-                {vb}
-            End Sub
-            """;
-
-        var cu = VB6ToCSharpConverter.GetCompilationUnit(wrapper, name);
-        var ns = (FileScopedNamespaceDeclarationSyntax)cu.Members[0];
-        var cls = (ClassDeclarationSyntax)ns.Members[0];
-        var met = (MethodDeclarationSyntax)cls.Members[0];
-
-        var sb = new StringBuilder();
-        foreach (var m in met.Body!.Statements) {
-            sb.AppendLine(m.NormalizeWhitespace().ToFullString());
+    [TestMethod]
+    public void WithInExpression() => ValidateBodyMatches(
+        """
+        With rsTmp
+            If (.RecordCount > 0) Then
+            End If
+        End With
+        """,
+        """
+        if ((rsTmp.RecordCount > 0))
+        {
         }
-
-        string converted = sb.ToString().TrimEnd(Environment.NewLine.ToCharArray());
-        converted.Should().Be(cs);
-    }
+        """
+        );
 }

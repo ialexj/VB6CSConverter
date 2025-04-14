@@ -92,34 +92,56 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
 
             "DateSerial" => ConvertDateSerial(node),
 
-            "Hour" => ConvertDateTimePart(node),
-            "Minute" => ConvertDateTimePart(node),
-            "Second" => ConvertDateTimePart(node),
-            "Year" => ConvertDateTimePart(node),
-            "Month" => ConvertDateTimePart(node),
-            "Day" => ConvertDateTimePart(node),
+            "Hour" => ConvertToMemberAccess(node),
+            "Minute" => ConvertToMemberAccess(node),
+            "Second" => ConvertToMemberAccess(node),
+            "Year" => ConvertToMemberAccess(node),
+            "Month" => ConvertToMemberAccess(node),
+            "Day" => ConvertToMemberAccess(node),
+
+            "Now" => ParseExpression("DateTime.Now"),
+            "Date" => ParseExpression("DateTime.Now.Date"),
 
             "Len" => ConvertLen(node),
             "Left" => ConvertLeft(node),
+
+            "CStr" => ConvertToMemberAccess(node, "Convert.ToString"),
+            "CLng" => ConvertToMemberAccess(node, "Convert.ToInt32"),
+            "CDbl" => ConvertToMemberAccess(node, "Convert.ToDouble"),
+
+            "IIf" => ConvertIIf(node),
+
 
             "MsgBox" => ConvertMsgBox(node),
             _ => base.VisitInvocationExpression(node),
         };
     }
 
-    private SyntaxNode ConvertDateTimePart(InvocationExpressionSyntax node)
+    private SyntaxNode ConvertIIf(InvocationExpressionSyntax node)
+    {
+        var condition = node.ArgumentList.Arguments[0].Expression;
+        var trueValue = node.ArgumentList.Arguments[1].Expression;
+        var falseValue = node.ArgumentList.Arguments[2].Expression;
+
+        return ConditionalExpression(condition, trueValue, falseValue);
+    }
+
+    private SyntaxNode ConvertToMemberAccess(InvocationExpressionSyntax node, string expression)
+        => InvocationExpression(
+            ParseExpression(expression),
+            ArgumentList(node.ArgumentList.Arguments[0].Expression));
+
+    private SyntaxNode ConvertToMemberAccess(InvocationExpressionSyntax node) 
     {
         if (node.Expression is IdentifierNameSyntax name) {
             var value = node.ArgumentList.Arguments[0];
-            return MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression,
-                (value.Expression as IdentifierNameSyntax),
-                name);
+            return MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, value.Expression, name);
         }
         else {
             return node;
         }
     }
+
 
     private SyntaxNode ConvertDateSerial(InvocationExpressionSyntax node)
     {

@@ -217,6 +217,16 @@ public sealed class ClassTests
         }
         """);
 
-
+    [TestMethod]
+    public void Event() => ValidateClassMatches(
+        """
+        Public Event TotalChanged()
+        """,
+        """
+        public static partial class Event
+        {
+            public static event EventHandler TotalChanged;
+        }
+        """);
 
 }

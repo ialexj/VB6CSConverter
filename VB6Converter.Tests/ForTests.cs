@@ -11,7 +11,7 @@ public class ForTests
         Next i
         """,
         """
-        for (int i = 1; i <= 10; i++)
+        for (i = 1; i <= 10; i++)
         {
         }
         """);
@@ -23,7 +23,7 @@ public class ForTests
         Next i
         """,
         """
-        for (int i = 1; i <= 10; i++)
+        for (i = 1; i <= 10; i++)
         {
         }
         """);
@@ -35,7 +35,7 @@ public class ForTests
         Next i
         """,
         """
-        for (int i = 1; i <= 10; i += 2)
+        for (i = 1; i <= 10; i += 2)
         {
         }
         """);
@@ -47,7 +47,7 @@ public class ForTests
         Next i
         """,
         """
-        for (int i = 10; i >= 1; i--)
+        for (i = 10; i >= 1; i--)
         {
         }
         """);
@@ -59,7 +59,7 @@ public class ForTests
         Next i
         """,
         """
-        for (int i = 10; i >= 1; i -= 2)
+        for (i = 10; i >= 1; i -= 2)
         {
         }
         """);
@@ -71,7 +71,7 @@ public class ForTests
         Next i
         """,
         """
-        for (double d = 1; d <= 10; d++)
+        for (d = 1; d <= 10; d++)
         {
         }
         """);
@@ -84,7 +84,7 @@ public class ForTests
         Next i
         """,
         """
-        for (int i = 1; i <= 10; i++)
+        for (i = 1; i <= 10; i++)
         {
             break;
         }

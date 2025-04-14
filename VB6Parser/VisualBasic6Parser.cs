@@ -1,11 +1,17 @@
 ﻿using Antlr4.Runtime;
 using Antlr4.Runtime.Misc;
 using Antlr4.Runtime.Tree;
+using System.Reflection.PortableExecutable;
+using System.Text.RegularExpressions;
+using System.Text;
 
 namespace VB6Parser;
 
 public partial class VisualBasic6Parser
 {
+    [GeneratedRegex(@"(.+?\:)\s{2}\s+(.+)")]
+    private static partial Regex WeirdMultilineRegex();
+
     public static StreamReader OpenFile(string path)
     {
         var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -21,6 +27,25 @@ public partial class VisualBasic6Parser
     public static ParseResult Parse(TextReader text)
     {
         ArgumentNullException.ThrowIfNull(text);
+
+        // Preprocess
+
+        var sb = new StringBuilder();
+
+        string line = null;
+        while ((line = text.ReadLine()) != null) {
+            if (WeirdMultilineRegex().Match(line) is Match m && m.Success) {
+                sb.AppendLine(m.Groups[1].Value);
+                sb.AppendLine(m.Groups[2].Value);
+            }
+            else {
+                sb.AppendLine(line);
+            }
+        }
+
+        text = new StringReader(sb.ToString());
+
+        // Now antlr
 
         var str = new AntlrInputStream(text);
         var lexer = new VisualBasic6Lexer(str);

@@ -15,8 +15,12 @@ using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter;
 
-public class VB6ToCSharpTransformation(bool failOnError = true)
+public record class TransformError(string Message = null, object Context = null);
+
+public class VB6ToCSharpConversion
 {
+    readonly bool _failOnError;
+
     readonly Stack<ImplicitCallStmt_InStmtContext> _with = [];
     readonly List<ComReference> _comReferences = [];
 
@@ -24,49 +28,48 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
 
     public IReadOnlyList<ComReference> ComReferences => _comReferences;
 
+    public string Name { get; }
 
-    public IReadOnlyList<CompilationUnitSyntax> GetProject(IEnumerable<ConversionTarget> files, string ns)
-    {
-        List<CompilationUnitSyntax> units = [];
+    public List<TransformError> Errors { get; } = [];
 
-        foreach (var file in files) {
-            var cu = GetCompilationUnit(file.Module, file.Name, ns, file.Static);
-            units.Add(cu);
-        }
+    public CompilationUnitSyntax CompilationUnit { get; }
 
-        return units;
-    }
+    public FileScopedNamespaceDeclarationSyntax Namespace { get; }
 
-    public CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string name, string ns, bool isStatic)
+    public ClassDeclarationSyntax Class { get; }
+
+
+    public VB6ToCSharpConversion(ModuleContext module, string name, string ns, bool isStatic, bool failOnError = true)
     {
         using var _ = new TraceMethod(module);
 
-        var cu = CompilationUnit()
+        _failOnError = failOnError;
+
+        Name = name ?? throw new ArgumentNullException(nameof(name));
+
+        CompilationUnit = CompilationUnit()
             .AddUsings(
                 UsingDirective(ParseName("System")),
                 UsingDirective(ParseName("System.Collections.Generic")));
 
-        var @namespace = FileScopedNamespaceDeclaration(IdentifierName(ns ?? name));
+        Namespace = FileScopedNamespaceDeclaration(IdentifierName(ns ?? name));
 
-        var body = module.moduleBody();
+        Class = GetClass(module.moduleBody(), name, isStatic);
 
-        @namespace = @namespace
-            .WithMembers(
-                SingletonList<MemberDeclarationSyntax>(
-                    GetClass(body, name,
-                        @static: isStatic)));
+        Namespace = Namespace.WithMembers(SingletonList<MemberDeclarationSyntax>(Class));
 
-        return cu.WithMembers(SingletonList<MemberDeclarationSyntax>(@namespace)).NormalizeWhitespace();
+        CompilationUnit = CompilationUnit
+            .WithMembers(SingletonList<MemberDeclarationSyntax>(Namespace));
+
+        CompilationUnit = CompilationUnit.NormalizeWhitespace();
     }
 
-    public ClassDeclarationSyntax GetClass(ModuleBodyContext body, string name, bool @static = false)
+    ClassDeclarationSyntax GetClass(ModuleBodyContext body, string name, bool isStatic)
     {
-        using var _ = new TraceMethod(body);
-
         IEnumerable<SyntaxToken> GetModifiers()
         {
             yield return Token(SyntaxKind.PublicKeyword);
-            if (@static) {
+            if (isStatic) {
                 yield return Token(SyntaxKind.StaticKeyword);
             }
             yield return Token(SyntaxKind.PartialKeyword);
@@ -75,66 +78,88 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
         var c = ClassDeclaration(name)
             .WithModifiers(TokenList(GetModifiers()));
 
-        foreach (var e in body.moduleBodyElement()) {
-            if (e.moduleBlock() is ModuleBlockContext moduleBlock) {
-                if (moduleBlock.block() is BlockContext block) {
-                    foreach (var stmt in block.blockStmt()) {
-                        if (stmt.constStmt() is ConstStmtContext @const) {
-                            c = c.AddMembers(GetConstantFields(@const).ToArray());
-                        }
-                        else if (stmt.variableStmt() is VariableStmtContext var) {
-                            c = c.AddMembers(GetVariableFields(var).ToArray());
+         foreach (var member in body.moduleBodyElement()) {
+            try {
+                foreach (var decl in GetMemberDeclarations(member, isStatic)) {
+                    if (decl is PropertyDeclarationSyntax property) {
+                        var existing = c.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => Equals(p.Identifier.Text, property.Identifier.Text));
+                        if (existing != null) {
+                            var replace = existing.AddAccessorListAccessors([.. property.AccessorList.Accessors]);
+                            c = c.ReplaceNode(existing, replace);
                         }
                         else {
-                            NotSupported(stmt);
+                            c = c.AddMembers(property);
                         }
+                    }
+                    else {
+                        c = c.AddMembers(decl);
                     }
                 }
             }
-
-            else if (e.enumerationStmt() is EnumerationStmtContext enumCtx) {
-                c = c.AddMembers(GetEnum(enumCtx));
-            }
-            else if (e.typeStmt() is TypeStmtContext typeCtx) {
-                c = c.AddMembers(GetStruct(typeCtx));
-            }
-
-            else if (e.subStmt() is SubStmtContext sub) {
-                c = c.AddMembers(GetMethod(sub));
-            }
-            else if (e.functionStmt() is FunctionStmtContext func) {
-                c = c.AddMembers(GetMethod(func));
-            }
-            else if (e.declareStmt() is DeclareStmtContext declare) {
-                c = c.AddMembers(GetExtern(declare));
-            }
-
-            else if (e.propertyAccessor() is IPropertyContext prop) {
-                var property = GetProperty(prop);
-                var existing = c.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => Equals(p.Identifier.Text, property.Identifier.Text));
-                if (existing != null) {
-                    var replace = existing.AddAccessorListAccessors([.. property.AccessorList.Accessors]);
-                    c = c.ReplaceNode(existing, replace);
-                }
-                else {
-                    c = c.AddMembers(property);
-                }
-            }
-
-            else {
-                NotSupported(e);
+            catch (Exception ex) when (!_failOnError) {
+                Errors.Add(new(ex.Message, member));
             }
         }
 
-        
-        var mr = new ReturnValueRewriter();
-        c = (ClassDeclarationSyntax)mr.Visit(c);
-
-        // Apply additional corrections
         var rewriter = new VBFunctionRewriter();
         c = (ClassDeclarationSyntax)rewriter.Visit(c);
-
         return c;
+    }
+
+    IEnumerable<MemberDeclarationSyntax> GetMemberDeclarations(ModuleBodyElementContext e, bool isStatic)
+    {
+        using var _ = new TraceMethod(e);
+
+        if (e.moduleBlock() is ModuleBlockContext moduleBlock) {
+            if (moduleBlock.block() is BlockContext block) {
+                foreach (var stmt in block.blockStmt()) {
+                    if (stmt.constStmt() is ConstStmtContext @const) {
+                        foreach (var f in GetConstantFields(@const)) {
+                            yield return f;
+                        }
+                        
+                    }
+                    else if (stmt.variableStmt() is VariableStmtContext var) {
+                        foreach (var f in GetVariableFields(var)) {
+                            yield return f;
+                        }
+                    }
+                    else {
+                        throw NotSupported(stmt);
+                    }
+                }
+            }
+        }
+
+        else if (e.enumerationStmt() is EnumerationStmtContext enumCtx) {
+            yield return GetEnum(enumCtx);
+        }
+        else if (e.typeStmt() is TypeStmtContext typeCtx) {
+            yield return GetStruct(typeCtx);
+        }
+
+        else if (e.subStmt() is SubStmtContext sub) {
+            yield return GetMethod(sub);
+        }
+        else if (e.functionStmt() is FunctionStmtContext func) {
+            yield return GetMethod(func);
+        }
+        else if (e.declareStmt() is DeclareStmtContext declare) {
+            yield return GetExtern(declare);
+        }
+
+        else if (e.eventStmt() is EventStmtContext @event) {
+            yield return GetEvent(@event);
+        }
+
+        else if (e.propertyAccessor() is IPropertyContext prop) {
+            yield return GetProperty(prop);
+        }
+
+        else {
+            throw NotSupported(e);
+        }
+        
 
         StructDeclarationSyntax GetStruct(TypeStmtContext type)
         {
@@ -186,18 +211,29 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
 
             // Rewrite return style
 
-            return MethodDeclaration(type, name)
+            var method = MethodDeclaration(type, name)
                 .WithModifiers(TokenList(new SyntaxToken?[] {
                     visb,
-                    @static ? Token(SyntaxKind.StaticKeyword) : null
+                    isStatic ? Token(SyntaxKind.StaticKeyword) : null
                 }.OfType<SyntaxToken>()))
                 .WithParameterList(GetMethodParameters(methodCtx.argList()))
                 .WithBody(body);
+
+            var mr = new ReturnValueRewriter();
+            method = (MethodDeclarationSyntax)mr.Visit(method);
+            return method;
         }
 
         PropertyDeclarationSyntax GetProperty(IPropertyContext propCtx)
         {
-            var vis = GetVisibility(propCtx.visibility());
+            IEnumerable<SyntaxToken> GetModifiers()
+            {
+                yield return GetVisibility(propCtx.visibility());
+                if (isStatic || propCtx.STATIC() is not null) {
+                    yield return Token(SyntaxKind.StaticKeyword);
+                }
+            }
+
             var name = GetIdentifier(propCtx.ambiguousIdentifier());
             var body = GetBlock(propCtx.block());
 
@@ -228,14 +264,15 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                 throw NotSupported(propCtx);
             }
 
-            return PropertyDeclaration(type, name)
-                .WithModifiers(TokenList(new SyntaxToken?[] {
-                    vis,
-                    @static || propCtx.STATIC() is not null ? Token(SyntaxKind.StaticKeyword) : null,
-                }.OfType<SyntaxToken>()))
+            var prop = PropertyDeclaration(type, name)
+                .WithModifiers(TokenList(GetModifiers()))
                 .WithAccessorList(AccessorList(
                     SingletonList(AccessorDeclaration(kind)
                         .WithBody(body))));
+
+            var mr = new ReturnValueRewriter();
+            prop = (PropertyDeclarationSyntax)mr.Visit(prop);
+            return prop;
         }
 
         MethodDeclarationSyntax GetExtern(DeclareStmtContext declare)
@@ -269,6 +306,29 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                 ))))
                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
         }
+        
+        EventDeclarationSyntax GetEvent(EventStmtContext eventCtx)
+        {
+            IEnumerable<SyntaxToken> GetModifiers()
+            {
+                yield return GetVisibility(eventCtx.visibility());
+                if (isStatic) {
+                    yield return Token(SyntaxKind.StaticKeyword);
+                }
+            }
+
+            var id = GetIdentifierName(eventCtx.ambiguousIdentifier());
+            var args = GetMethodParameters(eventCtx.argList());
+
+            if (args.ChildNodes().Any()) {
+                throw NotSupported(eventCtx);
+            }
+
+            return EventDeclaration(ParseTypeName("EventHandler"), id.Identifier)
+                .WithModifiers(TokenList(GetModifiers()))
+                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+        }
+
 
         ParameterListSyntax GetMethodParameters(ArgListContext argsContext)
         {
@@ -283,6 +343,13 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                     parameter = parameter.WithDefault(EqualsValueClause(GetValue(def.valueStmt())));
                 }
 
+                if (arg.PARAMARRAY() is not null) {
+                    parameter = parameter
+                        .WithModifiers(TokenList(Token(SyntaxKind.ParamsKeyword)))
+                        .WithType(ArrayType(parameter.Type));
+                    
+                }
+
                 return parameter;
             }
 
@@ -291,20 +358,29 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                     argsContext.arg().Select(GetParameter).ToArray()));
         }
 
+        
+
         IEnumerable<FieldDeclarationSyntax> GetConstantFields(ConstStmtContext @const)
             => GetConstantDeclarations(@const).Select(v => FieldDeclaration(v)
                 .WithModifiers(TokenList(
                     GetVisibility(@const.publicPrivateGlobalVisibility()),
                     Token(SyntaxKind.ConstKeyword))));
 
+
+        IEnumerable<SyntaxToken> GetModifiers(IVisibilityContext visibility)
+        {
+            yield return GetVisibility(visibility);
+            if (isStatic) {
+                yield return Token(SyntaxKind.StaticKeyword);
+            }
+        }
+
         IEnumerable<FieldDeclarationSyntax> GetVariableFields(VariableStmtContext var)
             => GetVariableDeclarations(var).Select(v => FieldDeclaration(v)
-                .WithModifiers(TokenList(
-                    GetVisibility(var.visibility()),
-                    Token(SyntaxKind.StaticKeyword)
-                )));
+                .WithModifiers(TokenList(GetModifiers(var.visibility()))));
     }
 
+    
 
     IEnumerable<VariableDeclarationSyntax> GetConstantDeclarations(ConstStmtContext @const)
     {
@@ -392,28 +468,10 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
 
     BlockSyntax GetBlock(BlockContext block) => (BlockSyntax)GetBlock(block, false, GetMethodStatements);
 
-    StatementSyntax GetBlock(BlockContext block, bool allowCollapse, Func<BlockStmtContext, IEnumerable<StatementSyntax>> statementFactory)
+    static StatementSyntax GetBlock(BlockContext block, bool allowCollapse, Func<BlockStmtContext, IEnumerable<StatementSyntax>> statementFactory)
         => GetBlockSyntax(block?.blockStmt().SelectMany(statementFactory).ToArray() ?? [], allowCollapse);
 
-    StatementSyntax GetBlockSyntax(StatementSyntax[] statements, bool allowCollapse)
-    {
-        if (allowCollapse) {
-            if (statements is null || statements.Length == 0) {
-                return EmptyStatement();
-            }
-            else if (statements.Length == 1) {
-                return statements[0];
-            }
-            else {
-                return Block(statements);
-            }
-        }
-        else {
-            return Block(statements ?? []);
-        }
-    }
-
-
+    
     IEnumerable<StatementSyntax> GetMethodStatements(BlockStmtContext stmt)
     {
         using var _ = new TraceMethod(stmt);
@@ -486,6 +544,16 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                 }
             }
 
+            else if (stmt.raiseEventStmt() is RaiseEventStmtContext raise) {
+                var name = GetIdentifierName(raise.ambiguousIdentifier());
+                var args = raise.argsCall();
+                if (args != null && args.ChildCount > 0) {
+                    throw NotSupported(raise);
+                }
+
+                yield return ParseStatement($"{name}?.Invoke(this, EventArgs.Empty);");
+            }
+
             else if (stmt.goToStmt() is GoToStmtContext goTo) {
                 yield return GetGoTo(goTo);
             }
@@ -503,6 +571,13 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                 yield return GetEnd(end);
             }
 
+            else if (stmt.attributeStmt() is AttributeStmtContext attribute) {
+                // do nothing
+            }
+
+            else if (stmt.beepStmt() is BeepStmtContext beepCtx) {
+                yield return ParseStatement("Console.Beep();");
+            }
             else if (stmt.sendkeysStmt() is SendkeysStmtContext sendKeys) {
                 var sendExpr = ParseExpression("SendKeys.Send");
                 foreach (var send in sendKeys.valueStmt()) {
@@ -513,12 +588,7 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
                 }
             }
             else {
-                if (failOnError) {
-                    throw NotSupported(stmt);
-                }
-                else {
-                    yield return ParseStatement(stmt.GetText());
-                }
+                throw NotSupported(stmt);
             }
         }
 
@@ -541,15 +611,17 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
         }
 
         try {
-            return GetStatementsWithLabels().ToArray();
+            return [.. GetStatementsWithLabels()];
         }
-        catch (Exception ex) when (!failOnError) {
-            return [EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {ex.Message}")))];
+        catch (Exception ex) when (!_failOnError) {
+            Errors.Add(new(ex.Message, stmt));
+            return [
+                ParseStatement(stmt.GetText()).WithTrailingTrivia(TriviaList(Comment($"// ERROR: {ex.Message}{Environment.NewLine}")))
+            ];
         }
     }
 
 
-    
     AssignmentExpressionSyntax GetAssignment(IAssignmentContext assignment)
     {
         using var _ = new TraceMethod(assignment);
@@ -617,9 +689,9 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
     {
         using var _ = new TraceMethod(call);
 
-        var segments = call.segments();
+        var segments = call.segments().ToArray();
         if (call.IsPartial && _with.TryPeek(out var with)) {
-            segments = with.segments().Concat(segments);
+            segments = with.segments().Concat(segments).ToArray();
         }
 
         ExpressionSyntax expr = null;
@@ -716,7 +788,7 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
         IEnumerable<SwitchSectionSyntax> GetSections()
         {
             foreach (var caseStmt in select.sC_Case()) {
-                var block = GetBlock(caseStmt.block());
+                var block = GetBlock(caseStmt.block()).AddStatements(BreakStatement());
 
                 if (caseStmt.sC_Cond() is CaseCondExprContext expr) {
                     var labels = List(GetLabels(expr).ToArray());
@@ -751,10 +823,93 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
             }
         }
 
-        return SwitchStatement(condition, List(GetSections()));
+        try {
+            return SwitchStatement(condition, List(GetSections()));
+        }
+        catch (NotSupportedException) {
+            return SwitchAsIf(select);
+        }
     }
-    
-    
+
+    private StatementSyntax SwitchAsIf(SelectCaseStmtContext select)
+    {
+        var condition = GetValue(select.valueStmt());
+
+        List<IfStatementSyntax> clauses = [];
+        ElseClauseSyntax @else = null;
+
+        foreach (var caseStmt in select.sC_Case()) {
+            var block = GetBlock(caseStmt.block());
+
+            if (caseStmt.sC_Cond() is CaseCondExprContext expr) {
+                var labels = List(expr.sC_CondExpr().Select(c => GetCondition(condition, c)));
+                foreach (var label in labels) {
+                    clauses.Add(IfStatement(label, block));
+                }
+            }
+            else if (caseStmt.sC_Cond() is CaseCondElseContext caseElse) {
+                @else = ElseClause(block);
+            }
+            else {
+                NotSupported(caseStmt);
+            }
+        }
+
+        ExpressionSyntax GetCondition(ExpressionSyntax condition, SC_CondExprContext c)
+        {
+            switch (c) {
+                case CaseCondExprValueContext valueCond: 
+                    var value = GetValue(valueCond.valueStmt());
+                    return BinaryExpression(SyntaxKind.EqualsExpression, condition, value);
+                    
+
+                case CaseCondExprToContext toCond: 
+                    var min = GetValue(toCond.valueStmt(0));
+                    var max = GetValue(toCond.valueStmt(1));
+
+                    return BinaryExpression(SyntaxKind.LogicalAndExpression,
+                        BinaryExpression(SyntaxKind.GreaterThanOrEqualExpression, condition, min),
+                        BinaryExpression(SyntaxKind.LessThanOrEqualExpression, condition, max));
+
+                case CaseCondExprIsContext isCond:
+                    var comparison = isCond.comparisonOperator();
+                    var kind = ((ITerminalNode)comparison.GetChild(0)).Symbol.Type switch {
+                        LT => SyntaxKind.LessThanExpression,
+                        LEQ => SyntaxKind.LessThanOrEqualExpression,
+                        GT => SyntaxKind.GreaterThanExpression,
+                        GEQ => SyntaxKind.GreaterThanOrEqualExpression,
+                        EQ => SyntaxKind.EqualsExpression,
+                        NEQ => SyntaxKind.NotEqualsExpression,
+                        IS => throw NotSupported(isCond),
+                        LIKE => throw NotSupported(isCond),
+                        _ => throw NotSupported(isCond)
+                    };
+
+                    var v = GetValue(isCond.valueStmt());
+                    return BinaryExpression(kind, condition, v);
+
+                default:
+                    throw NotSupported(c);
+            }
+        }
+
+        
+        if (clauses.Count == 1) {
+            return @else != null ? clauses[0].WithElse(@else) : (StatementSyntax)clauses[0];
+        }
+        else {
+            if (@else != null) {
+                clauses[^1] = clauses[^1].WithElse(@else);
+            }
+
+            for (int i = clauses.Count - 1; i > 0; i--) {
+                clauses[i - 1] = clauses[i - 1].WithElse(ElseClause(clauses[i]));
+            }
+
+            return clauses[0];
+        }        
+    }
+
     ForStatementSyntax GetForNext(ForNextStmtContext forNext)
     {
         var type = forNext.asTypeClause() is AsTypeClauseContext asType
@@ -839,7 +994,6 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
     }
 
 
-
     StatementSyntax GetRedim(RedimStmtContext redim)
     {
         using var _ = new TraceMethod(redim);
@@ -874,8 +1028,14 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
 
     StatementSyntax GetOpen(OpenStmtContext open)
     {
-        var variable = GetValue(open.valueStmt(1)) as IdentifierNameSyntax;
         var file = GetValue(open.valueStmt(0));
+        var name = GetValue(open.valueStmt(1));
+
+        var variable = name switch {
+            IdentifierNameSyntax n => n,
+            LiteralExpressionSyntax l => IdentifierName(l.Token.Text),
+            _ => throw NotSupported(open)
+        };
 
         string GetFileAccess()
         {
@@ -1040,24 +1200,37 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
     {
         using var _ = new TraceMethod(valueCtx);
 
-        if (valueCtx is null) {
-            return LiteralExpression(SyntaxKind.NullLiteralExpression);
+        try {
+            if (valueCtx is null) {
+                return LiteralExpression(SyntaxKind.NullLiteralExpression);
+            }
+            else if (valueCtx is VsICSContext vsics) {
+                return GetCallInvocationExpression(vsics.implicitCallStmt_InStmt());
+            }
+            else if (valueCtx is VsLiteralContext literal) {
+                return GetLiteral(literal.literal());
+            }
+            else if (valueCtx is VsNewContext @new) {
+                return ObjectCreationExpression(IdentifierName(@new.valueStmt().GetText()))
+                    .WithArgumentList(ArgumentList());
+            }
+            else if (valueCtx is VsStructContext @struct) {
+                if (@struct.valueStmt().Length > 1) {
+                    throw NotSupported("Struct with more than one value.");
+                }
+
+                var value = GetValue(@struct.valueStmt(0));
+                return ParenthesizedExpression(value);
+            }
+            else if (valueCtx is IOperatorContext oper) {
+                return GetOperator(oper);
+            }
+            else {
+                throw NotSupported($"Unknown value: {valueCtx.GetType().Name} {valueCtx.GetText()}");
+            }
         }
-        else if (valueCtx is VsICSContext vsics) {
-            return GetCallInvocationExpression(vsics.implicitCallStmt_InStmt());
-        }
-        else if (valueCtx is VsLiteralContext literal) {
-            return GetLiteral(literal.literal());
-        }
-        else if (valueCtx is VsNewContext @new) {
-            return ObjectCreationExpression(IdentifierName(@new.valueStmt().GetText()))
-                .WithArgumentList(ArgumentList());
-        }
-        else if (valueCtx is IOperatorContext oper) {
-            return GetOperator(oper);
-        }
-        else {
-            Trace.TraceWarning("Unknown value: {0} {1}", valueCtx.GetType().Name, valueCtx.GetText());
+        catch (Exception ex) when (!_failOnError) {
+            Errors.Add(new(ex.Message, valueCtx));
             return ParseExpression(valueCtx.GetText());
         }
     }
@@ -1078,6 +1251,8 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
             VsMultContext  => SyntaxKind.MultiplyExpression,
             VsDivContext   => SyntaxKind.DivideExpression,
             VsModContext   => SyntaxKind.ModuloExpression,
+            
+            VsNegationContext => SyntaxKind.UnaryMinusExpression,
 
             VsEqContext  => SyntaxKind.EqualsExpression,
             VsNeqContext => SyntaxKind.NotEqualsExpression,           
@@ -1139,6 +1314,14 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
             string str = @string.Symbol.Text;
             str = str.Trim('"');
             return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(str));
+        }
+        else if (lit.DATELITERAL() is ITerminalNode @date) {
+            var text = date.Symbol.Text.Trim('#');
+            return InvocationExpression(
+                ParseExpression("DateTime.Parse"),
+                ArgumentList(
+                    LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(text))
+                ));
         }
         else if (lit.FILENUMBER() is ITerminalNode file) {
             return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(file.GetText().TrimStart('#')));
@@ -1278,8 +1461,8 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
             ts = typeSymbol.Type switch {
                 BOOLEAN => Predefined(SyntaxKind.BoolKeyword),
                 BYTE => Predefined(SyntaxKind.ByteKeyword),
-                COLLECTION => ParseTypeName("System.Collections.List<object>"),
-                DATE => ParseTypeName("System.DateTime"),
+                COLLECTION => ParseTypeName("List<object>"),
+                DATE => ParseTypeName("DateTime"),
                 DOUBLE => Predefined(SyntaxKind.DoubleKeyword),
                 INTEGER => Predefined(SyntaxKind.IntKeyword),
                 LONG => Predefined(SyntaxKind.IntKeyword),
@@ -1326,6 +1509,8 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
         return Token(GetVisibilityKeyword());
     }
 
+    
+
 
     [DebuggerHidden]
     static Exception NotSupported(object context, string message = null, [CallerMemberName] string caller = null)
@@ -1333,12 +1518,15 @@ public class VB6ToCSharpTransformation(bool failOnError = true)
         if (string.IsNullOrEmpty(message)) {
             message = "Not supported";
         }
+
         if (context is ParserRuleContext parser) {
-            throw new NotSupportedException($"{message} from {caller}: '{parser.GetText()}'\r\n{new ConsoleVisitor().Visit(parser)}");
+            message = $"{message} from {caller}: '{parser.GetText()}'\r\n{new ConsoleVisitor().Visit(parser)}";
         }
         else {
-            throw new NotSupportedException($"{message} from {caller}: '{context.GetType().Name}'");
+            message = $"{message} from {caller}: '{context.GetType().Name}'";
         }
+
+        throw new NotSupportedException(message);
     }
 
     class TraceMethod : IDisposable

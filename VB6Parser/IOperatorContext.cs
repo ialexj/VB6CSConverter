@@ -23,6 +23,10 @@ namespace VB6Parser
         partial class VsPowContext : IOperatorContext { }
         partial class VsModContext : IOperatorContext { }
 
+        partial class VsNegationContext : IOperatorContext {
+            ValueStmtContext[] IOperatorContext.valueStmt() => [valueStmt()];
+        }
+
 
         partial class VsEqContext : IOperatorContext { }
         partial class VsNeqContext : IOperatorContext { }

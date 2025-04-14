@@ -166,5 +166,14 @@ public class CallTests
 
 
 
+    [TestMethod]
+    public void ArrayCall() => ValidateBodyMatches(
+        """
+        chkEntCC(0).Enabled = fActiva
+        """,
+        """
+        chkEntCC[0].Enabled = fActiva;
+        """);
+
     
 }

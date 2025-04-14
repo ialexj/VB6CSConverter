@@ -207,6 +207,9 @@ namespace VB6Parser
                 if (iCS_S_VariableOrProcedureCall() is ICS_S_VariableOrProcedureCallContext vpc) {
                     yield return vpc;
                 }
+                else if (iCS_S_ProcedureOrArrayCall() is ICS_S_ProcedureOrArrayCallContext procarr) {
+                    yield return procarr;
+                }
 
                 foreach (var member in iCS_S_MemberCall()) {
                     yield return member.target();

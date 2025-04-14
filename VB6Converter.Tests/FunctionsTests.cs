@@ -10,4 +10,13 @@ public class FunctionsTests
         "Set rsMovimentosCaixa = dbo.OpenRecordset(\"MovimentosCaixa\", dbOpenTable)",
         "rsMovimentosCaixa = dbo.OpenRecordset(\"MovimentosCaixa\", RecordsetTypeEnum.dbOpenTable);"
     );
+
+    [TestMethod]
+    public void IIf() => ValidateBodyMatches(
+        """
+        x = IIf(a, b, c)
+        """,
+        """
+        x = a ? b : c;
+        """);
 }

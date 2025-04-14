@@ -41,5 +41,23 @@ namespace VB6Converter
                         .Intersperse(Token(SyntaxKind.CommaToken)))));
             }
         }
+
+        public static StatementSyntax GetBlockSyntax(StatementSyntax[] statements, bool allowCollapse)
+        {
+            if (allowCollapse) {
+                if (statements is null || statements.Length == 0) {
+                    return EmptyStatement();
+                }
+                else if (statements.Length == 1) {
+                    return statements[0];
+                }
+                else {
+                    return Block(statements);
+                }
+            }
+            else {
+                return Block(statements ?? []);
+            }
+        }
     }
 }
