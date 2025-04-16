@@ -16,26 +16,26 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
         if (node.Identifier.Text == "vbNullString") {
             return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(string.Empty));
         }
-
-
-        if (node.Identifier.Text == "vbCr") {
-            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\r"));
+        else if (node.Identifier.Text == "vbNullChar") {
+            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\0'));
+        }
+        else if (node.Identifier.Text == "vbCr") {
+            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\r'));
         }
         else if (node.Identifier.Text == "vbLf") {
-            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\n"));
+            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\n'));
         }
         else if (node.Identifier.Text == "vbCrLf") {
             return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\r\n"));
         }
         else if (node.Identifier.Text == "vbFormFeed") {
-            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\f"));
+            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal("\f"));
         }
         else if (node.Identifier.Text == "vbBack") {
-            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal('\b'));
+            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\b'));
         }
-
         else if (node.Identifier.Text == "vbTab") {
-            return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal('\t'));
+            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\t'));
         }
 
         // DAO
@@ -87,7 +87,10 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
 
         return name.Identifier.Text switch {
             "Replace" => ConvertReplace(node),
+
             "IsNull" => ConvertIsNull(node),
+            "IsArray" => ConvertIsArray(node),
+
             "UBound" => ConvertUBound(node),
 
             "DateSerial" => ConvertDateSerial(node),
@@ -155,6 +158,17 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
             null);
     }
 
+
+    private SyntaxNode ConvertLen(InvocationExpressionSyntax node)
+    {
+        var str = node.ArgumentList.Arguments[0];
+
+        return MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+            ParenthesizedExpression(CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression)),
+            IdentifierName("Length"));
+    }
+
     private SyntaxNode ConvertLeft(InvocationExpressionSyntax node)
     {
         var str = node.ArgumentList.Arguments[0];
@@ -168,16 +182,6 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
             ArgumentList(
                 Argument(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0))),
                 len));        
-    }
-
-    private SyntaxNode ConvertLen(InvocationExpressionSyntax node)
-    {
-        var str = node.ArgumentList.Arguments[0];
-
-        return MemberAccessExpression(
-            SyntaxKind.SimpleMemberAccessExpression,
-            ParenthesizedExpression(CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression)),
-            IdentifierName("Length"));
     }
 
     private SyntaxNode ConvertUBound(InvocationExpressionSyntax node)
@@ -205,18 +209,20 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
         );
     }
 
-    static SyntaxNode ConvertIsNull(InvocationExpressionSyntax node)
-    {
-        var value = node.ArgumentList.Arguments[0];
-
-        return ParenthesizedExpression(
+    static SyntaxNode ConvertIsNull(InvocationExpressionSyntax node) 
+        => ParenthesizedExpression(
             IsPatternExpression(node.ArgumentList.Arguments[0].Expression, ConstantPattern(
-                    LiteralExpression(
-                        SyntaxKind.NullLiteralExpression
-                    )
+                LiteralExpression(
+                    SyntaxKind.NullLiteralExpression
                 )
-            ));
-    }
+            )
+        ));
+
+    static SyntaxNode ConvertIsArray(InvocationExpressionSyntax node)
+        => BinaryExpression(
+            SyntaxKind.IsPatternExpression,
+            node.ArgumentList.Arguments[0].Expression,
+            IdentifierName(nameof(Array)));
 
     SyntaxNode ConvertMsgBox(InvocationExpressionSyntax node)
     {

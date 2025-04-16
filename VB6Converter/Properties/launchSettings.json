@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "VB6Converter": {
+      "commandName": "Project",
+      "commandLineArgs": "-p \"C:\\Users\\alexandre.jerebtsov\\source\\alexj\\OptiwareVB6\\Optiware\\Optiware98.vbp\" -o \"./Optiware98\""
+    }
+  }
+}

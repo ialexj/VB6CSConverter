@@ -1,104 +1,128 @@
-﻿using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
+﻿using CommandLine;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using VB6Parser;
+using static VB6Converter.ConsoleColors;
 
 namespace VB6Converter;
 
+public class CommandLineOptions
+{
+    [Option('p', "project", Required = true, HelpText = "Path to the VB6 project file.")]
+    public string Project { get; set; }
+
+    [Option('o', "output", Required = true, HelpText = "Output directory for the converted files.")]
+    public string Output { get; set; }
+
+    [Option('u', "update", Required = false, HelpText = "Files to update if already converted.")]
+    public IEnumerable<string> Update { get; set; } = [];
+
+    [Option('f', "filter", Required = false, HelpText = "Only process the specified files.")]
+    public IEnumerable<string> Filter { get; set; } = [];
+
+    [Option("show-output", Required = false, HelpText = "Print the converted file to the console.")]
+    public bool Show { get; set; } = false;
+}
+
 public static class Program
 {
-    static async Task Main(string[] args)
-    {
-        //Trace.Listeners.Add(new TextWriterTraceListener("Input.log"));
+    static Task Main(string[] args) => Main(Parser.Default.ParseArguments<CommandLineOptions>(args).Value);
 
-        await ConvertProject(
-            @"C:\Users\aj\source\repos\OptiwareVB6\Optiware\Optiware98.vbp",
-            ["frmEntidadesMain"],
-            //["modCommon", "modMain", "BaseDados"],
-            "./Optiware98");
-    }
-
-    public static Task<Conversion[]> ConvertProject(string path, string[] filter, string outDir)
+    public static async Task Main(CommandLineOptions options)
     {
-        return ConvertProject(VisualBasicProject.Load(path), filter, outDir);
-    }
+        var project = VisualBasicProject.Load(options.Project);
+        var outDir = options.Output;
 
-    public static async Task<Conversion[]> ConvertProject(VisualBasicProject project, string[] filter, string outDir)
-    {
-        ArgumentNullException.ThrowIfNull(project);
+        var targets = project.Files.Select(f => ConversionTarget.Create(f, outDir)).ToArray();
+
+        IEnumerable<ConversionTarget> convert = targets;
+        if (options.Filter.Any()) {
+            convert = convert.Where(t => options.Filter.Contains(t.File.Name));
+        }
+        else {
+            convert = convert.Where(t => !t.Exists || t.HasErrors || options.Update.Contains(t.File.Name) || options.Update.Contains("*"));
+        }
 
         outDir = Path.GetFullPath(outDir);
         if (!Directory.Exists(outDir)) {
             Directory.CreateDirectory(outDir);
         }
 
-        var targets = project.Files.Select(f => new {
-            f.Name, f.Path, f.Type,
-            Target = Path.Combine(outDir, $"{Path.GetFileNameWithoutExtension(f.Name)}.cs"),
-            Convert = filter is null || filter.Contains(f.Name)
-        }).ToArray();
-
         var conversions = await Task.WhenAll(
-            targets.Select(file => Task.Run(
+            convert.Select(t => Task.Run(
                 () => {
-                    if (file.Convert) {
-                        try {
-                            var conversion = VB6ToCSharpConverter.ConvertFile(file.Path, file.Name, project.Name, file.Type, file.Target);
+                    var file = t.File;
+                    var stopwatch = Stopwatch.StartNew();
+                    try {
+                        var conversion = VB6ToCSharpConverter.ConvertFile(
+                            file.Path, t.OutputPath, file.Name, project.Name, file.Type);
 
-                            if (conversion.Errors.Count > 0) {
-                                var sb = new StringBuilder();
-                                sb.AppendLine($"{file.Name} Converted with {conversion.Errors.Count} conversion errors.");
-                                foreach (var diag in conversion.Errors) {
-                                    sb.AppendLine($"{file.Name}: {diag.Message}");
-                                }
+                        t.CompilationUnit = conversion.CompilationUnit;
 
-                                Console.Write("\x1b[93m" + sb.ToString() + "\x1b[39m");
-                            }
-                            else {
-                                var compilation = VB6ToCSharpConverter.GetCompilation([conversion.CompilationUnit]);
-                                var diagnostics = compilation.GetParseDiagnostics();
+                        if (options.Show) {
+                            Console.WriteLine(t.CompilationUnit.ToFullString());
+                        }
 
-                                if (diagnostics.Length > 0) {
-                                    var sb = new StringBuilder();
-                                    sb.AppendLine($"{file.Name} Converted with {diagnostics.Length} parse errors.");
-                                    foreach (var diag in diagnostics) {
-                                        sb.AppendLine($"{file.Name}: {diag}");
-                                    }
-                                    Console.Write("\x1b[93m" + sb.ToString() + "\x1b[39m");
-                                }
-                                else {
-                                    Console.WriteLine($"{file.Name} Converted.");
-                                }
+                        if (conversion.Errors.Count > 0) {
+                            var sb = new StringBuilder();
+                            sb.AppendLine($"{file.Name} Converted with {conversion.Errors.Count} conversion errors.");
+                            foreach (var err in conversion.Errors) {
+                                sb.AppendLine($"{file.Name}: {err.Message}");
                             }
 
-                            return new Conversion(file.Name, conversion.CompilationUnit, null);
+                            File.WriteAllText(file.Path + ".log", sb.ToString());
+                            Console.Write($"{YELLOW}{sb}{NORMAL}");
+                            return conversion;
                         }
-                        catch (Exception ex) when (!Debugger.IsAttached) {
-                            Console.WriteLine($"{file.Name} ERROR: {ex.Message}");
-                            return new Conversion(file.Name, null, ex);
+                        else {
+                            File.Delete(file.Path + ".log");
                         }
+
+                        var compilation = VB6ToCSharpConverter.GetCompilation([conversion.CompilationUnit]);
+                        var diagnostics = compilation.GetParseDiagnostics();
+
+                        if (diagnostics.Length > 0) {
+                            var sb = new StringBuilder();
+                            sb.AppendLine($"{file.Name} Converted with {diagnostics.Length} syntax errors.");
+                            foreach (var diag in diagnostics) {
+                                sb.AppendLine($"{BOLD}{file.Name}:{NOBOLD} {diag}");
+                            }
+
+                            Console.Write(YELLOW + sb.ToString() + NORMAL);
+                            return conversion;
+                        }
+
+                        stopwatch.Stop();
+                        Console.WriteLine($"{GREEN}{file.Name} Converted in {stopwatch.Elapsed}.{NORMAL}");
+                        return conversion;
                     }
-                    else {
-                        try {
-                            var code = File.ReadAllText(file.Target);
-                            var syntaxTree = CSharpSyntaxTree.ParseText(code);
-                            return new Conversion(file.Name, syntaxTree.GetCompilationUnitRoot(), null);
+                    catch (ParseException parse) {
+                        var sb = new StringBuilder();
+                        foreach (var error in parse.Errors) {
+                            sb.AppendLine($"{BOLD}{file.Name}:{NOBOLD} PARSE ERROR: {error}");
+                            sb.AppendLine(GetLineFromFile(file.Path, error.Line));
                         }
-                        catch (FileNotFoundException fnfe) {
-                            Console.WriteLine($"{file.Name} has not been converted yet.");
-                            return new Conversion(file.Name, null, fnfe);
-                        }
+
+                        Console.Write($"{RED}{sb}{NORMAL}");
+                        return null;
+                    }
+                    catch (Exception ex) when (!Debugger.IsAttached) {
+                        Console.WriteLine($"{REVERSE}{RED}{file.Name} ERROR: {ex.Message}{NORMAL}");
+                        return null;
+                    }
+                    finally {
+                        stopwatch.Stop();
                     }
                 })));
 
         StringBuilder globalUsings = new();
-        foreach (var file in targets) {
-            globalUsings.AppendLine($"global using static {project.Name}.{file.Name};");
+        foreach (var target in targets) {
+            globalUsings.AppendLine($"global using static {project.Name}.{target.File.Name};");
         }
 
         var globalUsingsPath = Path.Combine(outDir, "_VB6Usings.cs");
@@ -117,8 +141,14 @@ public static class Program
                 """);
         }
 
-        return conversions;
     }
 
-    public record struct Conversion(string Name, CompilationUnitSyntax CompilationUnit, Exception Error) { }
+    static string GetLineFromFile(string file, int lineNumber)
+    {
+        using var reader = new StreamReader(file);
+        for (int i = 0; i < lineNumber - 1; i++) {
+            reader.ReadLine();
+        }
+        return reader.ReadLine();
+    }
 }

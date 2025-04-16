@@ -42,7 +42,7 @@ namespace VB6Converter
             }
         }
 
-        public static StatementSyntax GetBlockSyntax(StatementSyntax[] statements, bool allowCollapse)
+        public static StatementSyntax GetBlock(StatementSyntax[] statements, bool allowCollapse)
         {
             if (allowCollapse) {
                 if (statements is null || statements.Length == 0) {

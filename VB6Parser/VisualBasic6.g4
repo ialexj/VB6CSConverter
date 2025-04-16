@@ -84,6 +84,7 @@ moduleBodyElement
    | enumerationStmt
    | eventStmt
    | functionStmt
+   | macroConstStmt
    | macroIfThenElseStmt
    | propertyGetStmt
    | propertySetStmt
@@ -114,7 +115,7 @@ cp_PropertyName
 	;
 
 cp_PropertyValue
-    : DOLLAR? (literal | (LBRACE ambiguousIdentifier RBRACE) | POW ambiguousIdentifier)
+    : (DOLLAR | PLUS | POW)? (literal | (LBRACE ambiguousIdentifier RBRACE) | ambiguousIdentifier)
     ;
 
 cp_NestedProperty
@@ -332,7 +333,7 @@ goToStmt
    ;
 
 ifThenElseStmt
-   : IF WS ifConditionStmt WS THEN WS blockStmt (WS ELSE WS blockStmt)? # inlineIfThenElse
+   : IF WS ifConditionStmt WS THEN WS block (WS ELSE WS block)? # inlineIfThenElse
    | ifBlockStmt ifElseIfBlockStmt* ifElseBlockStmt? END_IF # blockIfThenElse
    ;
 
@@ -382,6 +383,10 @@ lockStmt
 
 lsetStmt
    : LSET WS implicitCallStmt_InStmt WS? EQ WS? valueStmt
+   ;
+
+macroConstStmt
+   : MACRO_CONST WS ambiguousIdentifier WS? EQ WS? valueStmt
    ;
 
 macroIfThenElseStmt
@@ -1462,6 +1467,9 @@ LSET
    : L S E T
    ;
 
+MACRO_CONST
+   : HASH C O N S T
+   ;
 
 MACRO_IF
    : HASH I F

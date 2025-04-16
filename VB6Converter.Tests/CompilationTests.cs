@@ -13,13 +13,13 @@ namespace VB6Converter.Tests
         [TestMethod]
         public void Compilation()
         {
-            var cu1 = VB6ToCSharpConverter.GetConversion("""
+            var cu1 = VB6ToCSharpConverter.ConvertString("""
                 Public Sub HelloWorld1()
                 End Sub
                 """, 
                 "HelloWorld", "Test", VB6Parser.VisualBasicFileType.Module);
 
-            var cu2 = VB6ToCSharpConverter.GetConversion("""
+            var cu2 = VB6ToCSharpConverter.ConvertString("""
                 Public Sub HelloWorld2()
                 End Sub
                 """,

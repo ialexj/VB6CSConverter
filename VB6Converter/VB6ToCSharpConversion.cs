@@ -19,8 +19,6 @@ public record class TransformError(string Message = null, object Context = null)
 
 public class VB6ToCSharpConversion
 {
-    readonly bool _failOnError;
-
     readonly Stack<ImplicitCallStmt_InStmtContext> _with = [];
     readonly List<ComReference> _comReferences = [];
 
@@ -39,11 +37,9 @@ public class VB6ToCSharpConversion
     public ClassDeclarationSyntax Class { get; }
 
 
-    public VB6ToCSharpConversion(ModuleContext module, string name, string ns, bool isStatic, bool failOnError = true)
+    public VB6ToCSharpConversion(ModuleContext module, string name, string ns, bool isStatic)
     {
         using var _ = new TraceMethod(module);
-
-        _failOnError = failOnError;
 
         Name = name ?? throw new ArgumentNullException(nameof(name));
 
@@ -52,11 +48,10 @@ public class VB6ToCSharpConversion
                 UsingDirective(ParseName("System")),
                 UsingDirective(ParseName("System.Collections.Generic")));
 
-        Namespace = FileScopedNamespaceDeclaration(IdentifierName(ns ?? name));
+        Class = GetClass(module, name, isStatic);
 
-        Class = GetClass(module.moduleBody(), name, isStatic);
-
-        Namespace = Namespace.WithMembers(SingletonList<MemberDeclarationSyntax>(Class));
+        Namespace = FileScopedNamespaceDeclaration(IdentifierName(ns ?? name))
+            .WithMembers(SingletonList<MemberDeclarationSyntax>(Class));
 
         CompilationUnit = CompilationUnit
             .WithMembers(SingletonList<MemberDeclarationSyntax>(Namespace));
@@ -64,7 +59,7 @@ public class VB6ToCSharpConversion
         CompilationUnit = CompilationUnit.NormalizeWhitespace();
     }
 
-    ClassDeclarationSyntax GetClass(ModuleBodyContext body, string name, bool isStatic)
+    ClassDeclarationSyntax GetClass(ModuleContext module, string name, bool isStatic)
     {
         IEnumerable<SyntaxToken> GetModifiers()
         {
@@ -78,26 +73,28 @@ public class VB6ToCSharpConversion
         var c = ClassDeclaration(name)
             .WithModifiers(TokenList(GetModifiers()));
 
-         foreach (var member in body.moduleBodyElement()) {
-            try {
-                foreach (var decl in GetMemberDeclarations(member, isStatic)) {
-                    if (decl is PropertyDeclarationSyntax property) {
-                        var existing = c.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => Equals(p.Identifier.Text, property.Identifier.Text));
-                        if (existing != null) {
-                            var replace = existing.AddAccessorListAccessors([.. property.AccessorList.Accessors]);
-                            c = c.ReplaceNode(existing, replace);
+        if (module.moduleBody() is ModuleBodyContext body) {
+            foreach (var member in body.moduleBodyElement()) {
+                try {
+                    foreach (var decl in GetMemberDeclarations(member, isStatic)) {
+                        if (decl is PropertyDeclarationSyntax property) {
+                            var existing = c.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => Equals(p.Identifier.Text, property.Identifier.Text));
+                            if (existing != null) {
+                                var replace = existing.AddAccessorListAccessors([.. property.AccessorList.Accessors]);
+                                c = c.ReplaceNode(existing, replace);
+                            }
+                            else {
+                                c = c.AddMembers(property);
+                            }
                         }
                         else {
-                            c = c.AddMembers(property);
+                            c = c.AddMembers(decl);
                         }
                     }
-                    else {
-                        c = c.AddMembers(decl);
-                    }
                 }
-            }
-            catch (Exception ex) when (!_failOnError) {
-                Errors.Add(new(ex.Message, member));
+                catch (Exception ex) {
+                    Errors.Add(new(ex.Message, member));
+                }
             }
         }
 
@@ -123,6 +120,9 @@ public class VB6ToCSharpConversion
                         foreach (var f in GetVariableFields(var)) {
                             yield return f;
                         }
+                    }
+                    else if (stmt.attributeStmt() is AttributeStmtContext attr) {
+                        // ignore
                     }
                     else {
                         throw NotSupported(stmt);
@@ -154,6 +154,10 @@ public class VB6ToCSharpConversion
 
         else if (e.propertyAccessor() is IPropertyContext prop) {
             yield return GetProperty(prop);
+        }
+
+        else if (e.macroConstStmt() is MacroConstStmtContext macroConst) {
+            //
         }
 
         else {
@@ -223,6 +227,8 @@ public class VB6ToCSharpConversion
             method = (MethodDeclarationSyntax)mr.Visit(method);
             return method;
         }
+
+
 
         PropertyDeclarationSyntax GetProperty(IPropertyContext propCtx)
         {
@@ -466,10 +472,12 @@ public class VB6ToCSharpConversion
 
     // Statements
 
+    StatementSyntax GetBlock(BlockContext block, bool allowCollapse) => GetBlock(block, allowCollapse, GetMethodStatements);
+
     BlockSyntax GetBlock(BlockContext block) => (BlockSyntax)GetBlock(block, false, GetMethodStatements);
 
     static StatementSyntax GetBlock(BlockContext block, bool allowCollapse, Func<BlockStmtContext, IEnumerable<StatementSyntax>> statementFactory)
-        => GetBlockSyntax(block?.blockStmt().SelectMany(statementFactory).ToArray() ?? [], allowCollapse);
+        => RoslynHelpers.GetBlock(block?.blockStmt().SelectMany(statementFactory).ToArray() ?? [], allowCollapse);
 
     
     IEnumerable<StatementSyntax> GetMethodStatements(BlockStmtContext stmt)
@@ -613,10 +621,10 @@ public class VB6ToCSharpConversion
         try {
             return [.. GetStatementsWithLabels()];
         }
-        catch (Exception ex) when (!_failOnError) {
+        catch (Exception ex) {
             Errors.Add(new(ex.Message, stmt));
             return [
-                ParseStatement(stmt.GetText()).WithTrailingTrivia(TriviaList(Comment($"// ERROR: {ex.Message}{Environment.NewLine}")))
+                ParseStatement(stmt.GetText()).WithTrailingTrivia(TriviaList(Comment($"// ERROR: {ex.Message.Replace(Environment.NewLine, Environment.NewLine + "// ")}{Environment.NewLine}")))
             ];
         }
     }
@@ -763,14 +771,12 @@ public class VB6ToCSharpConversion
         }
         else if (ifthen is InlineIfThenElseContext inline && inline.ifConditionStmt() is IfConditionStmtContext ifcond) {
             var condition = GetValue(ifcond.valueStmt());
-            var statements = GetMethodStatements(inline.blockStmt(0));
-            var statement = GetBlockSyntax(statements.ToArray(), true);
+            var block = GetBlock(inline.block(0), true);
            
-            root = IfStatement(condition, statement);
+            root = IfStatement(condition, block);
 
-            if (inline.blockStmt(1) is BlockStmtContext elseBlock) {
-                var elseStatements = GetMethodStatements(elseBlock);
-                var elseStatement = GetBlockSyntax(statements.ToArray(), true);
+            if (inline.block(1) is BlockContext elseBlock) {
+                var elseStatement = GetBlock(elseBlock, true);
                 root = root.WithElse(ElseClause(elseStatement));
             }
         }
@@ -1130,7 +1136,7 @@ public class VB6ToCSharpConversion
                     .WithArgumentList(RoslynHelpers.ArgumentList(outputs))))
             .ToArray();
 
-        return GetBlockSyntax(statements, true);
+        return RoslynHelpers.GetBlock(statements, true);
     }
 
     IEnumerable<StatementSyntax> GetErase(EraseStmtContext erase)
@@ -1229,7 +1235,7 @@ public class VB6ToCSharpConversion
                 throw NotSupported($"Unknown value: {valueCtx.GetType().Name} {valueCtx.GetText()}");
             }
         }
-        catch (Exception ex) when (!_failOnError) {
+        catch (Exception ex) {
             Errors.Add(new(ex.Message, valueCtx));
             return ParseExpression(valueCtx.GetText());
         }
