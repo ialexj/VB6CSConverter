@@ -1,4 +1,8 @@
 ﻿using CommandLine;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.MSBuild;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VB6Converter.Conversion;
 using VB6Parser;
 using static VB6Converter.ConsoleColors;
 
@@ -31,9 +36,9 @@ public class CommandLineOptions
 
 public static class Program
 {
-    static Task Main(string[] args) => Main(Parser.Default.ParseArguments<CommandLineOptions>(args).Value);
+    public static Task Main(string[] args) => Run(Parser.Default.ParseArguments<CommandLineOptions>(args).Value);
 
-    public static async Task Main(CommandLineOptions options)
+    static async Task Run(CommandLineOptions options)
     {
         var project = VisualBasicProject.Load(options.Project);
         var outDir = options.Output;
@@ -59,7 +64,7 @@ public static class Program
                     var file = t.File;
                     var stopwatch = Stopwatch.StartNew();
                     try {
-                        var conversion = VB6ToCSharpConverter.ConvertFile(
+                        var conversion = VB6ToCSharpConversion.ConvertFile(
                             file.Path, t.OutputPath, file.Name, project.Name, file.Type);
 
                         t.CompilationUnit = conversion.CompilationUnit;
@@ -68,28 +73,37 @@ public static class Program
                             Console.WriteLine(t.CompilationUnit.ToFullString());
                         }
 
-                        if (conversion.Errors.Count > 0) {
+                        if (conversion.ParseErrors.Count > 0) {
                             var sb = new StringBuilder();
-                            sb.AppendLine($"{file.Name} Converted with {conversion.Errors.Count} conversion errors.");
-                            foreach (var err in conversion.Errors) {
-                                sb.AppendLine($"{file.Name}: {err.Message}");
+                            foreach (var error in conversion.ParseErrors) {
+                                sb.AppendLine($"{BOLD}{file.Name}:{NOBOLD} PARSE ERROR: {error}");
+                                sb.AppendLine(GetLineFromFile(file.Path, error.Line));
                             }
 
-                            File.WriteAllText(file.Path + ".log", sb.ToString());
+                            Console.Write($"{RED}{sb}{NORMAL}");
+                            return conversion;
+                        }
+
+                        if (conversion.TransformErrors.Count > 0) {
+                            var sb = new StringBuilder();
+                            sb.AppendLine($"{file.Name} Converted with {conversion.TransformErrors.Count} errors.");
+                            foreach (var err in conversion.TransformErrors) {
+                                sb.AppendLine($"{file.Name}: {err.Message}");
+                                sb.AppendLine();
+                                sb.AppendLine(err.Source);
+                                sb.AppendLine();
+                                sb.AppendLine("=======================");
+                                sb.AppendLine();
+                            }
+
                             Console.Write($"{YELLOW}{sb}{NORMAL}");
                             return conversion;
                         }
-                        else {
-                            File.Delete(file.Path + ".log");
-                        }
 
-                        var compilation = VB6ToCSharpConverter.GetCompilation([conversion.CompilationUnit]);
-                        var diagnostics = compilation.GetParseDiagnostics();
-
-                        if (diagnostics.Length > 0) {
+                        if (conversion.SyntaxErrors.Count > 0) {
                             var sb = new StringBuilder();
-                            sb.AppendLine($"{file.Name} Converted with {diagnostics.Length} syntax errors.");
-                            foreach (var diag in diagnostics) {
+                            sb.AppendLine($"{file.Name} Converted with {conversion.SyntaxErrors.Count} syntax errors.");
+                            foreach (var diag in conversion.SyntaxErrors) {
                                 sb.AppendLine($"{BOLD}{file.Name}:{NOBOLD} {diag}");
                             }
 
@@ -97,19 +111,8 @@ public static class Program
                             return conversion;
                         }
 
-                        stopwatch.Stop();
                         Console.WriteLine($"{GREEN}{file.Name} Converted in {stopwatch.Elapsed}.{NORMAL}");
                         return conversion;
-                    }
-                    catch (ParseException parse) {
-                        var sb = new StringBuilder();
-                        foreach (var error in parse.Errors) {
-                            sb.AppendLine($"{BOLD}{file.Name}:{NOBOLD} PARSE ERROR: {error}");
-                            sb.AppendLine(GetLineFromFile(file.Path, error.Line));
-                        }
-
-                        Console.Write($"{RED}{sb}{NORMAL}");
-                        return null;
                     }
                     catch (Exception ex) when (!Debugger.IsAttached) {
                         Console.WriteLine($"{REVERSE}{RED}{file.Name} ERROR: {ex.Message}{NORMAL}");
@@ -120,13 +123,9 @@ public static class Program
                     }
                 })));
 
-        StringBuilder globalUsings = new();
-        foreach (var target in targets) {
-            globalUsings.AppendLine($"global using static {project.Name}.{target.File.Name};");
-        }
-
+        var globalUsings = CompilationUnitConverter.GetGlobalUsings(targets.Select(t => $"{project.Name}.{t.File.Name}")).NormalizeWhitespace();
         var globalUsingsPath = Path.Combine(outDir, "_VB6Usings.cs");
-        File.WriteAllText(globalUsingsPath, globalUsings.ToString());
+        File.WriteAllText(globalUsingsPath, globalUsings.ToFullString());
 
         string projectPath = Path.Combine(outDir, $"{project.Name}.csproj");
         if (!File.Exists(projectPath)) {
@@ -141,6 +140,55 @@ public static class Program
                 """);
         }
 
+        if (targets.Any(t => !File.Exists(t.OutputPath))) {
+            Console.WriteLine($"{RED}Some files have not yet been converted.{NORMAL}");
+            return;
+        }
+
+        Console.WriteLine("Compiling...");
+
+        using (var workspace = MSBuildWorkspace.Create()) {
+            var csproject = await workspace.OpenProjectAsync(projectPath);
+            var compilation = await csproject.GetCompilationAsync();
+
+            var diagnostics = compilation.GetDiagnostics();
+            foreach (var severity in diagnostics.GroupBy(d => d.Severity)) {
+                Console.WriteLine($"{severity.Key}: {severity.Count()}");
+            }
+
+            using var writer = new StreamWriter(Path.Combine(outDir, "diagnostics.txt"), false);
+
+            writer.WriteLine();
+            writer.WriteLine("Global Diagnostics:");
+
+            WriteDiagnostics(writer, diagnostics, "");
+
+            writer.WriteLine();
+            writer.WriteLine("=======================================================");
+            writer.WriteLine("Files:");
+
+            foreach (var file in diagnostics.GroupBy(d => d.Location.SourceTree.FilePath).OrderByDescending(f => f.Count())) {
+                writer.WriteLine($"{Path.GetFileNameWithoutExtension(file.Key)}:");
+                WriteDiagnostics(writer, file, "   ");
+            }
+        }
+    }
+
+    static void WriteDiagnostics(StreamWriter writer, IEnumerable<Diagnostic> diagnostics, string prefix)
+    {
+        foreach (var severity in diagnostics.GroupBy(d => d.Severity)) {
+            writer.WriteLine($"{prefix}{severity.Key}: {severity.Count()}");
+
+            var ids = severity.GroupBy(gg => new { gg.Id, gg.Descriptor.MessageFormat })
+                .Select(g => (id: g.Key, count: g.Count()))
+                .OrderByDescending(g => g.count);
+
+            foreach (var id in ids) {
+                writer.WriteLine($"{prefix}{id.count,-6} - {id.id.Id} {id.id.MessageFormat}");
+            }
+        }
+
+        writer.WriteLine();
     }
 
     static string GetLineFromFile(string file, int lineNumber)

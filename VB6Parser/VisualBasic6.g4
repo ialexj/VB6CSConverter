@@ -333,9 +333,13 @@ goToStmt
    ;
 
 ifThenElseStmt
-   : IF WS ifConditionStmt WS THEN WS block (WS ELSE WS block)? # inlineIfThenElse
+   : IF WS ifConditionStmt WS THEN WS ifInlineBlockStmt (WS ELSE WS ifInlineBlockStmt)? # inlineIfThenElse
    | ifBlockStmt ifElseIfBlockStmt* ifElseBlockStmt? END_IF # blockIfThenElse
    ;
+
+ifInlineBlockStmt
+	: blockStmt (COLON WS? blockStmt)*
+	;
 
 ifBlockStmt
    : IF WS ifConditionStmt WS THEN COMMENT? NEWLINE + (block NEWLINE +)?

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace VB6Parser
 {
-    public interface IVisibilityContext
+    public interface IVisibilityContext : IParseTree
     {
         ITerminalNode PRIVATE();
         ITerminalNode PUBLIC();

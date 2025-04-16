@@ -40,8 +40,10 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
 
         // DAO
 
-        else if (node.Identifier.Text == "DAO") {
-            return ParseExpression("_DAO");
+        else if (node.Identifier.Text == "Recordset") {
+            return node.WithAdditionalAnnotations(
+                new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao")
+            );
         }
 
         string[] RecordsetOptionEnum = [
@@ -60,7 +62,8 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
         ];
 
         if (RecordsetOptionEnum.Contains(node.Identifier.Text)) {
-            return ParseExpression("RecordsetOptionEnum." + node.Identifier.Text);
+            return ParseExpression("RecordsetOptionEnum." + node.Identifier.Text)
+                .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao"));
         }
 
         string[] RecordsetTypeEnum = [
@@ -73,7 +76,8 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
         ];
 
         if (RecordsetTypeEnum.Contains(node.Identifier.Text)) {
-            return ParseExpression("RecordsetTypeEnum." + node.Identifier.Text);
+            return ParseExpression("RecordsetTypeEnum." + node.Identifier.Text)
+                .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao"));
         }
 
         return base.VisitIdentifierName(node);
@@ -220,7 +224,7 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
 
     static SyntaxNode ConvertIsArray(InvocationExpressionSyntax node)
         => BinaryExpression(
-            SyntaxKind.IsPatternExpression,
+            SyntaxKind.IsExpression,
             node.ArgumentList.Arguments[0].Expression,
             IdentifierName(nameof(Array)));
 

@@ -26,8 +26,8 @@ public static class Validations
     public static VB6ToCSharpConversion ValidateShouldNotFail(string vb, [CallerMemberName] string? name = null)
     {
         try {
-            var cu = VB6ToCSharpConverter.ConvertString(vb, name);
-            cu.Errors.Should().BeEmpty();
+            var cu = VB6ToCSharpConversion.ConvertString(vb, name);
+            cu.TransformErrors.Should().BeEmpty();
             return cu;
         }
         catch (ParseException pex) {
@@ -46,7 +46,7 @@ public static class Validations
         End Sub
         """;
 
-        var cu  = VB6ToCSharpConverter.ConvertString(wrapper, name);
+        var cu  = VB6ToCSharpConversion.ConvertString(wrapper, name);
         var met = (MethodDeclarationSyntax)cu.Class.Members[0].NormalizeWhitespace();
 
         var sb = new StringBuilder();

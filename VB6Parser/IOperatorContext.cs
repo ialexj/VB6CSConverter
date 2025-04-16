@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Antlr4.Runtime.Tree;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,7 +8,7 @@ using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Parser
 {
-    public interface IOperatorContext
+    public interface IOperatorContext : IParseTree
     {
         ValueStmtContext[] valueStmt();
     }
