@@ -9,7 +9,7 @@ using System.Linq;
 using VB6Parser;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Converter.Conversion.CommonConverter;
-using static VB6Converter.Conversion.ExpressionConverter;
+using static VB6Converter.Conversion.ValueConverter;
 using static VB6Converter.RoslynHelpers;
 using static VB6Parser.VisualBasic6Parser;
 
@@ -20,29 +20,66 @@ public static class StatementConverter
 
     public static StatementSyntax GetBlock(IBlockContext block, CallContext ctx, bool allowCollapse) => GetBlock(block, ctx, allowCollapse, GetMethodStatements);
 
-    static StatementSyntax GetBlock(IBlockContext block, CallContext ctx, bool allowCollapse, Func<BlockStmtContext, CallContext, IEnumerable<StatementSyntax>> statementFactory)
-        => RoslynHelpers.GetBlock(block?.blockStmt().SelectMany(b => statementFactory(b, ctx)).ToArray() ?? [], allowCollapse);
-
-
-    public static IEnumerable<StatementSyntax> GetMethodStatements(BlockStmtContext stmt, CallContext ctx)
+    static StatementSyntax GetBlock(IBlockContext block, CallContext ctx, bool allowCollapse, Func<IEnumerable<BlockStmtContext>, CallContext, IEnumerable<StatementSyntax>> statementFactory)
     {
-        using var _ = new TraceMethod(stmt);
-
-        SyntaxToken? currentLabel = null;
-
-        if (stmt.lineLabel() is LineLabelContext label) {
-            currentLabel = GetIdentifier(label.ambiguousIdentifier());
+        if (block != null) {
+            return RoslynHelpers.GetBlock([.. statementFactory(block?.blockStmt(), ctx)], allowCollapse);
         }
         else {
-            try {
-                foreach (var s in GetStatements()) {
+            return Block();
+        }
+    }
+        
+
+    public static IEnumerable<StatementSyntax> GetMethodStatements(IEnumerable<BlockStmtContext> statements, CallContext ctx)
+    {
+        SyntaxToken? currentLabel = null;
+
+        foreach (var stmt in statements) {
+            if (stmt.lineLabel() is LineLabelContext label) {
+                currentLabel = GetIdentifier(label.ambiguousIdentifier());
+            }
+            else {
+                foreach (var s in GetMethodStatements(stmt, ctx)) {
                     if (currentLabel is SyntaxToken l) {
                         currentLabel = null;
-                        return [ LabeledStatement(l, s) ];
+                        yield return LabeledStatement(l, s);
                     }
                     else {
-                        return [ s ];
+                        yield return s;
                     }
+                }
+            }
+        }
+
+        static IEnumerable<StatementSyntax> GetMethodStatements(BlockStmtContext stmt, CallContext ctx)
+        {
+            using var _ = new TraceMethod(stmt);
+
+            try {
+                if (stmt.constStmt() is ConstStmtContext @const) {
+                    return DeclarationConverter.GetConstantDeclarations(@const).Select(LocalDeclarationStatement);
+                }
+                else if (stmt.variableStmt() is VariableStmtContext var) {
+                    return DeclarationConverter.GetVariableDeclarations(var, true).Select(LocalDeclarationStatement);
+                }
+                else if (stmt.eraseStmt() is EraseStmtContext erase) {
+                    return GetErase(erase, ctx);
+                }
+                else if (stmt.attributeStmt() is AttributeStmtContext attribute) {
+                    return []; // nothing
+                }
+                else if (stmt.sendkeysStmt() is SendkeysStmtContext sendKeys) {
+                    var sendExpr = QualifiedName(IdentifierName("SendKeys"), IdentifierName("Send"));
+                    return sendKeys.valueStmt().Select(send => {
+                        var value = GetValue(send, ctx);
+                        return ExpressionStatement(
+                            InvocationExpression(sendExpr, ArgumentList(value))
+                        );
+                    });
+                }
+                else {
+                    return [ GetMethodStatement(stmt, ctx) ];
                 }
             }
             catch (NotSupportedException nse) {
@@ -54,127 +91,104 @@ public static class StatementConverter
             }
         }
 
-        return [];
-
-        IEnumerable<StatementSyntax> GetStatements()
+        static StatementSyntax GetMethodStatement(BlockStmtContext stmt, CallContext ctx)
         {
-            if (stmt.constStmt() is ConstStmtContext @const) {
-                foreach (var c in DeclarationConverter.GetConstantDeclarations(@const)) {
-                    yield return LocalDeclarationStatement(c);
-                }
-            }
-            else if (stmt.variableStmt() is VariableStmtContext var) {
-                foreach (var v in DeclarationConverter.GetVariableDeclarations(var, true)) {
-                    yield return LocalDeclarationStatement(v);
-                }
-            }
-            else if (stmt.redimStmt() is RedimStmtContext redim) {
-                yield return GetRedim(redim, ctx);
+            if (stmt.redimStmt() is RedimStmtContext redim) {
+                return GetRedim(redim, ctx);
             }
 
             else if (stmt.call() is ICallContext call) {
-                yield return GetCall(call, ctx);
+                return GetCall(call, ctx);
             }
             else if (stmt.assignment() is IAssignmentContext assignment) {
-                yield return ExpressionStatement(GetAssignment(assignment, ctx));
+                return ExpressionStatement(GetAssignment(assignment, ctx));
             }
             else if (stmt.withStmt() is WithStmtContext with) {
-                yield return GetWith(with, ctx);
+                return GetWith(with, ctx);
             }
 
             else if (stmt.ifThenElseStmt() is IfThenElseStmtContext ifthen) {
-                yield return GetIf(ifthen, ctx);
+                return GetIf(ifthen, ctx);
             }
             else if (stmt.selectCaseStmt() is SelectCaseStmtContext select) {
-                yield return GetSelectCase(select, ctx);
+                return GetSelectCase(select, ctx);
             }
 
             else if (stmt.forNextStmt() is ForNextStmtContext fornext) {
-                yield return GetForNext(fornext, ctx);
+                return GetForNext(fornext, ctx);
             }
             else if (stmt.forEachStmt() is ForEachStmtContext forEach) {
-                yield return GetForEach(forEach, ctx);
+                return GetForEach(forEach, ctx);
             }
             else if (stmt.doLoopStmt() is DoLoopStmtContext doLoop) {
-                yield return GetDoLoop(doLoop, ctx);
+                return GetDoLoop(doLoop, ctx);
             }
             else if (stmt.whileWendStmt() is WhileWendStmtContext whileWend) {
-                yield return GetWhile(whileWend, ctx);
+                return GetWhile(whileWend, ctx);
             }
 
             else if (stmt.loadStmt() is LoadStmtContext load) {
-                yield return EmptyStatement().WithTrailingTrivia(Comment($"// {load.GetText()}"));
+                return EmptyStatement().WithTrailingTrivia(Comment($"// {load.GetText()}"));
             }
             else if (stmt.unloadStmt() is UnloadStmtContext unload) {
-                yield return EmptyStatement().WithTrailingTrivia(Comment($"// {unload.GetText()}"));
+                return EmptyStatement().WithTrailingTrivia(Comment($"// {unload.GetText()}"));
             }
 
             else if (stmt.openStmt() is OpenStmtContext open) {
-                yield return GetOpen(open, ctx);
+                return GetOpen(open, ctx);
             }
             else if (stmt.printStmt() is PrintStmtContext print) {
-                yield return GetPrint(print, ctx);
+                return GetPrint(print, ctx);
             }
             else if (stmt.closeStmt() is CloseStmtContext close) {
-                yield return GetClose(close, ctx);
+                return GetClose(close, ctx);
             }
-            else if (stmt.eraseStmt() is EraseStmtContext erase) {
-                foreach (var e in GetErase(erase, ctx)) {
-                    yield return e;
-                }
+        
+            else if (stmt.killStmt() is KillStmtContext kill) {
+                return GetKill(kill, ctx);
             }
 
             else if (stmt.raiseEventStmt() is RaiseEventStmtContext raise) {
                 var name = GetIdentifierName(raise.ambiguousIdentifier());
                 var args = raise.argsCall();
-                
+
                 var statement = ParseStatement($"{name}?.Invoke(this, EventArgs.Empty);");
 
                 if (args != null && args.ChildCount > 0) {
                     statement = statement.WithError(TransformError.NotSupported(raise, "RaiseEvent with arguments not supported"));
                 }
 
-                yield return statement;
+                 return statement;
             }
 
             else if (stmt.goToStmt() is GoToStmtContext goTo) {
-                yield return GetGoTo(goTo, ctx);
+                 return GetGoTo(goTo, ctx);
             }
             else if (stmt.resumeStmt() is ResumeStmtContext resume) {
-                yield return GetResume(resume);
+                 return GetResume(resume);
             }
             else if (stmt.onErrorStmt() is OnErrorStmtContext onerror) {
-                yield return EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {onerror.GetText()}")));
+                 return EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {onerror.GetText()}")));
             }
 
             else if (stmt.exitStmt() is ExitStmtContext exit) {
-                yield return GetExit(exit);
+                 return GetExit(exit);
             }
             else if (stmt.endStmt() is EndStmtContext end) {
-                yield return GetEnd(end);
-            }
-
-            else if (stmt.attributeStmt() is AttributeStmtContext attribute) {
-                // do nothing
+                 return GetEnd(end);
             }
 
             else if (stmt.beepStmt() is BeepStmtContext beepCtx) {
-                yield return ParseStatement("Console.Beep();");
+                 return ParseStatement("Console.Beep();");
             }
-            else if (stmt.sendkeysStmt() is SendkeysStmtContext sendKeys) {
-                var sendExpr = ParseExpression("SendKeys.Send");
-                foreach (var send in sendKeys.valueStmt()) {
-                    var value = GetValue(send, ctx);
-                    yield return ExpressionStatement(
-                        InvocationExpression(sendExpr, ArgumentList(value))
-                    );
-                }
-            }
+        
             else {
                 throw new NotSupportedException("Unknown statement");
             }
         }
     }
+
+
 
 
     public static AssignmentExpressionSyntax GetAssignment(IAssignmentContext assignment, CallContext ctx)
@@ -412,14 +426,7 @@ public static class StatementConverter
             ? PostfixUnaryExpression(ops.Item1, variable)
             : AssignmentExpression(ops.Item2, variable, step);
 
-        var block = GetBlock(forNext.block(), ctx, false, (stmt, ctx) => {
-            if (stmt.exitStmt() is ExitStmtContext exit && exit.EXIT_FOR() is not null) {
-                return [BreakStatement()];
-            }
-            else {
-                return GetMethodStatements(stmt, ctx);
-            }
-        });
+        var block = GetBlock(forNext.block(), ctx, false);
 
         return ForStatement(block)
             .WithInitializers(SingletonSeparatedList<ExpressionSyntax>(decl))
@@ -433,14 +440,7 @@ public static class StatementConverter
 
         var variable = GetIdentifier(forEach.ambiguousIdentifier(0));
         var enumerator = GetValue(forEach.valueStmt(), ctx);
-        var statements = GetBlock(forEach.block(), ctx, false, (stmt, ctx) => {
-            if (stmt.exitStmt() is ExitStmtContext exit && exit.EXIT_FOR() is not null) {
-                return [BreakStatement()];
-            }
-            else {
-                return GetMethodStatements(stmt, ctx);
-            }
-        });
+        var statements = GetBlock(forEach.block(), ctx, false);
 
         return ForEachStatement(
             IdentifierName(Identifier(TriviaList(), SyntaxKind.VarKeyword, "var", "var", TriviaList())),
@@ -626,6 +626,18 @@ public static class StatementConverter
             .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
     }
 
+    public static StatementSyntax GetKill(KillStmtContext kill, CallContext ctx)
+    {
+        var value = GetValue(kill.valueStmt(), ctx);
+        return ExpressionStatement(
+            InvocationExpression(
+                QualifiedName(
+                    IdentifierName("File").WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.IO")),
+                    IdentifierName("Delete")
+                ),
+                ArgumentList(value)));
+    }
+
 
     public static StatementSyntax GetGoTo(GoToStmtContext goTo, CallContext ctx)
     {
@@ -641,7 +653,7 @@ public static class StatementConverter
             return GotoStatement(SyntaxKind.GotoStatement, expr);
         }
         else {
-            return EmptyStatement().WithTrailingTrivia(TriviaList(Comment(resume.GetText())));
+            return EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {resume.GetText()}")));
         }
     }
 

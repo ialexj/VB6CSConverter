@@ -141,7 +141,7 @@ attributeStmt
    ;
 
 block
-   : blockStmt COMMENT? (NEWLINE + WS? blockStmt)* NEWLINE? 
+   : blockStmt ((NEWLINE | INLINE_NEWLINE) + blockStmt)* NEWLINE? 
    ;
 
 blockStmt
@@ -338,7 +338,7 @@ ifThenElseStmt
    ;
 
 ifInlineBlockStmt
-	: blockStmt (COLON WS? blockStmt)*
+	: blockStmt (INLINE_NEWLINE blockStmt)*
 	;
 
 ifBlockStmt
@@ -520,7 +520,7 @@ selectCaseStmt
    ;
 
 sC_Case
-   : CASE WS sC_Cond WS? (COLON? NEWLINE* | NEWLINE +) (block NEWLINE +)?
+   : CASE WS sC_Cond WS? (COLON? NEWLINE* | NEWLINE + | INLINE_NEWLINE) COMMENT? (block NEWLINE +)?
    ;
 
 // ELSE first, so that it is not interpreted as a variable call
@@ -2088,9 +2088,12 @@ LINE_CONTINUATION
    : ' ' '_' BR -> channel(HIDDEN)
    ;
 
+INLINE_NEWLINE
+	: COLON ' '
+	;
 
 NEWLINE
-   : WS? (BR | COLON ' ') WS?
+   : WS? (BR | INLINE_NEWLINE) WS?
    ;
 
 

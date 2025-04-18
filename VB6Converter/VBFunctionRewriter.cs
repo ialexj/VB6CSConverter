@@ -288,7 +288,9 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
         return InvocationExpression(
             MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName("MessageBox"), IdentifierName("Show")))
+                IdentifierName("MessageBox").WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.Windows.Forms")),
+                IdentifierName("Show"))
+            )
             .WithArgumentList(ArgumentList(GetFinalArgs().ToArray()));
     }
 }

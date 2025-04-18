@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Parser.VisualBasic6Parser;
 
@@ -19,6 +18,13 @@ public static class CompilationUnitConverter
         var @namespace = FileScopedNamespaceDeclaration(IdentifierName(nsName ?? className))
             .WithMembers(SingletonList<MemberDeclarationSyntax>(@class));
 
+        IEnumerable<UsingDirectiveSyntax> GetGlobalStaticUsings()
+            => @class.Members.OfType<EnumDeclarationSyntax>()
+                .Select(e => UsingDirective(IdentifierName(e.Identifier))
+                    .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
+                    .WithStaticKeyword(Token(SyntaxKind.StaticKeyword))
+                );
+
         IEnumerable<string> GetUsings()
         {
             yield return "System";
@@ -27,13 +33,14 @@ public static class CompilationUnitConverter
             }
         }
 
-        return CompilationUnit()            
+        return CompilationUnit()
+            .AddUsings([.. GetGlobalStaticUsings()])
             .AddUsings([.. GetUsings().Distinct().Order().Select(u => UsingDirective(ParseName(u)))])
             .WithMembers(SingletonList<MemberDeclarationSyntax>(@namespace))
             .NormalizeWhitespace();
     }
 
-    public static CompilationUnitSyntax GetGlobalUsings(IEnumerable<string> names)
+    public static CompilationUnitSyntax GetGlobalStaticUsings(IEnumerable<string> names)
     {
         var usings = names.Select(n => UsingDirective(ParseTypeName(n))
             .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))

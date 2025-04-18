@@ -32,10 +32,12 @@ public static class CommonConverter
         return Identifier(text);
     }
 
-    public static TypeSyntax ToTypeSyntax(this AsTypeClauseContext asType)
+    public static TypeSyntax ToTypeSyntax(this AsTypeClauseContext asType, bool objectIfNull = false)
     {
         if (asType == null) {
-            return PredefinedType(Token(SyntaxKind.VoidKeyword));
+            return objectIfNull 
+                ? PredefinedType(Token(SyntaxKind.ObjectKeyword)) 
+                : PredefinedType(Token(SyntaxKind.VoidKeyword));
         }
         
         var type = asType.type().ToTypeSyntax();
@@ -57,7 +59,7 @@ public static class CommonConverter
 
         TypeSyntax ts;
         if (type.complexType() is ComplexTypeContext complex) {
-            ts = ParseTypeName(complex.GetText());
+            return complex.ToTypeSyntax();
         }
         else if (type.baseType() is BaseTypeContext baseType) {
             var typeSymbol = ((ITerminalNode)baseType.GetChild(0)).Symbol;
@@ -86,6 +88,11 @@ public static class CommonConverter
         }
 
         return ts;
+    }
+
+    public static TypeSyntax ToTypeSyntax(this ComplexTypeContext complex)
+    {
+        return ParseTypeName(complex.GetText());
     }
 
     public static SyntaxToken GetVisibility(this IVisibilityContext v)

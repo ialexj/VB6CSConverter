@@ -22,7 +22,7 @@ namespace VB6Converter.Tests
         [TestMethod]
         public void Replace() => ValidateBodyMatches(
             """
-            x = Replace$(s, "a", "b");
+            x = Replace$(s, "a", "b")
             """,
             """
             x = ((string)s).Replace("a", "b");

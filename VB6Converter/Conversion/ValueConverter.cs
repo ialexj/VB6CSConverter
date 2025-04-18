@@ -13,7 +13,7 @@ using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter.Conversion;
 
-public static class ExpressionConverter
+public static class ValueConverter
 {
     public static IdentifierNameSyntax GetIdentifierName(ICallTargetContext target)
     {
@@ -114,90 +114,15 @@ public static class ExpressionConverter
         else if (valueCtx is IOperatorContext oper) {
             return GetOperator(oper, ctx);
         }
+        else if (valueCtx is VsAssignContext assign) {
+            // Just unpack the value - sometimes assignment is inside the expression for some reason
+            // The argument list handles it at entry.
+            return GetValue(assign.valueStmt(), ctx);
+        }
         else {
             return ParseExpression(valueCtx.GetText())
                 .WithError(TransformError.NotSupported(valueCtx, "Unknown value"));
         }
-    }
-
-    public static ExpressionSyntax GetOperator(IOperatorContext oper, CallContext expr)
-    {
-        var values = oper.valueStmt().Select(v => GetValue(v, expr)).ToArray();
-
-        if (oper is VsPowContext pow) {
-            return InvocationExpression(ParseName("Math.Pow"), ArgumentList(values));
-        }
-
-        try {
-            SyntaxKind kind = oper switch {
-                VsAmpContext => SyntaxKind.AddExpression, // string concat
-
-                VsAddContext => SyntaxKind.AddExpression,
-                VsMinusContext => SyntaxKind.SubtractExpression,
-                VsMultContext => SyntaxKind.MultiplyExpression,
-                VsDivContext => SyntaxKind.DivideExpression,
-                VsModContext => SyntaxKind.ModuloExpression,
-
-                VsNegationContext => SyntaxKind.UnaryMinusExpression,
-
-                VsEqContext => SyntaxKind.EqualsExpression,
-                VsNeqContext => SyntaxKind.NotEqualsExpression,
-                VsGtContext => SyntaxKind.GreaterThanExpression,
-                VsGeqContext => SyntaxKind.GreaterThanOrEqualExpression,
-                VsLtContext => SyntaxKind.LessThanExpression,
-                VsLeqContext => SyntaxKind.LessThanOrEqualExpression,
-
-                VsAndContext => SyntaxKind.LogicalAndExpression,
-                VsOrContext => SyntaxKind.LogicalOrExpression,
-                VsNotContext => SyntaxKind.LogicalNotExpression,
-                VsXorContext => SyntaxKind.ExclusiveOrExpression,
-
-                VsIsContext => SyntaxKind.IsExpression,
-
-                _ => throw new NotSupportedException()
-            };
-
-            if (values.Length == 1) {
-                return PrefixUnaryExpression(kind, values[0]);
-            }
-            else if (values.Length == 2) {
-                return BinaryExpression(kind, values[0], values[1]);
-            }
-            else {
-                throw new NotSupportedException();
-            }
-        }
-        catch (NotSupportedException) {
-            return ParseExpression(oper.GetText())
-                .WithError(TransformError.NotSupported(oper, "Unknown operator type"));
-
-        }
-    }
-
-    static ArgumentListSyntax GetArgumentList(ArgsCallContext args, CallContext ctx) => ArgumentList(GetArgumentListCore(args, ctx));
-
-    static BracketedArgumentListSyntax GetBracketedArgumentList(ArgsCallContext args, CallContext ctx) => BracketedArgumentList(GetArgumentListCore(args, ctx));
-
-    static SeparatedSyntaxList<ArgumentSyntax> GetArgumentListCore(ArgsCallContext args, CallContext ctx)
-    {
-        if (args is null)
-            return SeparatedList<ArgumentSyntax>();
-
-        IEnumerable<ArgumentSyntax> GetArgsCore()
-            => args.argCall().Select(arg => {
-                if (arg.valueStmt() is VsAssignContext assign) {
-                    var argName = GetCallIdentifierExpression(assign.implicitCallStmt_InStmt(), ctx);
-                    var value = GetValue(assign.valueStmt(), ctx);
-                    return Argument(value).WithNameColon(NameColon((IdentifierNameSyntax)argName));
-                }
-                else {
-                    return Argument(GetValue(arg.valueStmt(), ctx));
-                }
-            });
-
-        return SeparatedList<ArgumentSyntax>(GetArgsCore()
-            .Select(a => (SyntaxNodeOrToken)a)
-            .Intersperse(Token(SyntaxKind.CommaToken)));
     }
 
     public static ExpressionSyntax GetLiteral(LiteralContext lit)
@@ -301,5 +226,89 @@ public static class ExpressionConverter
             return ParseExpression(lit.GetText())
                 .WithError(TransformError.NotSupported(lit, "Unknown literal type"));
         }
+    }
+
+    public static ExpressionSyntax GetOperator(IOperatorContext oper, CallContext expr)
+    {
+        var values = oper.valueStmt().Select(v => GetValue(v, expr)).ToArray();
+
+        if (oper is VsPowContext pow) {
+            return InvocationExpression(ParseName("Math.Pow"), ArgumentList(values));
+        }
+
+        try {
+            SyntaxKind kind = oper switch {
+                VsAmpContext => SyntaxKind.AddExpression, // string concat
+
+                VsAddContext => SyntaxKind.AddExpression,
+                VsMinusContext => SyntaxKind.SubtractExpression,
+                VsMultContext => SyntaxKind.MultiplyExpression,
+                VsDivContext => SyntaxKind.DivideExpression,
+                VsModContext => SyntaxKind.ModuloExpression,
+
+                VsNegationContext => SyntaxKind.UnaryMinusExpression,
+
+                VsEqContext => SyntaxKind.EqualsExpression,
+                VsNeqContext => SyntaxKind.NotEqualsExpression,
+                VsGtContext => SyntaxKind.GreaterThanExpression,
+                VsGeqContext => SyntaxKind.GreaterThanOrEqualExpression,
+                VsLtContext => SyntaxKind.LessThanExpression,
+                VsLeqContext => SyntaxKind.LessThanOrEqualExpression,
+
+                VsAndContext => SyntaxKind.LogicalAndExpression,
+                VsOrContext => SyntaxKind.LogicalOrExpression,
+                VsNotContext => SyntaxKind.LogicalNotExpression,
+                VsXorContext => SyntaxKind.ExclusiveOrExpression,
+
+                VsIsContext => SyntaxKind.IsExpression,
+
+                _ => throw new NotSupportedException()
+            };
+
+            if (values.Length == 1) {
+                return PrefixUnaryExpression(kind, values[0]);
+            }
+            else if (values.Length == 2) {
+                return BinaryExpression(kind, values[0], values[1]);
+            }
+            else {
+                throw new NotSupportedException();
+            }
+        }
+        catch (NotSupportedException) {
+            return ParseExpression(oper.GetText())
+                .WithError(TransformError.NotSupported(oper, "Unknown operator type"));
+
+        }
+    }
+
+    static ArgumentListSyntax GetArgumentList(ArgsCallContext args, CallContext ctx) => ArgumentList(GetArgumentListCore(args, ctx));
+
+    static BracketedArgumentListSyntax GetBracketedArgumentList(ArgsCallContext args, CallContext ctx) => BracketedArgumentList(GetArgumentListCore(args, ctx));
+
+    static SeparatedSyntaxList<ArgumentSyntax> GetArgumentListCore(ArgsCallContext args, CallContext ctx)
+    {
+        if (args is null)
+            return SeparatedList<ArgumentSyntax>();
+
+        IEnumerable<ArgumentSyntax> GetArgsCore()
+            => args.argCall().Select(arg => {
+                var value = arg.valueStmt();
+
+                // Sometimes the assignment is inside the expression rather at the top level
+                var assign = value as VsAssignContext ?? value.children.OfType<VsAssignContext>().FirstOrDefault();
+                if (assign is not null) {
+                    var argName = GetCallIdentifierExpression(assign.implicitCallStmt_InStmt(), ctx);
+                    var argValue = GetValue(assign.valueStmt(), ctx);
+                    return Argument(argValue).WithNameColon(NameColon((IdentifierNameSyntax)argName));
+                }
+                else {
+                    return Argument(GetValue(arg.valueStmt(), ctx));
+                }
+            });
+
+        return SeparatedList<ArgumentSyntax>(GetArgsCore()
+            .Select(a => (SyntaxNodeOrToken)a)
+            .Intersperse(Token(SyntaxKind.CommaToken)));
     }
 }

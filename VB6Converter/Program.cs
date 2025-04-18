@@ -58,6 +58,23 @@ public static class Program
             Directory.CreateDirectory(outDir);
         }
 
+        var globalUsings = CompilationUnitConverter.GetGlobalStaticUsings(targets.Select(t => $"{project.Name}.{t.File.Name}")).NormalizeWhitespace();
+        var globalUsingsPath = Path.Combine(outDir, "_VB6Usings.cs");
+        File.WriteAllText(globalUsingsPath, globalUsings.ToFullString());
+
+        string projectPath = Path.Combine(outDir, $"{project.Name}.csproj");
+        if (!File.Exists(projectPath)) {
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType>
+                    <TargetFramework>net9.0</TargetFramework>
+                    <LangVersion>latest</LangVersion>
+                  </PropertyGroup>
+                </Project>
+                """);
+        }
+
         var conversions = await Task.WhenAll(
             convert.Select(t => Task.Run(
                 () => {
@@ -77,7 +94,7 @@ public static class Program
                             var sb = new StringBuilder();
                             foreach (var error in conversion.ParseErrors) {
                                 sb.AppendLine($"{BOLD}{file.Name}:{NOBOLD} PARSE ERROR: {error}");
-                                sb.AppendLine(GetLineFromFile(file.Path, error.Line));
+                                sb.AppendLine(GetLineFromFile(conversion.Parse.Source, error.Line));
                             }
 
                             Console.Write($"{RED}{sb}{NORMAL}");
@@ -123,53 +140,38 @@ public static class Program
                     }
                 })));
 
-        var globalUsings = CompilationUnitConverter.GetGlobalUsings(targets.Select(t => $"{project.Name}.{t.File.Name}")).NormalizeWhitespace();
-        var globalUsingsPath = Path.Combine(outDir, "_VB6Usings.cs");
-        File.WriteAllText(globalUsingsPath, globalUsings.ToFullString());
-
-        string projectPath = Path.Combine(outDir, $"{project.Name}.csproj");
-        if (!File.Exists(projectPath)) {
-            File.WriteAllText(projectPath, """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup>
-                    <OutputType>Exe</OutputType>
-                    <TargetFramework>net9.0</TargetFramework>
-                    <LangVersion>latest</LangVersion>
-                  </PropertyGroup>
-                </Project>
-                """);
-        }
-
         if (targets.Any(t => !File.Exists(t.OutputPath))) {
             Console.WriteLine($"{RED}Some files have not yet been converted.{NORMAL}");
             return;
         }
 
-        Console.WriteLine("Compiling...");
+        if (options.Filter is null) {
+            Console.WriteLine("Compiling...");
 
-        using (var workspace = MSBuildWorkspace.Create()) {
-            var csproject = await workspace.OpenProjectAsync(projectPath);
-            var compilation = await csproject.GetCompilationAsync();
+            using (var workspace = MSBuildWorkspace.Create()) {
+                var csproject = await workspace.OpenProjectAsync(projectPath);
+                var compilation = await csproject.GetCompilationAsync();
 
-            var diagnostics = compilation.GetDiagnostics();
-            foreach (var severity in diagnostics.GroupBy(d => d.Severity)) {
-                Console.WriteLine($"{severity.Key}: {severity.Count()}");
-            }
+                var diagnostics = compilation.GetDiagnostics();
+                foreach (var severity in diagnostics.GroupBy(d => d.Severity)) {
+                    Console.WriteLine($"{severity.Key}: {severity.Count()}");
+                }
 
-            using var writer = new StreamWriter(Path.Combine(outDir, "diagnostics.txt"), false);
+                using var writer = new StreamWriter(Path.Combine(outDir, "diagnostics.txt"), false);
 
-            writer.WriteLine();
-            writer.WriteLine("Global Diagnostics:");
+                writer.WriteLine();
+                writer.WriteLine("Global Diagnostics:");
 
-            WriteDiagnostics(writer, diagnostics, "");
+                WriteDiagnostics(writer, diagnostics, "");
 
-            writer.WriteLine();
-            writer.WriteLine("=======================================================");
-            writer.WriteLine("Files:");
+                writer.WriteLine();
+                writer.WriteLine("=======================================================");
+                writer.WriteLine("Files:");
 
-            foreach (var file in diagnostics.GroupBy(d => d.Location.SourceTree.FilePath).OrderByDescending(f => f.Count())) {
-                writer.WriteLine($"{Path.GetFileNameWithoutExtension(file.Key)}:");
-                WriteDiagnostics(writer, file, "   ");
+                foreach (var file in diagnostics.GroupBy(d => d.Location.SourceTree.FilePath).OrderByDescending(f => f.Count())) {
+                    writer.WriteLine($"{Path.GetFileNameWithoutExtension(file.Key)}:");
+                    WriteDiagnostics(writer, file, "   ");
+                }
             }
         }
     }
@@ -191,9 +193,9 @@ public static class Program
         writer.WriteLine();
     }
 
-    static string GetLineFromFile(string file, int lineNumber)
+    static string GetLineFromFile(string code, int lineNumber)
     {
-        using var reader = new StreamReader(file);
+        using var reader = new StringReader(code);
         for (int i = 0; i < lineNumber - 1; i++) {
             reader.ReadLine();
         }

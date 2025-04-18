@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Converter.Conversion.CommonConverter;
-using static VB6Converter.Conversion.ExpressionConverter;
+using static VB6Converter.Conversion.ValueConverter;
 using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter.Conversion;

@@ -5,10 +5,6 @@ namespace VB6Parser
     using Antlr4.Runtime.Misc;
     using System.IO;
 
-    public record struct ParseError(string Message, int Line, int Col) {
-        public override string ToString() => Message;
-    }
-
     public class ErrorListener<S>() : IAntlrErrorListener<S>
     {
         public List<ParseError> Errors { get; } = [];

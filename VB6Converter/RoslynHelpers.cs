@@ -1,14 +1,46 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
 using System.Collections;
 using System.Linq;
+using System.Xml.Linq;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter
 {
     internal static class RoslynHelpers
     {
+        public static NameSyntax ToName(this ExpressionSyntax expr)
+        {
+            if (expr is NameSyntax name) {
+                return name;
+            }
+            else if (expr is MemberAccessExpressionSyntax member) {
+                var obj = ToName(member.Expression);
+                var target = member.Name;
+                return QualifiedName(obj, target);
+            }
+            else {
+                throw new NotSupportedException("Expression is not a name");
+            }
+        }
+
+        public static NameSyntax AppendName(this ExpressionSyntax left, ExpressionSyntax right)
+        {
+            ArgumentNullException.ThrowIfNull(left);
+            ArgumentNullException.ThrowIfNull(right);
+
+            var leftName = left.ToName();
+            var rightName = right.ToName();
+
+            var current = leftName;
+            foreach (var id in right.DescendantNodesAndSelf().OfType<SimpleNameSyntax>()) {
+                current = QualifiedName(current, id);
+            }
+
+            return current;
+        }
 
         public static ArgumentListSyntax ArgumentList(params ExpressionSyntax[] args)
         {

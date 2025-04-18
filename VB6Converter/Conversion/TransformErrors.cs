@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using VB6Parser;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter.Conversion;

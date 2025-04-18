@@ -1,6 +1,8 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using Antlr4.Runtime;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -30,12 +32,16 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
         File.Delete($"{output}.log");
         File.Delete($"{output}.tokens");
         File.Delete($"{output}.syntax.lisp");
+        File.Delete($"{output}.vb6");
 
         if (conversion.ParseErrors.Count > 0) {
             using var writer = new StreamWriter($"{output}.log", true);
             foreach (var error in conversion.ParseErrors) {
                 writer.WriteLine($"{error.Line}:{error.Col} {error.Message}");
             }
+
+            File.WriteAllText($"{output}.vb6", conversion.Parse.Source);
+            //File.WriteAllText()
         }
 
         // Create log file with errors
@@ -63,22 +69,25 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
 
     public static VB6ToCSharpConversion Convert(TextReader input, string className, string nsName, VisualBasicFileType type)
     {
+        ArgumentNullException.ThrowIfNull(input);
+
         try {
-            var start = Parse(input);
+            var parse = Parse(input);
 
             var cu = CompilationUnitConverter.GetCompilationUnit(
-                start.module(), nsName, className,
+                parse.Start.module(), nsName, className,
                 isStatic: type == VisualBasicFileType.Module);
 
             return new VB6ToCSharpConversion(className, cu) {
+                Parse = parse,
                 TransformErrors = cu.GetTransformErrors().ToArray(),
                 SyntaxErrors = GetCompilation([cu]).GetParseDiagnostics()
             };
         }
-        catch (ParseException parse) {
-            var cu = SyntaxFactory.CompilationUnit();
-            return new VB6ToCSharpConversion(className, cu) {
-                ParseErrors = parse.Errors
+        catch (ParseException pex) {
+            return new VB6ToCSharpConversion(className, SyntaxFactory.CompilationUnit()) {
+                Parse = pex.Context,
+                ParseErrors = pex.Errors
             };
         }
     }
@@ -99,6 +108,8 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
     public FileScopedNamespaceDeclarationSyntax Namespace => CompilationUnit.Members.OfType<FileScopedNamespaceDeclarationSyntax>().FirstOrDefault();
 
     public ClassDeclarationSyntax Class => Namespace?.Members.OfType<ClassDeclarationSyntax>().FirstOrDefault();
+
+    public ParseContext Parse { get; init; }
 
 
     public IReadOnlyCollection<ParseError> ParseErrors { get; init; } = [];
