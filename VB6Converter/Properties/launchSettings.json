@@ -2,7 +2,7 @@
   "profiles": {
     "VB6Converter": {
       "commandName": "Project",
-      "commandLineArgs": "-p \"C:\\Users\\alexandre.jerebtsov\\source\\alexj\\OptiwareVB6\\Optiware\\Optiware98.vbp\" -o \"C:\\Users\\alexandre.jerebtsov\\source\\alexj\\OptiwareVB6CS\" -u *"
+      "commandLineArgs": "-p \"C:\\Users\\alexandre.jerebtsov\\source\\alexj\\OptiwareVB6\\Optiware\\Optiware98.vbp\" -o \"C:\\Users\\alexandre.jerebtsov\\source\\alexj\\OptiwareVB6CS\" -u * --skip-transform"
     }
   }
 }

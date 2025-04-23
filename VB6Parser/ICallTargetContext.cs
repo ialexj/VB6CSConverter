@@ -144,6 +144,10 @@ namespace VB6Parser
             public bool IsPartial
             {
                 get {
+                    if (iCS_S_MembersCall()?.IsPartial ?? false) {
+                        return true;
+                    }
+
                     // Dictionary only
                     if (iCS_S_VariableOrProcedureCall() is null 
                         && iCS_S_ProcedureOrArrayCall() is null 
@@ -151,7 +155,7 @@ namespace VB6Parser
                         return true;
                     }
 
-                    return iCS_S_MembersCall()?.IsPartial ?? false;
+                    return false;
                 }
             }
 
@@ -196,7 +200,7 @@ namespace VB6Parser
 
         public partial class ICS_S_MembersCallContext : ICallContext
         {
-            public bool IsPartial => iCS_S_MemberCall()?.FirstOrDefault().DOT() is not null;
+            public bool IsPartial => iCS_S_VariableOrProcedureCall() is null && iCS_S_ProcedureOrArrayCall() is null;
 
             DictionaryCallStmtContext ICallContext.dictionaryCallStmt() 
                 => dictionaryCallStmt() 

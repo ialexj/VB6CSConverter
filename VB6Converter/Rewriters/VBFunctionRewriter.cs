@@ -3,47 +3,60 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
+using System.Text;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Converter.RoslynHelpers;
 
-namespace VB6Converter;
+namespace VB6Converter.Rewriters;
 
 public class VBFunctionRewriter : CSharpSyntaxRewriter
 {
+
+    [return: NotNullIfNotNull("node")]
+    public override SyntaxNode Visit(SyntaxNode node)
+    {
+        try {
+            return base.Visit(node);
+        }
+        catch (Exception ex) {
+            Log.Default.Error("Failed to convert {node} in {file}: {message:nq}", node, Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath), ex.Message);
+            throw;
+        }
+    }
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
     {
-        if (node.Identifier.Text == "vbNullString") {
-            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(string.Empty));
-        }
-        else if (node.Identifier.Text == "vbNullChar") {
-            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\0'));
-        }
-        else if (node.Identifier.Text == "vbCr") {
-            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\r'));
-        }
-        else if (node.Identifier.Text == "vbLf") {
-            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\n'));
-        }
-        else if (node.Identifier.Text == "vbCrLf") {
-            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\r\n"));
-        }
-        else if (node.Identifier.Text == "vbFormFeed") {
-            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal("\f"));
-        }
-        else if (node.Identifier.Text == "vbBack") {
-            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\b'));
-        }
-        else if (node.Identifier.Text == "vbTab") {
-            return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\t'));
-        }
+        switch (node.Identifier.Text) {
+            case "Now":  return ParseExpression("DateTime.Now");
+            case "Date": return ParseExpression("DateTime.Now.Date");
+        };
 
-        // DAO
+        switch (node.Identifier.Text) {
+            case "vbNullString":
+                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(string.Empty));
+            case "vbNullChar":
+                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\0'));
+            case "vbCr":
+                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\r'));
+            case "vbLf":
+                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\n'));
+            case "vbCrLf":
+                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\r\n"));
+            case "vbFormFeed":
+                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal("\f"));
+            case "vbBack":
+                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\b'));
+            case "vbTab":
+                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\t'));
 
-        else if (node.Identifier.Text == "Recordset") {
-            return node.WithAdditionalAnnotations(
-                new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao")
-            );
+            // DAO
+
+            case "Recordset":
+                return node.WithAdditionalAnnotations(
+                    new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao")
+                );
         }
 
         string[] RecordsetOptionEnum = [
@@ -86,42 +99,116 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
     {
-        if (node.Expression is not IdentifierNameSyntax name)
-            return base.VisitInvocationExpression(node);
+        try {
+            if (node.Expression is not IdentifierNameSyntax name) {
+                return base.VisitInvocationExpression(node);
+            }
 
-        return name.Identifier.Text switch {
-            "Replace" => ConvertReplace(node),
+            // Try to convert via just the name
+            var expr = VisitIdentifierName(name);
+            if (!name.IsEquivalentTo(expr)) {
+                return expr;
+            }
 
-            "IsNull" => ConvertIsNull(node),
-            "IsArray" => ConvertIsArray(node),
+            var newSyntax = name.Identifier.Text switch {
+                "Array" => ConvertArray(node),
+                "Replace" => ConvertReplace(node),
 
-            "UBound" => ConvertUBound(node),
+                "IsNull" => ConvertIsNull(node),
+                "IsArray" => ConvertIs(node, IdentifierName(nameof(Array))),
 
-            "DateSerial" => ConvertDateSerial(node),
+                "UBound" => ConvertUBound(node),
 
-            "Hour" => ConvertToMemberAccess(node),
-            "Minute" => ConvertToMemberAccess(node),
-            "Second" => ConvertToMemberAccess(node),
-            "Year" => ConvertToMemberAccess(node),
-            "Month" => ConvertToMemberAccess(node),
-            "Day" => ConvertToMemberAccess(node),
+                "DateSerial" => ConvertDateSerial(node),
 
-            "Now" => ParseExpression("DateTime.Now"),
-            "Date" => ParseExpression("DateTime.Now.Date"),
+                "Hour"   => ConvertToMemberAccess(node),
+                "Minute" => ConvertToMemberAccess(node),
+                "Second" => ConvertToMemberAccess(node),
+                "Year"   => ConvertToMemberAccess(node),
+                "Month"  => ConvertToMemberAccess(node),
+                "Day"    => ConvertToMemberAccess(node),
 
-            "Len" => ConvertLen(node),
-            "Left" => ConvertLeft(node),
+                "String" => ConvertString(node),
+                "Len"  => ConvertLen(node),
+                "Left" => ConvertLeft(node),
 
-            "CStr" => ConvertToMemberAccess(node, "Convert.ToString"),
-            "CLng" => ConvertToMemberAccess(node, "Convert.ToInt32"),
-            "CDbl" => ConvertToMemberAccess(node, "Convert.ToDouble"),
+                "CStr" => ConvertToMemberAccess(node, "Convert.ToString"),
+                "CLng" => ConvertToMemberAccess(node, "Convert.ToInt32"),
+                "CDbl" => ConvertToMemberAccess(node, "Convert.ToDouble"),
 
-            "IIf" => ConvertIIf(node),
+                "IIf" => ConvertIIf(node),
 
+                "Asc" => ConvertAsc(node),
+                "Chr" => ConvertChr(node),
 
-            "MsgBox" => ConvertMsgBox(node),
-            _ => base.VisitInvocationExpression(node),
-        };
+                "MsgBox" => ConvertMsgBox(node),
+
+                _ => null,
+            };
+
+            if (newSyntax?.IsEquivalentTo(node) == false) {
+                return Visit(newSyntax);
+            }
+            else {
+                return base.VisitInvocationExpression(node);
+            }
+        }
+        catch (Exception ex) {
+            Log.Default.Error("Failed to convert invocation {node} in {file}: {message:nq}", node, Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath), ex.Message);
+            throw;
+        }
+    }
+
+    private SyntaxNode ConvertChr(InvocationExpressionSyntax node)
+    {
+        var arg = node.ArgumentList.Arguments[0].Expression;
+        if (arg is LiteralExpressionSyntax literal 
+            && literal.IsKind(SyntaxKind.NumericLiteralExpression)) {
+            return LiteralExpression(
+                SyntaxKind.CharacterLiteralExpression,
+                Literal(Convert.ToChar((int)literal.Token.Value)));
+        }
+        else {
+            return ParenthesizedExpression(
+                CastExpression(PredefinedType(Token(SyntaxKind.CharKeyword)),
+                arg));
+        }
+    }
+
+    private SyntaxNode ConvertString(InvocationExpressionSyntax node)
+    {
+        return ObjectCreationExpression(
+            PredefinedType(Token(SyntaxKind.StringKeyword)),
+            ArgumentList(
+                node.ArgumentList.Arguments[1].Expression,
+                node.ArgumentList.Arguments[0].Expression),
+            null);
+    }
+
+    private SyntaxNode ConvertArray(InvocationExpressionSyntax node)
+    {
+        return ImplicitArrayCreationExpression(
+            InitializerExpression(
+                SyntaxKind.ArrayInitializerExpression,
+                SeparatedList<ExpressionSyntax>(
+                    node.ArgumentList.Arguments.Select(a => (SyntaxNodeOrToken)a.Expression).Intersperse(Token(SyntaxKind.CommaToken))
+                )
+            )
+        );
+    }
+
+    private SyntaxNode ConvertAsc(InvocationExpressionSyntax node)
+    {
+        var args = node.ArgumentList.Arguments[0].Expression;
+        if (args is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression) 
+            && literal.Token.ValueText.Length == 1) {
+            return LiteralExpression(
+                SyntaxKind.CharacterLiteralExpression,
+                Literal(literal.Token.ValueText[0]));
+        }
+        else {
+            return node;
+        }
     }
 
     private SyntaxNode ConvertIIf(InvocationExpressionSyntax node)
@@ -223,10 +310,18 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
         ));
 
     static SyntaxNode ConvertIsArray(InvocationExpressionSyntax node)
-        => BinaryExpression(
-            SyntaxKind.IsExpression,
-            node.ArgumentList.Arguments[0].Expression,
-            IdentifierName(nameof(Array)));
+        => ParenthesizedExpression(
+            BinaryExpression(
+                SyntaxKind.IsExpression,
+                node.ArgumentList.Arguments[0].Expression,
+                IdentifierName(nameof(Array))));
+
+    static SyntaxNode ConvertIs(InvocationExpressionSyntax node, IdentifierNameSyntax what)
+        => ParenthesizedExpression(
+            BinaryExpression(
+                SyntaxKind.IsExpression,
+                node.ArgumentList.Arguments[0].Expression,
+                what));
 
     SyntaxNode ConvertMsgBox(InvocationExpressionSyntax node)
     {

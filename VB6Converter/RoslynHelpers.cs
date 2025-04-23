@@ -5,6 +5,7 @@ using System;
 using System.Collections;
 using System.Linq;
 using System.Xml.Linq;
+using VB6Converter.Conversion;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter
@@ -22,7 +23,7 @@ namespace VB6Converter
                 return QualifiedName(obj, target);
             }
             else {
-                throw new NotSupportedException("Expression is not a name");
+                throw new ArgumentException("Expression is not a name");
             }
         }
 

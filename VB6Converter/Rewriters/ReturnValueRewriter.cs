@@ -1,26 +1,27 @@
-﻿using System.Linq;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System.Reflection;
+using Serilog;
+using System;
+using System.IO;
+using System.Linq;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
-using System.Xml.Linq;
 
-namespace VB6Converter;
+namespace VB6Converter.Rewriters;
 
 public class ReturnValueRewriter : CSharpSyntaxRewriter
 {
-    public override SyntaxNode VisitReturnStatement(ReturnStatementSyntax node)
-    {
-        if (node.Expression is null) {
-            var parent = node.Ancestors().FirstOrDefault(a => a.GetAnnotations("PropName").Any());
-            if (parent != null) {
-                var annot = parent.GetAnnotations("PropName").First();
-                return ReturnStatement(IdentifierName(annot.Data));
-            }
-        }
+    readonly ILogger Log = VB6Converter.Log.Default;
 
-        return base.VisitReturnStatement(node);
+    public override SyntaxNode DefaultVisit(SyntaxNode node)
+    {
+        try {
+            return base.DefaultVisit(node);
+        }
+        catch (Exception ex) {
+            Log.Error(ex, "Couldn't process {node} in {file}.", node, Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath));
+            throw;
+        }
     }
 
     public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
@@ -97,10 +98,7 @@ public class ReturnValueRewriter : CSharpSyntaxRewriter
             body = body.ReplaceNode(exst, ReturnStatement(assign.Right));
         }
 
-        var uses = body.DescendantNodes()
-            .OfType<IdentifierNameSyntax>()
-            .Any(id => id.Identifier.Text == propName.Text);
-
+        var uses = body.DescendantTokens().Any(t => t.IsKind(SyntaxKind.IdentifierToken) && t.Text == propName.Text);
         if (uses) {
             var newBody = Block().AddStatements(
                 LocalDeclarationStatement(
@@ -115,10 +113,27 @@ public class ReturnValueRewriter : CSharpSyntaxRewriter
                 newBody = newBody.AddStatements(ReturnStatement(IdentifierName(propName)));
             }
 
-            body = newBody;
+            body = newBody.WithAdditionalAnnotations(new SyntaxAnnotation("ReturnVar", propName.Text));
+        }
+        else {
+            body = body.WithAdditionalAnnotations(new SyntaxAnnotation("ReturnDefault"));
         }
 
-        body = body.WithAdditionalAnnotations(new SyntaxAnnotation("PropName", propName.Text));
         return (BlockSyntax)base.Visit(body);
+    }
+
+    public override SyntaxNode VisitReturnStatement(ReturnStatementSyntax node)
+    {
+        if (node.Expression is null) {
+            var method = node.Ancestors().OfType<BlockSyntax>().First();
+            if (method.GetAnnotations("ReturnVar").FirstOrDefault() is SyntaxAnnotation returnVar) {
+                return ReturnStatement(IdentifierName(returnVar.Data));
+            }
+            else if (method.GetAnnotations("ReturnDefault").Any()) {
+                return ReturnStatement(LiteralExpression(SyntaxKind.DefaultLiteralExpression));
+            }
+        }
+
+        return base.VisitReturnStatement(node);
     }
 }

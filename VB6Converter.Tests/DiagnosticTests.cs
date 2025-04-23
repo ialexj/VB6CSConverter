@@ -11,7 +11,7 @@ namespace VB6Converter.Tests;
 public class DiagnosticTests
 {
     [TestMethod]
-    public void TrailingColon() => ValidateShouldNotFail(
+    public void TrailingColon() => ConversionShouldSucceed(
         """
         Sub Test()
             FindFirst
@@ -39,7 +39,7 @@ public class DiagnosticTests
     //    """);
 
     [TestMethod]
-    public void Test4() => ValidateShouldNotFail(
+    public void Test4() => ConversionShouldSucceed(
         """
         Begin VB.Form frmEditorMain 
             Caption         =   "Editor"
@@ -88,7 +88,7 @@ public class DiagnosticTests
         """);
 
     [TestMethod]
-    public void Assignment() => ValidateShouldNotFail(
+    public void Assignment() => ConversionShouldSucceed(
         """   
         Private Sub Test()
             MethodCall arg:="Str1" & "Str2"
@@ -96,7 +96,7 @@ public class DiagnosticTests
         """);
 
     [TestMethod]
-    public void InlineIfStatements() => ValidateShouldNotFail(
+    public void InlineIfStatements() => ConversionShouldSucceed(
         """
         Sub Test()
             If value Then DoSomething: DoAnotherThing Else DoSomethingElse: DoSomethingMore
@@ -104,7 +104,7 @@ public class DiagnosticTests
         """);
 
     [TestMethod]
-    public void InlineIfStatements2() => ValidateShouldNotFail(
+    public void InlineIfStatements2() => ConversionShouldSucceed(
         """
         Sub Test()
             If chkNotasEncomenda(0).value = 1 Then sFrn = "Where " & sFrn: fCriar = True Else sFind = sFrn: sFrn = ""
@@ -114,7 +114,7 @@ public class DiagnosticTests
 
 
     [TestMethod]
-    public void InlineStatements() => ValidateShouldNotFail(
+    public void InlineStatements() => ConversionShouldSucceed(
         """
         Sub Test()
             A = 1: B = 2
@@ -122,7 +122,7 @@ public class DiagnosticTests
         """);
 
     [TestMethod]
-    public void CaseInline() => ValidateShouldNotFail(
+    public void CaseInline() => ConversionShouldSucceed(
         """
         Sub Test()
                Select Case i
@@ -132,7 +132,7 @@ public class DiagnosticTests
         """);
 
     [TestMethod]
-    public void CaseWithNewline() => ValidateShouldNotFail(
+    public void CaseWithNewline() => ConversionShouldSucceed(
         """
         Sub Test()
             Select Case tipo
@@ -143,7 +143,7 @@ public class DiagnosticTests
         """);
 
     [TestMethod]
-    public void CaseWithNewlineNoColon() => ValidateShouldNotFail(
+    public void CaseWithNewlineNoColon() => ConversionShouldSucceed(
         """
         Sub Test()
             Select Case tipo
@@ -154,7 +154,7 @@ public class DiagnosticTests
         """);
 
     [TestMethod]
-    public void CaseWithComment() => ValidateShouldNotFail(
+    public void CaseWithComment() => ConversionShouldSucceed(
         """
         Sub Test()
             Select Case tipo
@@ -163,4 +163,38 @@ public class DiagnosticTests
             End Select
         End Sub
         """);
+
+    [TestMethod]
+    public void With() => ValidateBodyMatches(
+        """
+        With rsFicha
+            !oficDataConsulta = mskPrescricaoO(optPMData).Text
+        End With       
+        """,
+        """
+        rsFicha["oficDataConsulta"] = mskPrescricaoO[optPMData].Text;
+        """);
+
+    [TestMethod]
+    public void What() => ConversionShouldSucceed(
+        """
+        Private Sub Test()
+                'Imprimir Linha
+                                  'SAMS
+        980                       sTableBody = "|| Total do Documento|" & _
+                                               "|" & _
+                                               Format$(dDocumentoIVABeneficiario, "Standard") & "|" & _
+                                               Format$(dDocumentoIVAEntidade, "Standard") & "|" & _
+                                               Format$(lDocumentoIVATotal, "Standard") & "|" & _
+                                               Format$(dDocumentoValorBeneficiario, "Standard") & "|" & _
+                                               Format$(dDocumentoValorEntidade, "Standard") & "|" & _
+                                               Format$(dDocumentoValorEntidade2, "Standard")    '& "|" & _
+                                                                                                Format$(dDocumentoValorTotalPTE, "Standard")
+        990                       .FontBold = True
+        1000                      .AddTable sTableFormat, sTableHeader, sTableBody, &HE0E0E0, &HE0E0E0, True
+        1010                      .FontBold = False
+        End Sub 
+        """);
+
+
 }

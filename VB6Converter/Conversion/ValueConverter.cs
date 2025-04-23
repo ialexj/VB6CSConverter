@@ -106,7 +106,7 @@ public static class ValueConverter
             var expr = ParenthesizedExpression(value);
 
             if (@struct.valueStmt().Length > 1) {
-                expr = expr.WithError(TransformError.NotSupported(@struct, "Struct with more than one value."));
+                expr = expr.WithError(TransformError.Create(@struct, "Struct with more than one value."));
             }
 
             return expr;
@@ -121,7 +121,7 @@ public static class ValueConverter
         }
         else {
             return ParseExpression(valueCtx.GetText())
-                .WithError(TransformError.NotSupported(valueCtx, "Unknown value"));
+                .WithError(TransformError.Create(valueCtx, "Unknown value"));
         }
     }
 
@@ -224,7 +224,7 @@ public static class ValueConverter
         }
         else {
             return ParseExpression(lit.GetText())
-                .WithError(TransformError.NotSupported(lit, "Unknown literal type"));
+                .WithError(TransformError.Create(lit, "Unknown literal type"));
         }
     }
 
@@ -236,49 +236,42 @@ public static class ValueConverter
             return InvocationExpression(ParseName("Math.Pow"), ArgumentList(values));
         }
 
-        try {
-            SyntaxKind kind = oper switch {
-                VsAmpContext => SyntaxKind.AddExpression, // string concat
+        SyntaxKind kind = oper switch {
+            VsAmpContext => SyntaxKind.AddExpression, // string concat
 
-                VsAddContext => SyntaxKind.AddExpression,
-                VsMinusContext => SyntaxKind.SubtractExpression,
-                VsMultContext => SyntaxKind.MultiplyExpression,
-                VsDivContext => SyntaxKind.DivideExpression,
-                VsModContext => SyntaxKind.ModuloExpression,
+            VsAddContext => SyntaxKind.AddExpression,
+            VsMinusContext => SyntaxKind.SubtractExpression,
+            VsMultContext => SyntaxKind.MultiplyExpression,
+            VsDivContext => SyntaxKind.DivideExpression,
+            VsModContext => SyntaxKind.ModuloExpression,
 
-                VsNegationContext => SyntaxKind.UnaryMinusExpression,
+            VsNegationContext => SyntaxKind.UnaryMinusExpression,
 
-                VsEqContext => SyntaxKind.EqualsExpression,
-                VsNeqContext => SyntaxKind.NotEqualsExpression,
-                VsGtContext => SyntaxKind.GreaterThanExpression,
-                VsGeqContext => SyntaxKind.GreaterThanOrEqualExpression,
-                VsLtContext => SyntaxKind.LessThanExpression,
-                VsLeqContext => SyntaxKind.LessThanOrEqualExpression,
+            VsEqContext => SyntaxKind.EqualsExpression,
+            VsNeqContext => SyntaxKind.NotEqualsExpression,
+            VsGtContext => SyntaxKind.GreaterThanExpression,
+            VsGeqContext => SyntaxKind.GreaterThanOrEqualExpression,
+            VsLtContext => SyntaxKind.LessThanExpression,
+            VsLeqContext => SyntaxKind.LessThanOrEqualExpression,
 
-                VsAndContext => SyntaxKind.LogicalAndExpression,
-                VsOrContext => SyntaxKind.LogicalOrExpression,
-                VsNotContext => SyntaxKind.LogicalNotExpression,
-                VsXorContext => SyntaxKind.ExclusiveOrExpression,
+            VsAndContext => SyntaxKind.LogicalAndExpression,
+            VsOrContext => SyntaxKind.LogicalOrExpression,
+            VsNotContext => SyntaxKind.LogicalNotExpression,
+            VsXorContext => SyntaxKind.ExclusiveOrExpression,
 
-                VsIsContext => SyntaxKind.IsExpression,
+            VsIsContext => SyntaxKind.IsExpression,
 
-                _ => throw new NotSupportedException()
-            };
+            _ => throw new TransformException(oper, "Invalid operator.")
+        };
 
-            if (values.Length == 1) {
-                return PrefixUnaryExpression(kind, values[0]);
-            }
-            else if (values.Length == 2) {
-                return BinaryExpression(kind, values[0], values[1]);
-            }
-            else {
-                throw new NotSupportedException();
-            }
+        if (values.Length == 1) {
+            return PrefixUnaryExpression(kind, values[0]);
         }
-        catch (NotSupportedException) {
-            return ParseExpression(oper.GetText())
-                .WithError(TransformError.NotSupported(oper, "Unknown operator type"));
-
+        else if (values.Length == 2) {
+            return BinaryExpression(kind, values[0], values[1]);
+        }
+        else {
+            throw new TransformException(oper, "Invalid operator type");
         }
     }
 

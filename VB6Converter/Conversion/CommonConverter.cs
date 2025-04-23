@@ -43,7 +43,7 @@ public static class CommonConverter
         var type = asType.type().ToTypeSyntax();
         
         if (asType.fieldLength() is FieldLengthContext length) {
-            type = type.WithError(TransformError.NotSupported(length, "Type with length specifier not supported."));
+            type = type.WithError(TransformError.Create(length, "Type with length specifier not supported."));
         }
 
         return type;
@@ -80,7 +80,7 @@ public static class CommonConverter
         }
         else {
             ts = ParseTypeName(type.GetText())
-                .WithError(TransformError.NotSupported(type, "Not a complex or a base type"));
+                .WithError(TransformError.Create(type, "Not a complex or a base type"));
         }
 
         if (type.LPAREN() != null || type.RPAREN() != null) {
@@ -95,10 +95,10 @@ public static class CommonConverter
         return ParseTypeName(complex.GetText());
     }
 
-    public static SyntaxToken GetVisibility(this IVisibilityContext v)
+    public static SyntaxToken GetVisibility(this IVisibilityContext v, SyntaxKind defaultVisibility = SyntaxKind.PrivateKeyword)
     {
         if (v is null) {
-            return Token(SyntaxKind.PrivateKeyword);
+            return Token(defaultVisibility);
         }
         else if (v.PRIVATE() != null) {
             return Token(SyntaxKind.PrivateKeyword);
@@ -111,7 +111,7 @@ public static class CommonConverter
         }
         else {
             return ParseToken(v.GetText())
-                .WithError(TransformError.NotSupported(v, "Unknown visibility"));
+                .WithError(TransformError.Create(v, "Unknown visibility"));
         }
     }
 }

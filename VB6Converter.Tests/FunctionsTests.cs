@@ -19,4 +19,27 @@ public class FunctionsTests
         """
         x = a ? b : c;
         """);
+
+    [TestMethod]
+    public void Array() => ValidateBodyMatches(
+        """
+        x = Array("a", "b", "c")
+        """,
+        """
+        x = new[]
+        {
+            "a",
+            "b",
+            "c"
+        };
+        """);
+
+    [TestMethod]
+    public void Asc() => ValidateBodyMatches(
+        """
+        x = Asc("a")
+        """,
+        """
+        x = 'a';
+        """);
 }

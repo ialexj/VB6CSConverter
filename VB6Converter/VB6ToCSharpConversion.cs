@@ -1,5 +1,4 @@
-﻿using Antlr4.Runtime;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
@@ -41,7 +40,6 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
             }
 
             File.WriteAllText($"{output}.vb6", conversion.Parse.Source);
-            //File.WriteAllText()
         }
 
         // Create log file with errors

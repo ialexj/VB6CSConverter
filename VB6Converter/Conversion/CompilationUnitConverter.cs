@@ -20,7 +20,9 @@ public static class CompilationUnitConverter
 
         IEnumerable<UsingDirectiveSyntax> GetGlobalStaticUsings()
             => @class.Members.OfType<EnumDeclarationSyntax>()
-                .Select(e => UsingDirective(IdentifierName(e.Identifier))
+                .Select(e => UsingDirective(
+                    // TODO: full name
+                    IdentifierName(e.Identifier))
                     .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
                     .WithStaticKeyword(Token(SyntaxKind.StaticKeyword))
                 );
@@ -42,7 +44,18 @@ public static class CompilationUnitConverter
 
     public static CompilationUnitSyntax GetGlobalStaticUsings(IEnumerable<string> names)
     {
-        var usings = names.Select(n => UsingDirective(ParseTypeName(n))
+        var common = new string[] {
+            "Microsoft.VisualBasic.FileSystem",
+            "Microsoft.VisualBasic.Strings",
+            "Microsoft.VisualBasic.VBMath",
+            "Microsoft.VisualBasic.Constants",
+            "Microsoft.VisualBasic.ControlChars",
+            "Microsoft.VisualBasic.Conversion",
+            "Microsoft.VisualBasic.DateAndTime",
+            "Microsoft.VisualBasic.Interaction"
+        };
+
+        var usings = common.Concat(names).Select(n => UsingDirective(ParseTypeName(n))
             .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
             .WithStaticKeyword(Token(SyntaxKind.StaticKeyword)));
 

@@ -8,7 +8,7 @@ using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Parser
 {
-    public interface IPropertyContext
+    public interface IPropertyContext : IParseTree
     {
         AmbiguousIdentifierContext ambiguousIdentifier();
 

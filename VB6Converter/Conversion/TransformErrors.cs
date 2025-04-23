@@ -37,7 +37,17 @@ public static class TransformErrors
 
     public static T WithError<T>(this T node, TransformError error) where T : SyntaxNode
     {
-        return node.WithLeadingTrivia(Comment($"// ERROR: {error.Message} @ {error.Line}:{error.Col}{Environment.NewLine}"))
+        var trivia = node.GetLeadingTrivia();
+        trivia = trivia.Insert(0, Comment($"// ERROR: {error.Message} @ {error.Line}:{error.Col}{Environment.NewLine}"));
+        return node.WithLeadingTrivia(trivia)
+            .WithAdditionalAnnotations(GetErrorAnnotations(error));
+    }
+
+    public static T WithError<T>(this T node, TransformError error, string originalContent) where T : SyntaxNode
+    {
+        return node.WithLeadingTrivia(
+            Comment($"// ERROR: {error.Message} @ {error.Line}:{error.Col}{Environment.NewLine}"),
+            Comment($"// {originalContent.ReplaceLineEndings($"{Environment.NewLine} //")}"))
             .WithAdditionalAnnotations(GetErrorAnnotations(error));
     }
 
@@ -48,9 +58,22 @@ public static class TransformErrors
     }
 }
 
+
+[Serializable]
+public class TransformException : Exception
+{
+    public TransformException(IParseTree tree, string message) : base(message) 
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        Tree = tree;
+    }
+
+    public IParseTree Tree { get; }
+}
+
 public record class TransformError(string Message, string Source, string ErrorTree, int Line, int Col)
 {
-    public static TransformError NotSupported(IParseTree ctx, string message = null, [CallerMemberName] string caller = null)
+    public static TransformError Create(IParseTree ctx, string message = null, [CallerMemberName] string caller = null)
     {
         ArgumentNullException.ThrowIfNull(ctx);
 
@@ -58,7 +81,7 @@ public record class TransformError(string Message, string Source, string ErrorTr
         message += $" from {caller}({ctx.GetType().Name})";
 
         var errorNode = ctx.GetText();
-        var errorTree = new ConsoleVisitor().Visit(ctx);
+        var errorTree = new TreeVisitor().Visit(ctx);
 
         int errorLine = 0, errorCol = 0;
         if (ctx is ParserRuleContext syntax) {

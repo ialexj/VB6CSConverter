@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using VB6Converter.Rewriters;
 using VB6Parser;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Converter.Conversion.CommonConverter;
@@ -180,6 +181,25 @@ public static class ClassConverter
             var variables = root.GetFields().Skip(1).ToArray(); // skip self
             var arrays = root.GetArrays();
 
+            c = c.AddMembers(
+                FieldDeclaration(VariableDeclaration(
+                    IdentifierName(ctx.Name),
+                    SingletonSeparatedList(
+                        VariableDeclarator("_Instance")
+                            .WithInitializer(EqualsValueClause(
+                                ImplicitObjectCreationExpression()
+                            ))
+                    )
+                ))
+                .WithModifiers(TokenList(
+                    Token(SyntaxKind.PublicKeyword),
+                    Token(SyntaxKind.StaticKeyword),
+                    Token(SyntaxKind.ReadOnlyKeyword)
+                ))
+            );
+
+            c = c.WithBaseList(BaseList(SingletonSeparatedList<BaseTypeSyntax>(SimpleBaseType(root.Type))));
+
             c = c.AddMembers([.. variables.Select(v => v.WithModifiers(TokenList(Token(SyntaxKind.InternalKeyword)))) ]);
 
             c = c.AddMembers([.. arrays.Select(v => v.variable.WithModifiers(TokenList(Token(SyntaxKind.InternalKeyword)))) ]);
@@ -225,11 +245,11 @@ public static class ClassConverter
                                 valueSyntax = GetIdentifierName(amb);
                             }
                             else {
-                                throw new NotSupportedException("Unknown property value");
+                                throw new TransformException(single, "Unknown property value");
                             }
                         }
                         else {
-                            throw new NotSupportedException("Property without value");
+                            throw new TransformException(single, "Property without value");
                         }
 
                         yield return (name, valueSyntax);
@@ -274,7 +294,7 @@ public static class ClassConverter
                             // ignore
                         }
                         else {
-                            throw new NotSupportedException("Unknown class member declaration");
+                            throw new TransformException(stmt, "Unknown class member declaration");
                         }
                     }
                 }
@@ -308,16 +328,21 @@ public static class ClassConverter
             }
 
             else {
-                throw new NotSupportedException("Unknown member declaration");
+                throw new TransformException(e, "Unknown member declaration");
             }
         }
 
         try {
             return [.. GetMembers()];
         }
-        catch (NotSupportedException nse) {
+        catch (TransformException nse) {
             return [ 
-                ParseMemberDeclaration(e.GetText()).WithError(TransformError.NotSupported(e, nse.Message))
+                ParseMemberDeclaration(e.GetText())
+                    .WithLeadingTrivia(TriviaList(Comment("// ")))
+                    .WithTrailingTrivia(TriviaList(
+                        Comment(e.GetText().ReplaceLineEndings($"{Environment.NewLine}// "))
+                    ))
+                    .WithError(TransformError.Create(nse.Tree, nse.Message, nse.TargetSite.Name))
             ];
         }
     }
@@ -326,7 +351,7 @@ public static class ClassConverter
     public static SyntaxTokenList GetModifiers(IVisibilityContext visibility, bool isStatic, params SyntaxKind[] extra)
     {
         IEnumerable<SyntaxToken> GetTokens() {
-            yield return visibility.GetVisibility();
+            yield return visibility.GetVisibility(isStatic ? SyntaxKind.PublicKeyword : SyntaxKind.PrivateKeyword);
             if (isStatic) {
                 yield return Token(SyntaxKind.StaticKeyword);
             }
@@ -426,7 +451,7 @@ public static class ClassConverter
 
             var parameters = GetMethodParameters(set.argList());
             if (parameters.Parameters.Count != 1) {
-                throw new NotSupportedException("Expected one parameter for setter.");
+                throw new TransformException(set, "Expected one parameter for setter.");
             }
 
             type = parameters.Parameters[0].Type;
@@ -438,7 +463,7 @@ public static class ClassConverter
             }
         }
         else {
-            throw new NotSupportedException("Unknown property accessor");
+            throw new TransformException(propCtx, "Unknown property accessor");
         }
 
         var prop = PropertyDeclaration(type, name)
@@ -493,7 +518,7 @@ public static class ClassConverter
 
         var args = GetMethodParameters(eventCtx.argList());
         if (args.ChildNodes().Any()) {
-            declr = declr.WithError(TransformError.NotSupported(eventCtx.argList(), "Event with parameters"));
+            declr = declr.WithError(TransformError.Create(eventCtx.argList(), "Event with parameters"));
         }
 
         return declr;
@@ -514,8 +539,13 @@ public static class ClassConverter
         var parameter = Parameter(GetIdentifier(arg.ambiguousIdentifier()))
             .WithType(CommonConverter.ToTypeSyntax(arg.asTypeClause(), true));
 
+
         if (arg.argDefaultValue() is ArgDefaultValueContext def) {
             parameter = parameter.WithDefault(EqualsValueClause(GetValue(def.valueStmt(), default)));
+        }
+        else if (arg.OPTIONAL() is not null) {
+            parameter = parameter.WithDefault(EqualsValueClause(
+                LiteralExpression(SyntaxKind.DefaultLiteralExpression, Token(SyntaxKind.DefaultKeyword))));
         }
 
         if (arg.PARAMARRAY() is not null) {

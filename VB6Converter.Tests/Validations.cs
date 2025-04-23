@@ -11,25 +11,27 @@ public static class Validations
 {
     public static void ValidateClassMatches(string vb, string cs, [CallerMemberName] string? name = null)
     {
-        var cu = ValidateShouldNotFail(vb, name);
+        var cu = ConversionShouldSucceed(vb, name);
         ValidateStringsMatch(cs, cu.Class.NormalizeWhitespace().ToFullString());
     }
 
     public static void ValidateMemberMatches(string vb, string cs, [CallerMemberName] string? name = null)
     {
-        var cu = ValidateShouldNotFail(vb, name);
+        var cu = ConversionShouldSucceed(vb, name);
         ValidateStringsMatch(cs, cu.Class.Members.OfType<MemberDeclarationSyntax>()
             .Should().ContainSingle().Which
                 .NormalizeWhitespace().ToFullString());
     }
 
-    public static VB6ToCSharpConversion ValidateShouldNotFail(string vb, [CallerMemberName] string? name = null)
+    public static VB6ToCSharpConversion ConversionShouldSucceed(string vb, [CallerMemberName] string? name = null)
     {
         var cu = VB6ToCSharpConversion.ConvertString(vb, name);
         try {
             cu.ParseErrors.Should().BeEmpty();
             cu.TransformErrors.Should().BeEmpty();
             cu.SyntaxErrors.Should().BeEmpty();
+
+            System.Diagnostics.Debug.WriteLine(cu.CompilationUnit.NormalizeWhitespace());
             return cu;
         }
         finally {
@@ -76,7 +78,7 @@ public static class Validations
         End Sub
         """;
 
-        var cu  = ValidateShouldNotFail(wrapper, name);
+        var cu  = ConversionShouldSucceed(wrapper, name);
         var met = (MethodDeclarationSyntax)cu.Class.Members[0].NormalizeWhitespace();
 
         var sb = new StringBuilder();

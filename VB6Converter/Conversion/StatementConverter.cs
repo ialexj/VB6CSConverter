@@ -82,10 +82,10 @@ public static class StatementConverter
                     return [ GetMethodStatement(stmt, ctx) ];
                 }
             }
-            catch (NotSupportedException nse) {
+            catch (TransformException nse) {
                 return [
-                    ParseStatement(stmt.GetText())
-                        .WithError(TransformError.NotSupported(stmt, nse.Message))
+                    EmptyStatement()
+                        .WithError(TransformError.Create(stmt, nse.Message, stmt.GetText()))
                         .WithTrailingTrivia(Whitespace(Environment.NewLine))
                 ];
             }
@@ -143,7 +143,22 @@ public static class StatementConverter
             else if (stmt.closeStmt() is CloseStmtContext close) {
                 return GetClose(close, ctx);
             }
-        
+            else if (stmt.lineInputStmt() is LineInputStmtContext lineInput) {
+                return ExpressionStatement(InvocationExpression(
+                    ParseExpression("FileSystem.LineInput"),
+                    ArgumentList(
+                        GetValue(lineInput.valueStmt(0), ctx),
+                        GetValue(lineInput.valueStmt(1), ctx))));
+            }
+            else if (stmt.writeStmt() is WriteStmtContext writeStmt) {
+                // todo
+                return ExpressionStatement(InvocationExpression(
+                    ParseExpression("FileSystem.Write"),
+                    ArgumentList(
+                        Argument(GetValue(writeStmt.valueStmt(), ctx)))));
+            }
+
+
             else if (stmt.killStmt() is KillStmtContext kill) {
                 return GetKill(kill, ctx);
             }
@@ -155,35 +170,35 @@ public static class StatementConverter
                 var statement = ParseStatement($"{name}?.Invoke(this, EventArgs.Empty);");
 
                 if (args != null && args.ChildCount > 0) {
-                    statement = statement.WithError(TransformError.NotSupported(raise, "RaiseEvent with arguments not supported"));
+                    statement = statement.WithError(TransformError.Create(raise, "RaiseEvent with arguments not supported"));
                 }
 
-                 return statement;
+                return statement;
             }
 
             else if (stmt.goToStmt() is GoToStmtContext goTo) {
-                 return GetGoTo(goTo, ctx);
+                return GetGoTo(goTo, ctx);
             }
             else if (stmt.resumeStmt() is ResumeStmtContext resume) {
-                 return GetResume(resume);
+                return GetResume(resume);
             }
             else if (stmt.onErrorStmt() is OnErrorStmtContext onerror) {
-                 return EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {onerror.GetText()}")));
+                return EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {onerror.GetText()}")));
             }
 
             else if (stmt.exitStmt() is ExitStmtContext exit) {
-                 return GetExit(exit);
+                return GetExit(exit);
             }
             else if (stmt.endStmt() is EndStmtContext end) {
-                 return GetEnd(end);
+                return GetEnd(end);
             }
 
             else if (stmt.beepStmt() is BeepStmtContext beepCtx) {
-                 return ParseStatement("Console.Beep();");
+                return ParseStatement("Console.Beep();");
             }
-        
+
             else {
-                throw new NotSupportedException("Unknown statement");
+                throw new TransformException(stmt, "Unknown statement");
             }
         }
     }
@@ -218,16 +233,12 @@ public static class StatementConverter
     {
         using var _ = new TraceMethod(ifthen);
 
-        IfStatementSyntax root = null;
-        IfStatementSyntax current = null;
-
         if (ifthen is BlockIfThenElseContext @if) {
+            IfStatementSyntax current = null;
             if (@if.ifBlockStmt() is IfBlockStmtContext ifBlock) {
                 var condition = GetValue(ifBlock.ifConditionStmt().valueStmt(), ctx);
                 var then = GetBlock(ifBlock.block(), ctx);
-
-                root = IfStatement(condition, then);
-                current = root;
+                current = IfStatement(condition, then);
             }
 
             if (@if.ifElseIfBlockStmt() is IfElseIfBlockStmtContext[] elseifs) {
@@ -245,23 +256,25 @@ public static class StatementConverter
                 var block = GetBlock(@else.block(), ctx);
                 current = current.WithElse(ElseClause(block));
             }
+
+            return (IfStatementSyntax)current.AncestorsAndSelf().Last();
         }
         else if (ifthen is InlineIfThenElseContext inline && inline.ifConditionStmt() is IfConditionStmtContext ifcond) {
             var condition = GetValue(ifcond.valueStmt(), ctx);
             var block = GetBlock(inline.ifInlineBlockStmt(0), ctx, true);
 
-            root = IfStatement(condition, block);
+            var current = IfStatement(condition, block);
 
             if (inline.ifInlineBlockStmt(1) is IBlockContext elseBlock) {
                 var elseStatement = GetBlock(elseBlock, ctx, true);
-                root = root.WithElse(ElseClause(elseStatement));
+                current = current.WithElse(ElseClause(elseStatement));
             }
+
+            return current;
         }
         else {
-            throw new NotSupportedException("Unknown if statement");
+            throw new TransformException(ifthen, "Unknown if statement");
         }
-
-        return root;
     }
 
     public static StatementSyntax GetSelectCase(SelectCaseStmtContext select, CallContext ctx)
@@ -282,7 +295,7 @@ public static class StatementConverter
                     yield return SwitchSection(labels, block.Statements);
                 }
                 else {
-                    throw new NotSupportedException("Unknown case arm");
+                    throw new TransformException(caseStmt, "Unknown case arm");
                 }
             }
         }
@@ -296,13 +309,13 @@ public static class StatementConverter
                     yield return CaseSwitchLabel(value);
                 }
                 else if (c is CaseCondExprIsContext isCond) {
-                    throw new NotSupportedException("Can't translate IS condition.");
+                    throw new TransformException(isCond, "Can't translate IS condition.");
                 }
                 else if (c is CaseCondExprToContext toCond) {
-                    throw new NotSupportedException("Can't translate TO condition.");
+                    throw new TransformException(toCond, "Can't translate TO condition.");
                 }
                 else {
-                    throw new NotSupportedException("Unknown case condition");
+                    throw new TransformException(c, "Unknown case condition");
                 }
             }
         }
@@ -310,7 +323,7 @@ public static class StatementConverter
         try {
             return SwitchStatement(condition, List(GetSections()));
         }
-        catch (NotSupportedException) {
+        catch (TransformException) {
             return SelectCaseAsIf(select, ctx);
         }
     }
@@ -335,7 +348,7 @@ public static class StatementConverter
                 @else = ElseClause(block);
             }
             else {
-                throw new NotSupportedException("Unknown case arm");
+                throw new TransformException(caseStmt, "Unknown case arm");
             }
         }
 
@@ -364,16 +377,16 @@ public static class StatementConverter
                         GEQ => SyntaxKind.GreaterThanOrEqualExpression,
                         EQ => SyntaxKind.EqualsExpression,
                         NEQ => SyntaxKind.NotEqualsExpression,
-                        IS => throw new NotSupportedException("Not supported 'IS' condition."),
-                        LIKE => throw new NotSupportedException("Not supported 'LIKE' case condition"),
-                        _ => throw new NotSupportedException("Unknown case condition")
+                        IS => throw new TransformException(comparison, "Not supported 'IS' condition."),
+                        LIKE => throw new TransformException(comparison, "Not supported 'LIKE' case condition"),
+                        _ => throw new TransformException(comparison, "Unknown case condition")
                     };
 
                     var v = GetValue(isCond.valueStmt(), ctx);
                     return BinaryExpression(kind, condition, v);
 
                 default:
-                    throw new NotSupportedException("Not supported case arm type");
+                    throw new TransformException(c, "Not supported case arm type");
             }
         }
 
@@ -472,14 +485,14 @@ public static class StatementConverter
             var variable = GetCallIdentifierExpression(rd.implicitCallStmt_InStmt(), ctx);
 
             var type = CommonConverter.ToTypeSyntax(rd.asTypeClause())
-                ?? throw new NotSupportedException("Redim inferred array type not supported.");
+                ?? throw new TransformException(redim, "Redim inferred array type not supported.");
 
             var subscripts = rd.subscripts().subscript().Select(s => GetValue(s.valueStmt(0), ctx));
 
             var arrayType = ArrayType(type, SingletonList(ArrayRankSpecifier(SeparatedList(subscripts))));
 
             if (redim.PRESERVE() is not null) {
-                throw new NotSupportedException("Redim Preserve not supported");
+                throw new TransformException(redim, "Redim Preserve not supported");
             }
             else {
                 return AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
@@ -503,7 +516,7 @@ public static class StatementConverter
         var variable = name switch {
             IdentifierNameSyntax n => n,
             LiteralExpressionSyntax l => IdentifierName(l.Token.Text),
-            _ => throw new NotSupportedException("Unknown open type")
+            _ => throw new TransformException(open.valueStmt(1), "Unknown open type")
         };
 
         string GetFileAccess()
@@ -579,17 +592,17 @@ public static class StatementConverter
 
         var outputs = print.outputList().outputList_Expression().Select(o => {
             if (o.SPC() is not null) {
-                throw new NotSupportedException();
+                throw new TransformException(o, "Print SPC not supported.");
             }
             if (o.TAB() is not null) {
-                throw new NotSupportedException();
+                throw new TransformException(o, "Print TAB not supported.");
             }
 
             if (o.valueStmt() is ValueStmtContext value) {
                 return GetValue(value, ctx);
             }
             else {
-                throw new NotSupportedException("Print without value");
+                throw new TransformException(o, "Print without value");
             }
         }).ToArray();
 
@@ -667,7 +680,7 @@ public static class StatementConverter
             return BreakStatement();
         }
         else {
-            throw new NotSupportedException("Unknown exit type");
+            throw new TransformException(exit, "Unknown exit type");
         }
     }
 
