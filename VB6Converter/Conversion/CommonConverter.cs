@@ -43,7 +43,7 @@ public static class CommonConverter
         var type = asType.type().ToTypeSyntax();
         
         if (asType.fieldLength() is FieldLengthContext length) {
-            type = type.WithError(TransformError.Create(length, "Type with length specifier not supported."));
+            type = type.WithAdditionalAnnotations(new SyntaxAnnotation("FixedLength", length.INTEGERLITERAL().Symbol.Text));
         }
 
         return type;

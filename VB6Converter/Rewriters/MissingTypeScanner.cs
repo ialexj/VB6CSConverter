@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Serilog;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
@@ -18,57 +17,44 @@ public class MissingTypeScanner(SemanticModel semantics, MissingTypes types) : C
         var log = _log.ForContext("node", node);
 
         var symbol = semantics.GetSymbolInfo(node);
-        if (symbol.Symbol is null && symbol.CandidateSymbols.Length == 0) {
-            // Figure out what type this member is attached to.
-            var typeInfo = semantics.GetTypeInfo(node.Expression).ConvertedType;
-            if (typeInfo is null || string.IsNullOrEmpty(typeInfo.Name)) {
-                return;
-            }
+        if (symbol.Symbol is not null || symbol.CandidateSymbols.Length > 0) {
+            return;
+        }
 
-            // When targetting `this`, use the base class instead.
-            var isThis = node.Expression.DescendantNodesAndSelf().OfType<ThisExpressionSyntax>().Any();
-            if (isThis) {
-                typeInfo = typeInfo.BaseType;
-            }
+        // Figure out what type this member is attached to.
+        var typeInfo = semantics.GetTypeInfo(node.Expression).ConvertedType;
+        if (typeInfo is null || string.IsNullOrEmpty(typeInfo.Name)) {
+            return;
+        }
 
-            // Method or property?
-            var invocation = node.Ancestors()
-                .SkipWhile(a => a is MemberAccessExpressionSyntax)
-                .FirstOrDefault() as InvocationExpressionSyntax;
+        // When targetting `this`, use the base class instead.
+        var isThis = node.Expression.DescendantNodesAndSelf().OfType<ThisExpressionSyntax>().Any();
+        if (isThis) {
+            typeInfo = typeInfo.BaseType;
+        }
+
+        // Figure out the return type
+        TypeSyntax returnType = PredefinedType(Token(SyntaxKind.ObjectKeyword));
+        if (node.FirstAncestorOrSelf<AssignmentExpressionSyntax>() is AssignmentExpressionSyntax assign 
+            && assign.Right.Contains(node)) {
+            returnType = semantics.GetTypeInfo(assign.Left).ToTypeSyntax();
+        }
+
+        // Method or property?
+        var invocation = node.Ancestors()
+            .SkipWhile(a => a is MemberAccessExpressionSyntax)
+            .FirstOrDefault() as InvocationExpressionSyntax;
             
-            if (invocation is not null) {
-                TypeSyntax returnType = PredefinedType(Token(SyntaxKind.ObjectKeyword));
+        if (invocation is not null) {
+            var parameters = invocation.ArgumentList.Arguments.Select(a => {
+                var ptype = semantics.GetTypeInfo(a.Expression).ToTypeSyntax();
+                return Parameter(Identifier($"p{invocation.ArgumentList.Arguments.IndexOf(a)}")).WithType(ptype);
+            });
 
-                if (invocation.FirstAncestorOrSelf<AssignmentExpressionSyntax>() is AssignmentExpressionSyntax assign && assign.Right.Contains(invocation)) {
-                    var leftSymbol = semantics.GetTypeInfo(assign.Left).ConvertedType;
-                    if (leftSymbol is not null) {
-                        returnType = ParseTypeName(leftSymbol.ToString());
-                    }
-                }
-
-                var parameters = invocation.ArgumentList.Arguments.Select(a => {
-                    var parameterType = semantics.GetTypeInfo(a.Expression).ConvertedType;
-                    return Parameter(Identifier($"p{invocation.ArgumentList.Arguments.IndexOf(a)}"))
-                        .WithType(parameterType != null
-                            ? ParseTypeName(parameterType.ToString())
-                            : PredefinedType(Token(SyntaxKind.ObjectKeyword)));
-                });
-
-                types.RegisterMethod(typeInfo.ToString(), node.Name, parameters, returnType);
-            }
-            else {
-                TypeSyntax targetType = PredefinedType(Token(SyntaxKind.ObjectKeyword));
-
-                if (node.FirstAncestorOrSelf<AssignmentExpressionSyntax>() is AssignmentExpressionSyntax assignment) {
-                    if (semantics.GetTypeInfo(assignment.Right).ConvertedType is ITypeSymbol ts) {
-                        if (ParseTypeName(ts.ToString()) is TypeSyntax t) {
-                            targetType = t;
-                        }
-                    }
-                }
-
-                types.RegisterProperty(typeInfo.ToString(), node.Name, targetType);
-            }
+            types.RegisterMethod(typeInfo.ToString(), node.Name, parameters, returnType);
+        }
+        else {
+            types.RegisterProperty(typeInfo.ToString(), node.Name, returnType);
         }
     }
 
@@ -79,6 +65,10 @@ public class MissingTypeScanner(SemanticModel semantics, MissingTypes types) : C
         try {
             var parent = node.Ancestors().SkipWhile(a => a is QualifiedNameSyntax).FirstOrDefault();
             if (parent is BaseNamespaceDeclarationSyntax or UsingDirectiveSyntax) {
+                return;
+            }
+
+            if (node.GetAnnotations("MissingMembers").Any()) {
                 return;
             }
 
@@ -104,6 +94,10 @@ public class MissingTypeScanner(SemanticModel semantics, MissingTypes types) : C
                 return;
             }
             if (node.Parent is QualifiedNameSyntax or UsingDirectiveSyntax or BaseNamespaceDeclarationSyntax) {
+                return;
+            }
+
+            if (node.GetAnnotations("MissingMembers").Any()) {
                 return;
             }
 

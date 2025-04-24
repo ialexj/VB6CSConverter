@@ -3,26 +3,36 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Linq;
+using VB6Converter.Rewriters;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter.Conversion;
+
 public static class CompilationUnitConverter
 {
+    static CSharpSyntaxRewriter[] Rewriters = [
+        new VBCoreRewriter(),
+        new CursorRewriter(),
+        new UsingsRewriter()
+    ];
+
     public static CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string nsName, string className, bool isStatic)
     {
         using var _ = new TraceMethod(module);
 
-        var @class = ClassConverter.GetClass(module, new ClassContext(className, isStatic));
+        var namespaceName = ParseName(nsName ?? className);
+        var classFullName = QualifiedName(namespaceName, IdentifierName(className));
 
-        var @namespace = FileScopedNamespaceDeclaration(IdentifierName(nsName ?? className))
+        var @class = ClassConverter.GetClass(module, new ClassContext(className, isStatic));
+        var @namespace = FileScopedNamespaceDeclaration(namespaceName)
             .WithMembers(SingletonList<MemberDeclarationSyntax>(@class));
 
-        IEnumerable<UsingDirectiveSyntax> GetGlobalStaticUsings()
+        // Make enum values as global constants
+        IEnumerable<UsingDirectiveSyntax> GetGlobalStaticUsings() 
             => @class.Members.OfType<EnumDeclarationSyntax>()
                 .Select(e => UsingDirective(
-                    // TODO: full name
-                    IdentifierName(e.Identifier))
+                    QualifiedName(classFullName, IdentifierName(e.Identifier)))
                     .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
                     .WithStaticKeyword(Token(SyntaxKind.StaticKeyword))
                 );
@@ -35,11 +45,17 @@ public static class CompilationUnitConverter
             }
         }
 
-        return CompilationUnit()
+        var cu = CompilationUnit()
             .AddUsings([.. GetGlobalStaticUsings()])
             .AddUsings([.. GetUsings().Distinct().Order().Select(u => UsingDirective(ParseName(u)))])
-            .WithMembers(SingletonList<MemberDeclarationSyntax>(@namespace))
-            .NormalizeWhitespace();
+            .WithMembers(SingletonList<MemberDeclarationSyntax>(@namespace));
+
+        // Perform additional rewrites
+        foreach (var rewriter in Rewriters) {
+            cu = (CompilationUnitSyntax)rewriter.Visit(cu);
+        }
+
+        return cu.NormalizeWhitespace();
     }
 
     public static CompilationUnitSyntax GetGlobalStaticUsings(IEnumerable<string> names)
@@ -55,7 +71,8 @@ public static class CompilationUnitConverter
             "Microsoft.VisualBasic.Interaction"
         };
 
-        var usings = common.Concat(names).Select(n => UsingDirective(ParseTypeName(n))
+        var usings = common.Concat(names)
+            .Select(n => UsingDirective(ParseTypeName(n))
             .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
             .WithStaticKeyword(Token(SyntaxKind.StaticKeyword)));
 

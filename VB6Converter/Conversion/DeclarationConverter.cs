@@ -90,7 +90,10 @@ public static class DeclarationConverter
                         LiteralExpression(SyntaxKind.DefaultLiteralExpression, Token(SyntaxKind.DefaultKeyword))));
             }
 
+
             yield return VariableDeclaration(type).WithVariables(SingletonSeparatedList(variable));
+
+
         }
     }
 }

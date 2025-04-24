@@ -15,131 +15,6 @@ using static VB6Parser.VisualBasic6Parser;
 namespace VB6Converter.Conversion;
 public static class ClassConverter
 {
-    class ControlInfo(TypeSyntax type, IdentifierNameSyntax name)
-    {
-        public IdentifierNameSyntax Name { get; internal set; } = name;
-
-        public TypeSyntax Type { get; internal set; } = type;
-
-        public IEnumerable<(NameSyntax name, ExpressionSyntax value)> Properties { get; set; } = [];
-
-        public IEnumerable<ControlInfo> Children { get; set; } = [];
-
-        public IdentifierNameSyntax GetIndexedName() 
-            => GetArrayIndex() is LiteralExpressionSyntax literal
-                ? IdentifierName(Name.Identifier.Text + literal.Token.Text)
-                : Name;
-
-        public LiteralExpressionSyntax GetArrayIndex()
-            => Properties.FirstOrDefault(p => p.name is IdentifierNameSyntax id && id.Identifier.Text == "Index")
-                .value as LiteralExpressionSyntax;
-
-        public FieldDeclarationSyntax GetField() 
-            => FieldDeclaration(
-                VariableDeclaration(Type,
-                    SingletonSeparatedList(VariableDeclarator(GetIndexedName().Identifier)
-                        .WithInitializer(EqualsValueClause(
-                            ObjectCreationExpression(Type)
-                                .WithArgumentList(ArgumentList()))))));
-
-        public IEnumerable<ControlInfo> FlattenControls()
-            => new[] { this }.Concat(Children.SelectMany(c => c.FlattenControls()));
-
-        
-        public IEnumerable<FieldDeclarationSyntax> GetFields() => FlattenControls().Select(c => c.GetField());
-
-        public IEnumerable<StatementSyntax> GetAssignments()
-        {
-            bool isFirst = true;
-            foreach (var prop in Properties) {
-                if (prop.name is IdentifierNameSyntax id && id.Identifier.Text == "Index") {
-                    continue;
-                }
-
-                NameSyntax name = GetIndexedName();
-                foreach (var segment in prop.name.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()) {
-                    name = QualifiedName(name, segment);
-                }
-
-                var stmt = ExpressionStatement(
-                    AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
-                        name, prop.value));
-
-                if (isFirst) {
-                    stmt = stmt.WithLeadingTrivia(TriviaList(Comment($"{Environment.NewLine}// {name}")));
-                    isFirst = false;
-                }
-
-                yield return stmt;
-            }
-
-            foreach (var child in Children) {
-                foreach (var stmt in child.GetAssignments()) {
-                    yield return stmt;
-                }
-            }
-        }
-        
-        public IEnumerable<(FieldDeclarationSyntax variable, StatementSyntax[] initializers)> GetArrays()
-        {
-            var arrayChildren = FlattenControls()
-                .Where(c => c.GetArrayIndex() != null)
-                .Select(c => new { Control = c, Index = (int)c.GetArrayIndex().Token.Value })
-                .GroupBy(c => c.Control.Name.Identifier.Text, v => v, 
-                    (k, v) => new { Name = k, Controls = v.ToDictionary(k => k.Index, v => v.Control) });
-
-            bool isFirst = true;
-
-            foreach (var array in arrayChildren) {
-                var maxIndex = array.Controls.Max(c => c.Key);
-                var first    = array.Controls.Values.First();
-                var baseType = first.Type;
-                var baseName = first.Name;
-
-                var arrayType = ArrayType(baseType)
-                    .WithRankSpecifiers(SingletonList(
-                        ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
-                            OmittedArraySizeExpression())
-                        )));
-
-                var variable = FieldDeclaration(
-                    VariableDeclaration(arrayType, SingletonSeparatedList(
-                        VariableDeclarator(baseName.Identifier)
-                            .WithInitializer(EqualsValueClause(ArrayCreationExpression(
-                                arrayType.WithRankSpecifiers(SingletonList(
-                                    ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
-                                        LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(maxIndex + 1))
-                                    ))
-                                ))
-                            )))
-                    ))
-                );
-
-                if (isFirst) {
-                    variable = variable.WithLeadingTrivia(TriviaList(Whitespace(Environment.NewLine)));
-                }
-
-                var initializers = array.Controls.OrderBy(c => c.Key).Select(c => ExpressionStatement(
-                    AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
-                        ElementAccessExpression(
-                            baseName, BracketedArgumentList(SingletonSeparatedList(
-                                Argument(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(c.Key)))
-                            ))
-                        ),
-                        c.Value.GetIndexedName()
-                    )
-                )).ToArray();
-
-                if (isFirst) {
-                    initializers[0] = initializers[0].WithLeadingTrivia(TriviaList(Comment($"{Environment.NewLine}// {array.Name}")));
-                }
-
-                yield return (variable, initializers);
-                isFirst = false;
-            }
-        }
-    }
-
     public static ClassDeclarationSyntax GetClass(ModuleContext module, ClassContext ctx)
     {
         IEnumerable<SyntaxToken> GetModifiers()
@@ -154,26 +29,7 @@ public static class ClassConverter
         var c = ClassDeclaration(ctx.Name)
             .WithModifiers(TokenList(GetModifiers()));
 
-        if (module.moduleBody() is ModuleBodyContext body) {
-            foreach (var member in body.moduleBodyElement()) {
-                foreach (var decl in GetMemberDeclarations(member, ctx)) {
-                    if (decl is PropertyDeclarationSyntax property) {
-                        var existing = c.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => Equals(p.Identifier.Text, property.Identifier.Text));
-                        if (existing != null) {
-                            var replace = existing.AddAccessorListAccessors([.. property.AccessorList.Accessors]);
-                            c = c.ReplaceNode(existing, replace);
-                        }
-                        else {
-                            c = c.AddMembers(property);
-                        }
-                    }
-                    else {
-                        c = c.AddMembers(decl);
-                    }
-                }
-            }
-        }
-
+        // Control properties
         if (module.controlProperties() is ControlPropertiesContext controlCtx) {
             var root = GetControl(controlCtx);
             root.Name = IdentifierName("this");
@@ -209,69 +65,87 @@ public static class ClassConverter
                     .WithModifiers(TokenList(Token(SyntaxKind.ProtectedKeyword)))
                     .WithBody(Block()
                         .WithStatements(List(root.GetAssignments().Concat(arrays.SelectMany(a => a.initializers))))));
+        }
 
-            ControlInfo GetControl(ControlPropertiesContext control)
-            {
-                var name = GetIdentifierName(control.cp_ControlIdentifier().ambiguousIdentifier());
-                var type = control.cp_ControlType().complexType().ToTypeSyntax();
-
-                var properties = GetProperties(control.cp_Properties()).ToArray();
-
-                var children = control.cp_Properties().Select(c => c.controlProperties())
-                    .OfType<ControlPropertiesContext>()
-                    .Select(c => GetControl(c))
-                    .ToArray();
-
-                return new ControlInfo(type, name) {
-                    Properties = properties,
-                    Children = children
-                };
-            }
-
-            IEnumerable<(NameSyntax name, ExpressionSyntax value)> GetProperties(IEnumerable<Cp_PropertiesContext> properties, NameSyntax parent = null)
-            {
-                NameSyntax GetFullName(NameSyntax expr) => parent is not null ? parent.ToName().AppendName(expr.ToName()) : expr;
-
-                foreach (var prop in properties) {
-                    if (prop.cp_SingleProperty() is Cp_SinglePropertyContext single) {
-                        var name = GetFullName(GetCallIdentifierExpression(single.implicitCallStmt_InStmt(), default).ToName());
-
-                        ExpressionSyntax valueSyntax;
-                        if (single.cp_PropertyValue() is Cp_PropertyValueContext valueCtx) {
-                            if (valueCtx.literal() is LiteralContext literal) {
-                                valueSyntax = GetLiteral(literal);
-                            }
-                            else if (valueCtx.ambiguousIdentifier() is AmbiguousIdentifierContext amb) {
-                                valueSyntax = GetIdentifierName(amb);
-                            }
-                            else {
-                                throw new TransformException(single, "Unknown property value");
-                            }
+        // Main body
+        if (module.moduleBody() is ModuleBodyContext body) {
+            foreach (var member in body.moduleBodyElement()) {
+                foreach (var decl in GetMembers(member, ctx)) {
+                    if (decl is PropertyDeclarationSyntax property) {
+                        var existing = c.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => Equals(p.Identifier.Text, property.Identifier.Text));
+                        if (existing != null) {
+                            var replace = existing.AddAccessorListAccessors([.. property.AccessorList.Accessors]);
+                            c = c.ReplaceNode(existing, replace);
                         }
                         else {
-                            throw new TransformException(single, "Property without value");
+                            c = c.AddMembers(property);
                         }
-
-                        yield return (name, valueSyntax);
                     }
-                    else if (prop.cp_NestedProperty() is Cp_NestedPropertyContext nested) {
-                        var name = GetFullName(GetIdentifierName(nested.ambiguousIdentifier()));
-
-                        foreach (var np in GetProperties(nested.cp_Properties(), name)) {
-                            yield return np;
-                        }
+                    else {
+                        c = c.AddMembers(decl);
                     }
                 }
             }
-
         }
 
-        var rewriter = new VBFunctionRewriter();
-        c = (ClassDeclarationSyntax)rewriter.Visit(c);
         return c;
     }
 
-    public static IEnumerable<MemberDeclarationSyntax> GetMemberDeclarations(ModuleBodyElementContext e, ClassContext ctx)
+    public static ClassControlInfo GetControl(ControlPropertiesContext control)
+    {
+        var name = GetIdentifierName(control.cp_ControlIdentifier().ambiguousIdentifier());
+        var type = control.cp_ControlType().complexType().ToTypeSyntax();
+
+        var properties = GetProperties(control.cp_Properties()).ToArray();
+
+        var children = control.cp_Properties().Select(c => c.controlProperties())
+            .OfType<ControlPropertiesContext>()
+            .Select(c => GetControl(c))
+            .ToArray();
+
+        return new ClassControlInfo(type, name) {
+            Properties = properties,
+            Children = children
+        };
+
+        IEnumerable<(NameSyntax name, ExpressionSyntax value)> GetProperties(IEnumerable<Cp_PropertiesContext> properties, NameSyntax parent = null)
+        {
+            NameSyntax GetFullName(NameSyntax expr) => parent is not null ? parent.ToName().AppendName(expr.ToName()) : expr;
+
+            foreach (var prop in properties) {
+                if (prop.cp_SingleProperty() is Cp_SinglePropertyContext single) {
+                    var name = GetFullName(GetCallIdentifierExpression(single.implicitCallStmt_InStmt(), default).ToName());
+
+                    ExpressionSyntax valueSyntax;
+                    if (single.cp_PropertyValue() is Cp_PropertyValueContext valueCtx) {
+                        if (valueCtx.literal() is LiteralContext literal) {
+                            valueSyntax = GetLiteral(literal);
+                        }
+                        else if (valueCtx.ambiguousIdentifier() is AmbiguousIdentifierContext amb) {
+                            valueSyntax = GetIdentifierName(amb);
+                        }
+                        else {
+                            throw new TransformException(single, "Unknown property value");
+                        }
+                    }
+                    else {
+                        throw new TransformException(single, "Property without value");
+                    }
+
+                    yield return (name, valueSyntax);
+                }
+                else if (prop.cp_NestedProperty() is Cp_NestedPropertyContext nested) {
+                    var name = GetFullName(GetIdentifierName(nested.ambiguousIdentifier()));
+
+                    foreach (var np in GetProperties(nested.cp_Properties(), name)) {
+                        yield return np;
+                    }
+                }
+            }
+        }
+    }
+
+    public static IEnumerable<MemberDeclarationSyntax> GetMembers(ModuleBodyElementContext e, ClassContext ctx)
     {
         using var _ = new TraceMethod(e);
 
@@ -336,13 +210,10 @@ public static class ClassConverter
             return [.. GetMembers()];
         }
         catch (TransformException nse) {
-            return [ 
-                ParseMemberDeclaration(e.GetText())
-                    .WithLeadingTrivia(TriviaList(Comment("// ")))
-                    .WithTrailingTrivia(TriviaList(
-                        Comment(e.GetText().ReplaceLineEndings($"{Environment.NewLine}// "))
-                    ))
-                    .WithError(TransformError.Create(nse.Tree, nse.Message, nse.TargetSite.Name))
+            return [
+                FieldDeclaration(VariableDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)))
+                    .WithVariables(SingletonSeparatedList(VariableDeclarator("TransformError"))))
+                .WithError(nse)
             ];
         }
     }
@@ -440,7 +311,9 @@ public static class ClassConverter
         var body = StatementConverter.GetBlock(propCtx.block(), default);
 
         SyntaxKind kind;
-        TypeSyntax type;
+        TypeSyntax type = PredefinedType(Token(SyntaxKind.ObjectKeyword));
+
+        bool isMultiParameter = false;
 
         if (propCtx is PropertyGetStmtContext get) {
             kind = SyntaxKind.GetAccessorDeclaration;
@@ -450,16 +323,17 @@ public static class ClassConverter
             kind = SyntaxKind.SetAccessorDeclaration;
 
             var parameters = GetMethodParameters(set.argList());
-            if (parameters.Parameters.Count != 1) {
-                throw new TransformException(set, "Expected one parameter for setter.");
+            if (parameters.Parameters.Count > 0) {
+                type = parameters.Parameters[0].Type;
+
+                var identifier = parameters.Parameters[0].Identifier.ValueText;
+                if (!Equals(identifier, "value")) {
+                    var renamer = new SimpleIdentifierRenamer(identifier, "value");
+                    body = (BlockSyntax)renamer.Visit(body);
+                }
             }
-
-            type = parameters.Parameters[0].Type;
-
-            var identifier = parameters.Parameters[0].Identifier.ValueText;
-            if (!Equals(identifier, "value")) {
-                var renamer = new SimpleIdentifierRenamer(identifier, "value");
-                body = (BlockSyntax)renamer.Visit(body);
+            if (parameters.Parameters.Count > 1) {
+                isMultiParameter = true;
             }
         }
         else {
@@ -471,6 +345,10 @@ public static class ClassConverter
             .WithAccessorList(AccessorList(
                 SingletonList(AccessorDeclaration(kind)
                     .WithBody(body))));
+
+        if (isMultiParameter) {
+            prop = prop.WithError(TransformError.Create(propCtx, "Multi-value properties not supported"));
+        }
 
         var mr = new ReturnValueRewriter();
         prop = (PropertyDeclarationSyntax)mr.Visit(prop);

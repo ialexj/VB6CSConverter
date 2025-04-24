@@ -35,6 +35,11 @@ public static class TransformErrors
         }
     }
 
+    public static T WithError<T>(this T node, TransformException error) where T : SyntaxNode
+    {
+        return node.WithError(TransformError.Create(error.Tree, error.Message, error.TargetSite.Name));
+    }
+
     public static T WithError<T>(this T node, TransformError error) where T : SyntaxNode
     {
         var trivia = node.GetLeadingTrivia();

@@ -10,27 +10,54 @@ namespace VB6Converter.Rewriters;
 
 public class ControlInstanceRewriter(IEnumerable<string> controls) : CSharpSyntaxRewriter
 {
-    public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
+    bool IsControl(SimpleNameSyntax name) => name is not null && controls.Contains(name.Identifier.Text);
+
+    public override SyntaxNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
     {
-        static IEnumerable<SimpleNameSyntax> EnumerateNames(ExpressionSyntax expression)
-        {
-            if (expression is MemberAccessExpressionSyntax inner) {
-                yield return inner.Name;
-                foreach (var expr in EnumerateNames(inner.Expression)) {
-                    yield return expr;
-                }
-            }
-            else if (expression is ElementAccessExpressionSyntax element) {
-                foreach (var expr in EnumerateNames(element.Expression)) {
-                    yield return expr;
-                }
-            }
-            else if (expression is SimpleNameSyntax simple) {
-                yield return simple;
-            }
+        if (IsControl(node.Left as SimpleNameSyntax) 
+            && node.Right is LiteralExpressionSyntax literal 
+            && literal.Token.IsKind(SyntaxKind.NullLiteralExpression)) {
+
+            return InvocationExpression(
+                MemberAccessExpression(SyntaxKind.SimpleAssignmentExpression, 
+                    MemberAccessExpression(SyntaxKind.SimpleAssignmentExpression, node.Left, IdentifierName("_Instance")),
+                    IdentifierName("Close")),
+                ArgumentList()
+            );
         }
 
-        var expressions = EnumerateNames(node).ToArray();
+        return base.VisitAssignmentExpression(node);
+    }
+
+    public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
+    {
+        if (node.Expression is MemberAccessExpressionSyntax macc && macc.Name.Identifier.ValueText == "Show") {
+            var names = macc.EnumerateNames().ToArray();
+            if (IsControl(names[^1])) {
+                macc = InsertInstance(macc);
+                
+                if (node.ArgumentList.Arguments.Any(a => a.Expression is SimpleNameSyntax name && Equals(name.Identifier.ValueText, "vbModal"))) {
+                    return InvocationExpression(
+                        macc.WithName(IdentifierName("ShowDialog")),
+                        ArgumentList());
+                }
+                else {
+                    return node.WithExpression(macc);
+                }
+            }
+        } 
+
+        return base.VisitInvocationExpression(node);
+    }
+
+    public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
+    {
+        return base.VisitMemberAccessExpression(InsertInstance(node));
+    }
+
+    private MemberAccessExpressionSyntax InsertInstance(MemberAccessExpressionSyntax node)
+    {
+        var expressions = node.EnumerateNames().ToArray();
         if (expressions.Length >= 1) {
             var root = expressions[^1];
             if (controls.Contains(root.Identifier.Text) && !expressions.Any(e => e.Identifier.Text == "_Instance")) {
@@ -39,7 +66,7 @@ public class ControlInstanceRewriter(IEnumerable<string> controls) : CSharpSynta
                     root, IdentifierName("_Instance")));
             }
         }
-        
-        return base.VisitMemberAccessExpression(node);
+
+        return node;
     }
 }

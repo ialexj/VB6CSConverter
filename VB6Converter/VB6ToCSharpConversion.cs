@@ -1,6 +1,8 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.VisualBasic;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -69,20 +71,37 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
     {
         ArgumentNullException.ThrowIfNull(input);
 
+        var log = Log.ForFile(className);
+
         try {
             var parse = Parse(input);
-
+            
             var cu = CompilationUnitConverter.GetCompilationUnit(
                 parse.Start.module(), nsName, className,
                 isStatic: type == VisualBasicFileType.Module);
 
+            var transformErrors = cu.GetTransformErrors().ToArray();
+            foreach (var error in transformErrors) {
+                log.Warning("{file} TRANSFORM ERROR: {error}", className, error.Message);
+            }
+
+            // Basic compile and check for syntax errors
+            var syntaxErrors = GetCompilation([cu]).GetParseDiagnostics();
+            foreach (var diag in syntaxErrors) {
+                log.Warning("{file} SYNTAX ERROR: {error}", className, diag.ToString());
+            }
+
             return new VB6ToCSharpConversion(className, cu) {
                 Parse = parse,
-                TransformErrors = cu.GetTransformErrors().ToArray(),
-                SyntaxErrors = GetCompilation([cu]).GetParseDiagnostics()
+                TransformErrors = transformErrors,
+                SyntaxErrors = syntaxErrors
             };
         }
         catch (ParseException pex) {
+            foreach (var error in pex.Errors) {
+                log.Warning("{file} PARSE ERROR: {error}", className, error);
+            }
+
             return new VB6ToCSharpConversion(className, SyntaxFactory.CompilationUnit()) {
                 Parse = pex.Context,
                 ParseErrors = pex.Errors

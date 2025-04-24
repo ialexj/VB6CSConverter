@@ -1,4 +1,6 @@
-﻿using Serilog;
+﻿using Microsoft.CodeAnalysis;
+using Serilog;
+using System.IO;
 
 namespace VB6Converter;
 internal class Log
@@ -8,4 +10,8 @@ internal class Log
         .WriteTo.Console();
 
     public static ILogger Default = Configuration.CreateLogger();
+
+    public static ILogger ForFile(string file) => Default.ForContext("file", file);
+    
+    public static ILogger ForTree(SyntaxTree tree) => Default.ForContext("file", Path.GetFileNameWithoutExtension(tree.FilePath));
 }

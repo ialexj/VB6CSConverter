@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
 using VB6Converter.Conversion;
@@ -43,6 +44,24 @@ namespace VB6Converter
             return current;
         }
 
+        public static IEnumerable<SimpleNameSyntax> EnumerateNames(this ExpressionSyntax expression)
+        {
+            if (expression is MemberAccessExpressionSyntax inner) {
+                yield return inner.Name;
+                foreach (var expr in EnumerateNames(inner.Expression)) {
+                    yield return expr;
+                }
+            }
+            else if (expression is ElementAccessExpressionSyntax element) {
+                foreach (var expr in EnumerateNames(element.Expression)) {
+                    yield return expr;
+                }
+            }
+            else if (expression is SimpleNameSyntax simple) {
+                yield return simple;
+            }
+        }
+
         public static ArgumentListSyntax ArgumentList(params ExpressionSyntax[] args)
         {
             if (args is null || args.Length == 0) {
@@ -69,9 +88,9 @@ namespace VB6Converter
             }
             else {
                 return SyntaxFactory.ArgumentList(SeparatedList<ArgumentSyntax>(
-                    new SyntaxNodeOrTokenList(args
+                    [.. args
                         .Select(a => (SyntaxNodeOrToken)a)
-                        .Intersperse(Token(SyntaxKind.CommaToken)))));
+                        .Intersperse(Token(SyntaxKind.CommaToken))]));
             }
         }
 
@@ -92,5 +111,10 @@ namespace VB6Converter
                 return Block(statements ?? []);
             }
         }
+
+        public static TypeSyntax ToTypeSyntax(this TypeInfo typeInfo)
+            => !string.IsNullOrEmpty(typeInfo.ConvertedType?.Name)
+                ? ParseTypeName(typeInfo.ConvertedType.ToString())
+                : PredefinedType(Token(SyntaxKind.ObjectKeyword));
     }
 }

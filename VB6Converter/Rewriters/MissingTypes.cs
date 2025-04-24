@@ -19,14 +19,11 @@ public class MissingTypes
 
     public IEnumerable<CompilationUnitSyntax> GetCompilationUnits()
     {
-        var statics = ClassDeclaration("_MissingMembers")
-            .WithModifiers(TokenList(
-                Token(SyntaxKind.PublicKeyword),
-                Token(SyntaxKind.StaticKeyword)));
+        var statics = new SortedDictionary<string, FieldDeclarationSyntax>();
 
         foreach (var type in Identifiers) {
             var properties = Properties.TryGetValue(type.Key, out var p) ? p : [];
-            var methods = Methods.TryGetValue(type.Key, out var m) ? m : [];
+            var methods    = Methods.TryGetValue(type.Key, out var m) ? m : [];
 
             if (type.Value.isType || !properties.IsEmpty || !methods.IsEmpty) {
                 var cu = GetIdentifierAsClass(type.Value.name, type.Value.ns);
@@ -37,18 +34,24 @@ public class MissingTypes
                     .NormalizeWhitespace();
             }
             else {
-                statics = statics.AddMembers(GetIdentifierAsField(type.Value.name, type.Value.ns));
+                statics[type.Value.name.Text] = GetIdentifierAsField(type.Value.name, type.Value.ns);
             }
         }
 
-        if (statics.Members.Count > 0) {
+        if (statics.Count > 0) {
+            var cls = ClassDeclaration("_MissingMembers")
+                .WithModifiers(TokenList(
+                    Token(SyntaxKind.PublicKeyword),
+                    Token(SyntaxKind.StaticKeyword)))
+                .WithMembers(List(statics.Values.Cast<MemberDeclarationSyntax>().ToArray()));
+
             yield return CompilationUnit()
                 .WithUsings(SingletonList(
-                    UsingDirective(IdentifierName(statics.Identifier))
+                    UsingDirective(IdentifierName(cls.Identifier))
                         .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
                         .WithStaticKeyword(Token(SyntaxKind.StaticKeyword))
                 ))
-                .WithMembers(SingletonList<MemberDeclarationSyntax>(statics))
+                .WithMembers(SingletonList<MemberDeclarationSyntax>(cls))
                 .NormalizeWhitespace();
         }
     }

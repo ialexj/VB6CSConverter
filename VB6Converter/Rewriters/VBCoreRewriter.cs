@@ -12,20 +12,19 @@ using static VB6Converter.RoslynHelpers;
 
 namespace VB6Converter.Rewriters;
 
-public class VBFunctionRewriter : CSharpSyntaxRewriter
+public class VBCoreRewriter : CSharpSyntaxRewriter
 {
+    static readonly Dictionary<string, LiteralExpressionSyntax> _literals = new(StringComparer.InvariantCultureIgnoreCase) {
+        ["vbNullString"] = LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(string.Empty)),
+        ["vbNullChar"]   = LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\0')),
+        ["vbCr"]         = LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\r')),
+        ["vbLf"]         = LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\n')),
+        ["vbCrLf"]       = LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\r\n")),
+        ["vbFormFeed"]   = LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\f')),
+        ["vbBack"]       = LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\b')),
+        ["vbTab"]        = LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\t'))
+    };
 
-    [return: NotNullIfNotNull("node")]
-    public override SyntaxNode Visit(SyntaxNode node)
-    {
-        try {
-            return base.Visit(node);
-        }
-        catch (Exception ex) {
-            Log.Default.Error("Failed to convert {node} in {file}: {message:nq}", node, Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath), ex.Message);
-            throw;
-        }
-    }
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
     {
         switch (node.Identifier.Text) {
@@ -33,118 +32,70 @@ public class VBFunctionRewriter : CSharpSyntaxRewriter
             case "Date": return ParseExpression("DateTime.Now.Date");
         };
 
+        if (_literals.TryGetValue(node.Identifier.Text, out var literal)) {
+            return literal;
+        }
+
         switch (node.Identifier.Text) {
-            case "vbNullString":
-                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(string.Empty));
-            case "vbNullChar":
-                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\0'));
-            case "vbCr":
-                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\r'));
-            case "vbLf":
-                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\n'));
-            case "vbCrLf":
-                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("\r\n"));
-            case "vbFormFeed":
-                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal("\f"));
-            case "vbBack":
-                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\b'));
-            case "vbTab":
-                return LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal('\t'));
-
             // DAO
-
             case "Recordset":
                 return node.WithAdditionalAnnotations(
                     new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao")
                 );
         }
 
-        string[] RecordsetOptionEnum = [
-            "dbDenyWrite",
-            "dbDenyRead",
-            "dbReadOnly",
-            "dbAppendOnly",
-            "dbInconsistent",
-            "dbConsistent",
-            "dbSQLPassThrough",
-            "dbFailOnError",
-            "dbForwardOnly ",
-            "dbSeeChanges",
-            "dbRunAsync",
-            "dbExecDirect"
-        ];
-
-        if (RecordsetOptionEnum.Contains(node.Identifier.Text)) {
-            return ParseExpression("RecordsetOptionEnum." + node.Identifier.Text)
-                .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao"));
-        }
-
-        string[] RecordsetTypeEnum = [
-            "dbOpenTable",
-            "dbOpenSnapshot",
-            "dbOpenForwardOnly",
-            "dbOpenDynamic",
-            "dbOpenDynaset",
-            "dbOpenKeyset"
-        ];
-
-        if (RecordsetTypeEnum.Contains(node.Identifier.Text)) {
-            return ParseExpression("RecordsetTypeEnum." + node.Identifier.Text)
-                .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao"));
-        }
+        
 
         return base.VisitIdentifierName(node);
     }
 
-
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
     {
         try {
-            if (node.Expression is not IdentifierNameSyntax name) {
-                return base.VisitInvocationExpression(node);
+            SyntaxNode newSyntax = node;
+            if (node.Expression is IdentifierNameSyntax name) {
+                // Try to convert via just the name
+                var expr = VisitIdentifierName(name);
+                if (!name.IsEquivalentTo(expr)) {
+                    return expr;
+                }
+
+                newSyntax = name.Identifier.Text switch {
+                    "Array" => ConvertArray(node),
+                    "Replace" => ConvertReplace(node),
+
+                    "IsNull" => ConvertIsNull(node),
+                    "IsArray" => ConvertIs(node, IdentifierName(nameof(Array))),
+
+                    "UBound" => ConvertUBound(node),
+
+                    "DateSerial" => ConvertDateSerial(node),
+
+                    "Hour" => ConvertToMemberAccess(node),
+                    "Minute" => ConvertToMemberAccess(node),
+                    "Second" => ConvertToMemberAccess(node),
+                    "Year" => ConvertToMemberAccess(node),
+                    "Month" => ConvertToMemberAccess(node),
+                    "Day" => ConvertToMemberAccess(node),
+
+                    "String" => ConvertString(node),
+                    "Len" => ConvertLen(node),
+                    "Left" => ConvertLeft(node),
+
+                    "CStr" => ConvertToMemberAccess(node, "Convert.ToString"),
+                    "CLng" => ConvertToMemberAccess(node, "Convert.ToInt32"),
+                    "CDbl" => ConvertToMemberAccess(node, "Convert.ToDouble"),
+
+                    "IIf" => ConvertIIf(node),
+
+                    "Asc" => ConvertAsc(node),
+                    "Chr" => ConvertChr(node),
+
+                    "MsgBox" => ConvertMsgBox(node),
+
+                    _ => null,
+                };
             }
-
-            // Try to convert via just the name
-            var expr = VisitIdentifierName(name);
-            if (!name.IsEquivalentTo(expr)) {
-                return expr;
-            }
-
-            var newSyntax = name.Identifier.Text switch {
-                "Array" => ConvertArray(node),
-                "Replace" => ConvertReplace(node),
-
-                "IsNull" => ConvertIsNull(node),
-                "IsArray" => ConvertIs(node, IdentifierName(nameof(Array))),
-
-                "UBound" => ConvertUBound(node),
-
-                "DateSerial" => ConvertDateSerial(node),
-
-                "Hour"   => ConvertToMemberAccess(node),
-                "Minute" => ConvertToMemberAccess(node),
-                "Second" => ConvertToMemberAccess(node),
-                "Year"   => ConvertToMemberAccess(node),
-                "Month"  => ConvertToMemberAccess(node),
-                "Day"    => ConvertToMemberAccess(node),
-
-                "String" => ConvertString(node),
-                "Len"  => ConvertLen(node),
-                "Left" => ConvertLeft(node),
-
-                "CStr" => ConvertToMemberAccess(node, "Convert.ToString"),
-                "CLng" => ConvertToMemberAccess(node, "Convert.ToInt32"),
-                "CDbl" => ConvertToMemberAccess(node, "Convert.ToDouble"),
-
-                "IIf" => ConvertIIf(node),
-
-                "Asc" => ConvertAsc(node),
-                "Chr" => ConvertChr(node),
-
-                "MsgBox" => ConvertMsgBox(node),
-
-                _ => null,
-            };
 
             if (newSyntax?.IsEquivalentTo(node) == false) {
                 return Visit(newSyntax);
