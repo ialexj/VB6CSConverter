@@ -15,7 +15,12 @@ class TraceMethod : IDisposable
 {
     public TraceMethod(object ctx, [CallerMemberName] string procedure = null)
     {
-        Log.Default.Verbose("{method}({context}) \"{text}\"", 
+        var log = Log.Conversion;
+        if (ctx is ParserRuleContext rule) {
+            log = log.ForContext("file", rule.Start.TokenSource.SourceName);
+        }
+
+        log.Verbose("{method}({context}) \"{text}\"", 
             procedure, ctx?.GetType().Name,
             Utils.EscapeWhitespace((ctx as ParserRuleContext)?.GetText() ?? string.Empty, false));
     }

@@ -10,6 +10,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using VB6Converter.Rewriters;
+using VB6Converter.Rewriters.Semantic;
 
 
 namespace VB6Converter.Tests.Rewrites;

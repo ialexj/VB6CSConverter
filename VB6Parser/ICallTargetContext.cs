@@ -95,7 +95,7 @@ namespace VB6Parser
 
         public partial class ICS_B_MemberProcedureCallContext : ICallContext, ICallTargetContext
         {
-            public bool IsPartial => DOT() is not null;
+            public bool IsPartial => implicitCallStmt_InStmt() is null && DOT() is not null;
 
             public IIdentifierContext identifier() => ambiguousIdentifier();
 
@@ -115,7 +115,7 @@ namespace VB6Parser
 
         public partial class ECS_MemberProcedureCallContext : ICallContext, ICallTargetContext
         {
-            public bool IsPartial => DOT() is not null;
+            public bool IsPartial => implicitCallStmt_InStmt() is null && DOT() is not null;
 
             public DictionaryCallStmtContext dictionaryCallStmt() => null;
 

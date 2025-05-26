@@ -4,108 +4,136 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Reflection.Metadata;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+using static VB6Converter.RoslynHelpers;
+
+#nullable enable
 
 namespace VB6Converter.Rewriters;
 
 public class MissingTypes
 {
+    [DebuggerDisplay("{FullName}")]
+    public class TypeDef(SyntaxToken name, NameSyntax? ns)
+    {
+        public SyntaxToken Name { get; } = name;
+
+        public NameSyntax? Namespace { get; } = ns;
+
+        public string FullName => Namespace != null ? $"{Namespace}.{Name.Text}" : Name.Text;
+
+        public ConcurrentDictionary<string, PropertyDeclarationSyntax> Properties = [];
+
+        public ConcurrentDictionary<string, MethodDeclarationSyntax> Methods = [];
+
+        public ConcurrentDictionary<string, FieldDeclarationSyntax> Constants = [];
+
+        public CompilationUnitSyntax GetCompilationUnit() 
+            => CompilationUnit(ClassDeclaration(Name)
+                .WithModifiers(Modifiers(isPublic: true, isPartial: true))
+                .WithMembers(List(
+                    Enumerable.Empty<MemberDeclarationSyntax>()
+                    .Concat(GetMembers(Constants))
+                    .Concat(GetMembers(Properties))
+                    .Concat(GetMembers(Methods))
+                ))
+                .WithGeneratedCodeAttribute(), Namespace);
+
+        static IEnumerable<MemberDeclarationSyntax> GetMembers<T>(ConcurrentDictionary<string, T> dict) where T : MemberDeclarationSyntax
+        {
+            return dict.OrderBy(c => c.Key).Select(v => v.Value);
+        }
+
+
+        public void RegisterConstant(SyntaxToken name, TypeSyntax type)
+        {
+            if (string.IsNullOrEmpty(name.Text)) {
+                return;
+            }
+
+            Constants.GetOrAdd(name.Text, f => FieldDeclaration(
+                default,
+                Modifiers(isPublic: true, isStatic: true, isReadOnly: true),
+                VariableDeclaration(
+                    type ?? PredefinedType(Token(SyntaxKind.ObjectKeyword)),
+                    name, LiteralExpression(
+                        SyntaxKind.DefaultLiteralExpression,
+                        Token(SyntaxKind.DefaultKeyword)))
+            ));
+        }
+
+        public void AddProperty(SyntaxToken name, TypeSyntax propertyType, bool isStatic = false)
+        {
+            var prop = PropertyDeclaration(propertyType, name)
+                .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
+                .WithAccessorList(AccessorList(List([
+                    AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)),
+                    AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))
+                    ])));
+
+            // Update the property type - if there are multiple types, then use object.
+            Properties.AddOrUpdate(name.Text, prop, (key, existing) => {
+                var exprop = existing;
+                if (!exprop.Type.IsEquivalentTo(prop.Type)) {
+                    return exprop.WithType(PredefinedType(Token(SyntaxKind.ObjectKeyword)));
+                }
+                else {
+                    return exprop;
+                }
+            });
+        }
+
+        public void AddMethod(SyntaxToken memberName, ParameterListSyntax parameters, TypeSyntax returnType, bool isStatic = false)
+        {
+            var method = MethodDeclaration(returnType, memberName)
+                .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
+                .WithParameterList(parameters)
+                .WithExpressionBody(ArrowExpressionClause(ThrowExpression(
+                    ObjectCreationExpression(
+                        QualifiedName(IdentifierName(nameof(System)), IdentifierName(nameof(NotImplementedException))))
+                        .WithArgumentList(ArgumentList())
+                    )))
+                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+
+            var signature = $"{method.Identifier}{method.ParameterList}"; // must include parameter list to allow overrides
+            Methods.AddOrUpdate(signature, method, (key, existing) => {
+                return existing; // todo
+            });
+        }
+    }
+
+    public ConcurrentDictionary<string, TypeDef> Types = [];
+
+
     public ConcurrentDictionary<string, (SyntaxToken name, NameSyntax ns, bool isType)> Identifiers = [];
 
     public ConcurrentDictionary<string, ConcurrentDictionary<string, PropertyDeclarationSyntax>> Properties = [];
 
     public ConcurrentDictionary<string, ConcurrentDictionary<string, MethodDeclarationSyntax>> Methods = [];
 
+    public ConcurrentDictionary<string, ConcurrentDictionary<string, FieldDeclarationSyntax>> Fields = [];
+
     public IEnumerable<CompilationUnitSyntax> GetCompilationUnits()
     {
-        var statics = new SortedDictionary<string, FieldDeclarationSyntax>();
-
-        foreach (var type in Identifiers) {
-            var properties = Properties.TryGetValue(type.Key, out var p) ? p : [];
-            var methods    = Methods.TryGetValue(type.Key, out var m) ? m : [];
-
-            if (type.Value.isType || !properties.IsEmpty || !methods.IsEmpty) {
-                var cu = GetIdentifierAsClass(type.Value.name, type.Value.ns);
-                var cls = cu.DescendantNodes().OfType<ClassDeclarationSyntax>().First();
-                yield return cu.ReplaceNode(cls, cls
-                    .AddMembers([.. properties.Values])
-                    .AddMembers([.. methods.Values]))
-                    .NormalizeWhitespace();
-            }
-            else {
-                statics[type.Value.name.Text] = GetIdentifierAsField(type.Value.name, type.Value.ns);
-            }
-        }
-
-        if (statics.Count > 0) {
-            var cls = ClassDeclaration("_MissingMembers")
-                .WithModifiers(TokenList(
-                    Token(SyntaxKind.PublicKeyword),
-                    Token(SyntaxKind.StaticKeyword)))
-                .WithMembers(List(statics.Values.Cast<MemberDeclarationSyntax>().ToArray()));
-
-            yield return CompilationUnit()
-                .WithUsings(SingletonList(
-                    UsingDirective(IdentifierName(cls.Identifier))
-                        .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
-                        .WithStaticKeyword(Token(SyntaxKind.StaticKeyword))
-                ))
-                .WithMembers(SingletonList<MemberDeclarationSyntax>(cls))
-                .NormalizeWhitespace();
+        foreach (var type in Types) {
+            yield return type.Value.GetCompilationUnit();
         }
     }
 
-    static CompilationUnitSyntax GetIdentifierAsClass(SyntaxToken name, NameSyntax ns)
+    public TypeDef RegisterType(string classType, NameSyntax? ns = null)
     {
-        var cls = ClassDeclaration(name)
-            .WithModifiers(TokenList(
-                Token(SyntaxKind.PublicKeyword),
-                Token(SyntaxKind.PartialKeyword)
-            ));
-
-        var cu = CompilationUnit();
-        if (ns is not null) {
-            return cu.WithMembers(
-                SingletonList<MemberDeclarationSyntax>(FileScopedNamespaceDeclaration(ns)
-                    .WithMembers(SingletonList<MemberDeclarationSyntax>(cls))));
-        }
-        else {
-            return cu.WithMembers(SingletonList<MemberDeclarationSyntax>(cls));
-        }
+        return Types.GetOrAdd(classType, t => new TypeDef(Identifier(t), ns));
     }
 
-    static FieldDeclarationSyntax GetIdentifierAsField(SyntaxToken name, NameSyntax ns)
+    public void RegisterProperty(TypeDef classType, SyntaxToken name, TypeSyntax propertyType, bool isStatic = false)
     {
-        return FieldDeclaration(
-            [],
-            TokenList(
-                Token(SyntaxKind.PublicKeyword),
-                Token(SyntaxKind.StaticKeyword),
-                Token(SyntaxKind.ReadOnlyKeyword)
-            ),
-            VariableDeclaration(
-                PredefinedType(Token(SyntaxKind.ObjectKeyword)),
-                SingletonSeparatedList(VariableDeclarator(name)
-                    .WithInitializer(EqualsValueClause(
-                        ImplicitObjectCreationExpression()
-                    )
-                ))
-            )
-        );
-    }
-
-    public void RegisterIdentifier(SyntaxToken name, NameSyntax ns, bool isType)
-    {
-        if (string.IsNullOrEmpty(name.Text)) return;
-        var fullName = ns != null ? $"{ns}.{name.Text}" : name.Text;
-        Identifiers.TryAdd(fullName.ToString(), (name, ns, isType));
-    }
-
-    public void RegisterProperty(string classType, SimpleNameSyntax name, TypeSyntax propertyType)
-    {
-        var prop = PropertyDeclaration(propertyType, name.Identifier)
-            .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword)))
+        var prop = PropertyDeclaration(propertyType, name)
+            .WithModifiers(TokenList(GetModifiers(isStatic)))
             .WithAccessorList(AccessorList(List([
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)),
@@ -114,7 +142,7 @@ public class MissingTypes
                 ])));
 
         // Update the property type - if there are multiple types, then use object.
-        Properties.GetOrAdd(classType, []).AddOrUpdate(name.Identifier.Text, prop, (key, existing) => {
+        classType.Properties.AddOrUpdate(name.Text, prop, (key, existing) => {
             var exprop = existing;
             if (!exprop.Type.IsEquivalentTo(prop.Type)) {
                 return exprop.WithType(PredefinedType(Token(SyntaxKind.ObjectKeyword)));
@@ -125,11 +153,11 @@ public class MissingTypes
         });
     }
 
-    public void RegisterMethod(string type, SimpleNameSyntax memberName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType)
+    public void RegisterMethod(TypeDef typeName, SyntaxToken memberName, ParameterListSyntax parameters, TypeSyntax returnType, bool isStatic = false)
     {
-        var method = MethodDeclaration(returnType, memberName.Identifier)
-            .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword)))
-            .WithParameterList(ParameterList(SeparatedList(parameters.ToArray())))
+        var method = MethodDeclaration(returnType, memberName)
+            .WithModifiers(TokenList(GetModifiers(isStatic)))
+            .WithParameterList(parameters)
             .WithExpressionBody(ArrowExpressionClause(ThrowExpression(
                 ObjectCreationExpression(
                     QualifiedName(IdentifierName(nameof(System)), IdentifierName(nameof(NotImplementedException))))
@@ -138,8 +166,16 @@ public class MissingTypes
             .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
 
         var signature = $"{method.Identifier}{method.ParameterList}"; // must include parameter list to allow overrides
-        Methods.GetOrAdd(type, []).AddOrUpdate(signature, method, (key, existing) => {
+        typeName.Methods.AddOrUpdate(signature, method, (key, existing) => {
             return existing; // todo
         });
+    }
+
+    static IEnumerable<SyntaxToken> GetModifiers(bool isStatic)
+    {
+        yield return Token(SyntaxKind.PublicKeyword);
+        if (isStatic) {
+            yield return Token(SyntaxKind.StaticKeyword);
+        }
     }
 }

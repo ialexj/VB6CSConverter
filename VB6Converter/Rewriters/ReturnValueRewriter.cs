@@ -1,95 +1,110 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Serilog;
-using System;
-using System.IO;
+using Serilog.Parsing;
 using System.Linq;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter.Rewriters;
 
-public class ReturnValueRewriter : CSharpSyntaxRewriter
+public class ReturnValueRewriter(SyntaxToken? valueName = null) : LoggedRewriter
 {
-    readonly ILogger Log = VB6Converter.Log.Default;
+    public static readonly ReturnValueRewriter Default = new();
 
-    public override SyntaxNode DefaultVisit(SyntaxNode node)
+    public override SyntaxNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
+        => Rewrite(node, node => {
+            var propName = valueName ?? Identifier("Item");
+            var accessors = node.AccessorList;
+
+            if (accessors.Accessors.FirstOrDefault(a => a.IsKind(SyntaxKind.GetAccessorDeclaration)) is not AccessorDeclarationSyntax get) {
+                return base.VisitIndexerDeclaration(node);
+            }
+            if (get.Body is null) {
+                return base.VisitIndexerDeclaration(node);
+            }
+
+            var newGet = ProcessAccessor(node.Type, propName, get);
+            accessors = accessors.ReplaceNode(get, newGet);
+            return node.WithAccessorList(accessors);
+        });
+
+    public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node) 
+        => Rewrite(node, node => {
+            var propName = node.Identifier;
+            var accessors = node.AccessorList;
+
+            if (accessors.Accessors.FirstOrDefault(a => a.IsKind(SyntaxKind.GetAccessorDeclaration)) is not AccessorDeclarationSyntax get) {
+                return base.VisitPropertyDeclaration(node);
+            }
+            if (get.Body is null) {
+                return base.VisitPropertyDeclaration(node);
+            }
+
+            var newGet = ProcessAccessor(node.Type, propName, get);
+            accessors = accessors.ReplaceNode(get, newGet);
+            return node.WithAccessorList(accessors);
+        });
+
+    AccessorDeclarationSyntax ProcessAccessor(TypeSyntax type, SyntaxToken propName, AccessorDeclarationSyntax get)
     {
-        try {
-            return base.DefaultVisit(node);
-        }
-        catch (Exception ex) {
-            Log.Error(ex, "Couldn't process {node} in {file}.", node, Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath));
-            throw;
-        }
-    }
-
-    public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
-    {
-        var propName  = IdentifierName(node.Identifier);
-        var accessors = node.AccessorList;
-
-        if (accessors.Accessors.FirstOrDefault(a => a.IsKind(SyntaxKind.GetAccessorDeclaration)) is not AccessorDeclarationSyntax get) {
-            return base.VisitPropertyDeclaration(node);
-        }
-
-        if (get.Body is null) {
-            return base.VisitPropertyDeclaration(node);
-        }
-
-        var newGet = get;
-
-        if (get.Body.Statements.Count == 1
-            && get.Body.Statements[0] is ExpressionStatementSyntax exprst
-            && exprst.Expression is AssignmentExpressionSyntax assignment
-            && assignment.Left is IdentifierNameSyntax name
-            && name.Identifier.Text == node.Identifier.Text) {
-
-            newGet = get.WithBody(null)
-                .WithExpressionBody(ArrowExpressionClause(assignment.Right))
-                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+        if (TryUseExpressionBody(get.Body, propName) is ArrowExpressionClauseSyntax expr) {
+            return get.WithBody(null).WithExpressionBody(expr).WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
         }
         else {
-            var newBody = ProcessBody(get.Body, node.Identifier, node.Type);
-            newGet = get.WithBody(newBody);
+            return get.WithBody(ProcessGetBody(get.Body, propName, type));
         }
-
-        accessors = accessors.ReplaceNode(get, newGet);
-        return node.WithAccessorList(accessors);
     }
+
 
     public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
-    {
-        if (node.ReturnType is PredefinedTypeSyntax predefined && predefined.Keyword.IsKind(SyntaxKind.VoidKeyword)) {
-            return base.VisitMethodDeclaration(node);
-        }
+        => Rewrite(node, node => {
+            if (node.ReturnType is PredefinedTypeSyntax predefined && predefined.Keyword.IsKind(SyntaxKind.VoidKeyword)) {
+                return base.VisitMethodDeclaration(node);
+            }
+            if (node.Body is null) {
+                return base.VisitMethodDeclaration(node);
+            }
 
-        if (node.Body is null) {
-            return base.VisitMethodDeclaration(node);
-        }
+            var newMethod = node;
 
-        var newMethod = node;
+            if (TryUseExpressionBody(node.Body, node.Identifier) is ArrowExpressionClauseSyntax expr) {
+                return node.WithBody(null).WithExpressionBody(expr).WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+            }
+            else {
+                newMethod = node.WithBody(ProcessGetBody(node.Body, node.Identifier, node.ReturnType));
+            }
 
-        if (node.Body.Statements.Count == 1
-            && node.Body.Statements[0] is ExpressionStatementSyntax exprst
+            return newMethod;
+        });
+
+    public override SyntaxNode VisitReturnStatement(ReturnStatementSyntax node)
+        => Rewrite(node, node => {
+            if (node.Expression is null) {
+                var method = node.Ancestors().OfType<BlockSyntax>().Last();
+                if (method.GetAnnotations("ReturnVar").FirstOrDefault() is SyntaxAnnotation returnVar) {
+                    return ReturnStatement(IdentifierName(returnVar.Data));
+                }
+                else if (method.GetAnnotations("ReturnDefault").Any()) {
+                    return ReturnStatement(LiteralExpression(SyntaxKind.DefaultLiteralExpression));
+                }
+            }
+
+            return base.VisitReturnStatement(node);
+        });
+
+    ArrowExpressionClauseSyntax TryUseExpressionBody(BlockSyntax body, SyntaxToken prop)
+        => body.Statements.Count == 1
+            && body.Statements[0] is ExpressionStatementSyntax exprst
             && exprst.Expression is AssignmentExpressionSyntax assignment
             && assignment.Left is IdentifierNameSyntax name
-            && name.Identifier.Text == node.Identifier.Text) {
+            && name.Identifier.Text == prop.Text
+        ? ArrowExpressionClause(assignment.Right)
+        : null;
 
-            newMethod = node.WithBody(null)
-                .WithExpressionBody(ArrowExpressionClause(assignment.Right))
-                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
-        }
-        else {
-            var newBody = ProcessBody(node.Body, node.Identifier, node.ReturnType);
-            newMethod = node.WithBody(newBody);
-        }
-
-        return newMethod;
-    }
-
-    BlockSyntax ProcessBody(BlockSyntax body, SyntaxToken propName, TypeSyntax propType)
+    BlockSyntax ProcessGetBody(BlockSyntax body, SyntaxToken propName, TypeSyntax propType)
     {
+        propName = valueName ?? propName;
+
         if (body.Statements[^1] is ExpressionStatementSyntax exst
             && exst.Expression is AssignmentExpressionSyntax assign
             && assign.Left is IdentifierNameSyntax identifier
@@ -120,20 +135,5 @@ public class ReturnValueRewriter : CSharpSyntaxRewriter
         }
 
         return (BlockSyntax)base.Visit(body);
-    }
-
-    public override SyntaxNode VisitReturnStatement(ReturnStatementSyntax node)
-    {
-        if (node.Expression is null) {
-            var method = node.Ancestors().OfType<BlockSyntax>().First();
-            if (method.GetAnnotations("ReturnVar").FirstOrDefault() is SyntaxAnnotation returnVar) {
-                return ReturnStatement(IdentifierName(returnVar.Data));
-            }
-            else if (method.GetAnnotations("ReturnDefault").Any()) {
-                return ReturnStatement(LiteralExpression(SyntaxKind.DefaultLiteralExpression));
-            }
-        }
-
-        return base.VisitReturnStatement(node);
     }
 }

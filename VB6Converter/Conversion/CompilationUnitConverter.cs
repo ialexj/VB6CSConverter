@@ -1,9 +1,9 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System.Collections.Generic;
 using System.Linq;
 using VB6Converter.Rewriters;
+using VB6Converter.Rewriters.Forms;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Parser.VisualBasic6Parser;
 
@@ -11,10 +11,15 @@ namespace VB6Converter.Conversion;
 
 public static class CompilationUnitConverter
 {
-    static CSharpSyntaxRewriter[] Rewriters = [
+    static readonly CSharpSyntaxRewriter[] rewriters = [
+        new VBLiteralRewriter(),
         new VBCoreRewriter(),
+
         new CursorRewriter(),
-        new UsingsRewriter()
+        new KeysRewriter(),
+        new MsgBoxRewriter(),
+
+        UsingsRewriter.Default
     ];
 
     public static CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string nsName, string className, bool isStatic)
@@ -22,43 +27,22 @@ public static class CompilationUnitConverter
         using var _ = new TraceMethod(module);
 
         var namespaceName = ParseName(nsName ?? className);
-        var classFullName = QualifiedName(namespaceName, IdentifierName(className));
 
         var @class = ClassConverter.GetClass(module, new ClassContext(className, isStatic));
+        
         var @namespace = FileScopedNamespaceDeclaration(namespaceName)
             .WithMembers(SingletonList<MemberDeclarationSyntax>(@class));
 
-        // Make enum values as global constants
-        IEnumerable<UsingDirectiveSyntax> GetGlobalStaticUsings() 
-            => @class.Members.OfType<EnumDeclarationSyntax>()
-                .Select(e => UsingDirective(
-                    QualifiedName(classFullName, IdentifierName(e.Identifier)))
-                    .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
-                    .WithStaticKeyword(Token(SyntaxKind.StaticKeyword))
-                );
+        var cu = CompilationUnit(default, default, default, SingletonList<MemberDeclarationSyntax>(@namespace));
 
-        IEnumerable<string> GetUsings()
-        {
-            yield return "System";
-            foreach (var usingDirective in @class.GetAnnotatedNodesAndTokens("Using").SelectMany(t => t.GetAnnotations("Using"))) {
-                yield return usingDirective.Data;
-            }
-        }
-
-        var cu = CompilationUnit()
-            .AddUsings([.. GetGlobalStaticUsings()])
-            .AddUsings([.. GetUsings().Distinct().Order().Select(u => UsingDirective(ParseName(u)))])
-            .WithMembers(SingletonList<MemberDeclarationSyntax>(@namespace));
-
-        // Perform additional rewrites
-        foreach (var rewriter in Rewriters) {
+        foreach (var rewriter in rewriters) {
             cu = (CompilationUnitSyntax)rewriter.Visit(cu);
         }
 
         return cu.NormalizeWhitespace();
     }
 
-    public static CompilationUnitSyntax GetGlobalStaticUsings(IEnumerable<string> names)
+    public static CompilationUnitSyntax GetGlobalStaticUsings()
     {
         var common = new string[] {
             "Microsoft.VisualBasic.FileSystem",
@@ -71,7 +55,7 @@ public static class CompilationUnitConverter
             "Microsoft.VisualBasic.Interaction"
         };
 
-        var usings = common.Concat(names)
+        var usings = common
             .Select(n => UsingDirective(ParseTypeName(n))
             .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
             .WithStaticKeyword(Token(SyntaxKind.StaticKeyword)));

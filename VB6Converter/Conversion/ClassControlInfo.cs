@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+using static VB6Converter.RoslynHelpers;
 
 namespace VB6Converter.Conversion;
 
@@ -20,26 +21,29 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
 
     public IdentifierNameSyntax GetIndexedName()
         => GetArrayIndex() is LiteralExpressionSyntax literal
-            ? IdentifierName(Name.Identifier.Text + literal.Token.Text)
+            ? IdentifierName("_" + Name.Identifier.Text + "_" + literal.Token.Text)
             : Name;
 
     public LiteralExpressionSyntax GetArrayIndex()
         => Properties.FirstOrDefault(p => p.name is IdentifierNameSyntax id && id.Identifier.Text == "Index")
             .value as LiteralExpressionSyntax;
 
-    public FieldDeclarationSyntax GetField()
+    public FieldDeclarationSyntax GetField() 
         => FieldDeclaration(
-            VariableDeclaration(Type,
-                SingletonSeparatedList(VariableDeclarator(GetIndexedName().Identifier)
-                    .WithInitializer(EqualsValueClause(
-                        ObjectCreationExpression(Type)
-                            .WithArgumentList(ArgumentList()))))));
+            default,
+            Modifiers(isInternal: true),
+            VariableDeclaration(
+                Type, GetIndexedName().Identifier, 
+                ImplicitObjectCreationExpression()
+            )
+        );
 
     public IEnumerable<ClassControlInfo> FlattenControls()
         => new[] { this }.Concat(Children.SelectMany(c => c.FlattenControls()));
 
 
-    public IEnumerable<FieldDeclarationSyntax> GetFields() => FlattenControls().Select(c => c.GetField());
+    public IEnumerable<FieldDeclarationSyntax> GetFields() 
+        => FlattenControls().Select(c => c.GetField());
 
     public IEnumerable<StatementSyntax> GetAssignments()
     {
@@ -85,26 +89,23 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
 
         foreach (var array in arrayChildren) {
             var maxIndex = array.Controls.Max(c => c.Key);
-            var first = array.Controls.Values.First();
-            var baseType = first.Type;
-            var baseName = first.Name;
+            var first    = array.Controls.Values.First();
 
-            var arrayType = ArrayType(baseType)
+            var arrayType = ArrayType(first.Type)
                 .WithRankSpecifiers(SingletonList(
                     ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
                         OmittedArraySizeExpression())
                     )));
 
             var variable = FieldDeclaration(
-                VariableDeclaration(arrayType, SingletonSeparatedList(
-                    VariableDeclarator(baseName.Identifier)
-                        .WithInitializer(EqualsValueClause(ArrayCreationExpression(
-                            arrayType.WithRankSpecifiers(SingletonList(
-                                ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
-                                    LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(maxIndex + 1))
-                                ))
-                            ))
-                        )))
+                default, 
+                Modifiers(isInternal: true),
+                VariableDeclaration(arrayType, first.Name.Identifier, ArrayCreationExpression(
+                    arrayType.WithRankSpecifiers(SingletonList(
+                        ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
+                            LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(maxIndex + 1))
+                        ))
+                    ))
                 ))
             );
 
@@ -115,17 +116,13 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
             var initializers = array.Controls.OrderBy(c => c.Key).Select(c => ExpressionStatement(
                 AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
                     ElementAccessExpression(
-                        baseName, BracketedArgumentList(SingletonSeparatedList(
+                        first.Name, BracketedArgumentList(SingletonSeparatedList(
                             Argument(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(c.Key)))
                         ))
                     ),
                     c.Value.GetIndexedName()
                 )
             )).ToArray();
-
-            if (isFirst) {
-                initializers[0] = initializers[0].WithLeadingTrivia(TriviaList(Comment($"{Environment.NewLine}// {array.Name}")));
-            }
 
             yield return (variable, initializers);
             isFirst = false;

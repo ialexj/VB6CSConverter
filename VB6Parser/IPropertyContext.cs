@@ -15,14 +15,13 @@ namespace VB6Parser
         VisibilityContext visibility();
         
         BlockContext block();
+
+        ArgListContext argList();
         
         ITerminalNode STATIC();
     }
 
-    public interface IPropertySetContext : IPropertyContext
-    {
-        ArgListContext argList();
-    }
+    public interface IPropertySetContext : IPropertyContext { }
 
     public partial class VisualBasic6Parser
     {

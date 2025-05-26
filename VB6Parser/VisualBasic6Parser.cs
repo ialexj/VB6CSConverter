@@ -20,7 +20,7 @@ public partial class VisualBasic6Parser
         return Parse(reader);
     }
 
-    public static ParseContext Parse(TextReader text)
+    public static ParseContext Parse(TextReader text, string name = null)
     {
         ArgumentNullException.ThrowIfNull(text);
 
@@ -28,7 +28,7 @@ public partial class VisualBasic6Parser
         string source = Preprocessor.Preprocess(text);
 
         // Lexing
-        var str = new AntlrInputStream(source);
+        var str = new AntlrInputStream(source) { name = name };
         var lexer = new VisualBasic6Lexer(str);
 
         var lexlistener = new ErrorListener<int>();

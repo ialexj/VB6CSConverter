@@ -10,6 +10,7 @@ using VB6Parser;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Converter.Conversion.CommonConverter;
 using static VB6Converter.Conversion.ValueConverter;
+using static VB6Converter.Conversion.LoopConverter;
 using static VB6Converter.RoslynHelpers;
 using static VB6Parser.VisualBasic6Parser;
 
@@ -114,24 +115,20 @@ public static class StatementConverter
                 return GetSelectCase(select, ctx);
             }
 
-            else if (stmt.forNextStmt() is ForNextStmtContext fornext) {
-                return GetForNext(fornext, ctx);
-            }
-            else if (stmt.forEachStmt() is ForEachStmtContext forEach) {
-                return GetForEach(forEach, ctx);
-            }
-            else if (stmt.doLoopStmt() is DoLoopStmtContext doLoop) {
-                return GetDoLoop(doLoop, ctx);
-            }
-            else if (stmt.whileWendStmt() is WhileWendStmtContext whileWend) {
-                return GetWhile(whileWend, ctx);
+            else if (GetLoopMethodStatement(stmt, ctx) is StatementSyntax loop) {
+                return loop;
             }
 
             else if (stmt.loadStmt() is LoadStmtContext load) {
                 return EmptyStatement().WithTrailingTrivia(Comment($"// {load.GetText()}"));
             }
             else if (stmt.unloadStmt() is UnloadStmtContext unload) {
-                return EmptyStatement().WithTrailingTrivia(Comment($"// {unload.GetText()}"));
+                if (unload.valueStmt().GetText() == "Me") {
+                    return ExpressionStatement(InvocationExpression(IdentifierName("Close"), ArgumentList()));
+                }
+                else {
+                    return EmptyStatement().WithTrailingTrivia(Comment($"// {unload.GetText()}"));
+                }
             }
 
             else if (stmt.openStmt() is OpenStmtContext open) {
@@ -183,7 +180,13 @@ public static class StatementConverter
                 return GetResume(resume);
             }
             else if (stmt.onErrorStmt() is OnErrorStmtContext onerror) {
-                return EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {onerror.GetText()}")));
+                var comment = EmptyStatement().WithTrailingTrivia(TriviaList(Comment($"// {onerror.GetText()}")));
+                if (onerror.GOTO() is not null) {
+                    comment = comment.WithAdditionalAnnotations(
+                        new SyntaxAnnotation("OnErrorGoto", onerror.valueStmt().GetText()));
+                }
+
+                return comment;
             }
 
             else if (stmt.exitStmt() is ExitStmtContext exit) {
@@ -209,6 +212,8 @@ public static class StatementConverter
     public static AssignmentExpressionSyntax GetAssignment(IAssignmentContext assignment, CallContext ctx)
     {
         using var _ = new TraceMethod(assignment);
+
+
         var identifier = GetCallIdentifierExpression(assignment.implicitCallStmt_InStmt(), ctx, true);
         var value = GetValue(assignment.valueStmt(), ctx);
         return AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, identifier, value);
@@ -407,74 +412,7 @@ public static class StatementConverter
         }
     }
 
-    public static ForStatementSyntax GetForNext(ForNextStmtContext forNext, CallContext ctx)
-    {
-        var type = forNext.asTypeClause() is AsTypeClauseContext asType
-            ? CommonConverter.ToTypeSyntax(asType)
-            : PredefinedType(Token(SyntaxKind.IntKeyword));
-
-        var variable = GetIdentifierName(forNext.iCS_S_VariableOrProcedureCall());
-
-        var start = GetValue(forNext.valueStmt(0), ctx);
-        var end = GetValue(forNext.valueStmt(1), ctx);
-        var step = GetValue(forNext.valueStmt(2), ctx);
-
-        bool stepIsOne = true, stepIsNegative = false;
-        if (step is LiteralExpressionSyntax literal && literal.Token.Value is int istep) {
-            stepIsOne = istep == 1 || istep == -1;
-            stepIsNegative = istep < 0;
-            if (stepIsNegative) {
-                step = LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(-istep));
-            }
-        }
-
-        var decl = AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, variable, start);
-
-        var ops = stepIsNegative
-            ? (SyntaxKind.PostDecrementExpression, SyntaxKind.SubtractAssignmentExpression, SyntaxKind.GreaterThanOrEqualExpression)
-            : (SyntaxKind.PostIncrementExpression, SyntaxKind.AddAssignmentExpression, SyntaxKind.LessThanOrEqualExpression);
-
-
-        ExpressionSyntax incrementor = stepIsOne
-            ? PostfixUnaryExpression(ops.Item1, variable)
-            : AssignmentExpression(ops.Item2, variable, step);
-
-        var block = GetBlock(forNext.block(), ctx, false);
-
-        return ForStatement(block)
-            .WithInitializers(SingletonSeparatedList<ExpressionSyntax>(decl))
-            .WithCondition(BinaryExpression(ops.Item3, variable, GetValue(forNext.valueStmt(1), ctx)))
-            .WithIncrementors(SingletonSeparatedList(incrementor));
-    }
-
-    public static StatementSyntax GetForEach(ForEachStmtContext forEach, CallContext ctx)
-    {
-        using var _ = new TraceMethod(forEach);
-
-        var variable = GetIdentifier(forEach.ambiguousIdentifier(0));
-        var enumerator = GetValue(forEach.valueStmt(), ctx);
-        var statements = GetBlock(forEach.block(), ctx, false);
-
-        return ForEachStatement(
-            IdentifierName(Identifier(TriviaList(), SyntaxKind.VarKeyword, "var", "var", TriviaList())),
-            variable,
-            enumerator,
-            statements);
-    }
-
-    public static StatementSyntax GetDoLoop(DoLoopStmtContext doLoop, CallContext ctx)
-    {
-        var condition = GetValue(doLoop.valueStmt(), ctx);
-        var statements = GetBlock(doLoop.block(), ctx);
-        return WhileStatement(condition, statements);
-    }
-
-    public static StatementSyntax GetWhile(WhileWendStmtContext whileWend, CallContext ctx)
-    {
-        var condition = GetValue(whileWend.valueStmt(), ctx);
-        var statements = GetBlock(whileWend.block().First(), ctx);
-        return WhileStatement(condition, statements);
-    }
+    
 
 
     public static StatementSyntax GetRedim(RedimStmtContext redim, CallContext ctx)
@@ -482,14 +420,10 @@ public static class StatementConverter
         using var _ = new TraceMethod(redim);
 
         var statements = redim.redimSubStmt().Select(rd => {
-            var variable = GetCallIdentifierExpression(rd.implicitCallStmt_InStmt(), ctx);
-
-            var type = CommonConverter.ToTypeSyntax(rd.asTypeClause())
-                ?? throw new TransformException(redim, "Redim inferred array type not supported.");
-
+            var variable   = GetCallIdentifierExpression(rd.implicitCallStmt_InStmt(), ctx);
+            var type       = rd.asTypeClause().ToTypeSyntax(true);
             var subscripts = rd.subscripts().subscript().Select(s => GetValue(s.valueStmt(0), ctx));
-
-            var arrayType = ArrayType(type, SingletonList(ArrayRankSpecifier(SeparatedList(subscripts))));
+            var arrayType  = ArrayType(type, SingletonList(ArrayRankSpecifier(SeparatedList(subscripts))));
 
             if (redim.PRESERVE() is not null) {
                 throw new TransformException(redim, "Redim Preserve not supported");
@@ -511,11 +445,11 @@ public static class StatementConverter
     public static StatementSyntax GetOpen(OpenStmtContext open, CallContext ctx)
     {
         var file = GetValue(open.valueStmt(0), ctx);
-        var name = GetValue(open.valueStmt(1), ctx);
+        var name = GetValue(open.valueStmt(1), ctx);       
 
         var variable = name switch {
             IdentifierNameSyntax n => n,
-            LiteralExpressionSyntax l => IdentifierName(l.Token.Text),
+            LiteralExpressionSyntax l => IdentifierName(l.Token.ValueText.Trim('"', '#')),
             _ => throw new TransformException(open.valueStmt(1), "Unknown open type")
         };
 
@@ -581,7 +515,8 @@ public static class StatementConverter
 
                     )
                 )
-            )));
+            )))
+            .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.IO"));
     }
 
     public static StatementSyntax GetPrint(PrintStmtContext print, CallContext ctx)
@@ -648,7 +583,8 @@ public static class StatementConverter
                     IdentifierName("File").WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.IO")),
                     IdentifierName("Delete")
                 ),
-                ArgumentList(value)));
+                ArgumentList(value)))
+            .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.IO"));
     }
 
 
@@ -691,4 +627,6 @@ public static class StatementConverter
             ParseExpression("Application.Exit()")
         );
     }
+
+    
 }

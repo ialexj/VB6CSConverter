@@ -1,11 +1,13 @@
 ﻿using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
+using System.Diagnostics;
 using System.IO;
 using VB6Parser;
 using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter;
 
+[DebuggerDisplay("{Name}")]
 public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
 {
     public VisualBasicProjectFile File { get; } = file ?? throw new ArgumentNullException(nameof(file));

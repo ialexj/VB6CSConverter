@@ -1,41 +1,73 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using Microsoft.Build.Tasks;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
-using Serilog;
+using Microsoft.Extensions.Options;
+using Spectre.Console;
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using VB6Converter.Conversion;
 using VB6Converter.Rewriters;
+using VB6Parser;
 
 namespace VB6Converter;
-public class ConversionWorkspace : IDisposable
+
+public sealed class ConversionWorkspace : IDisposable
 {
-    readonly ConversionTarget[] _targets;
     readonly MSBuildWorkspace _ws;
+    readonly bool _overwriteNonGenerated;
 
-    readonly CSharpSyntaxRewriter[] PostRewriters = new[] {
-        new UsingsRewriter()
-    };  
-
-    public ConversionWorkspace(ConversionTarget[] targets)
+    public ConversionWorkspace(bool overwriteNonGenerated)
     {
+        _overwriteNonGenerated = overwriteNonGenerated;
+
         _ws = MSBuildWorkspace.Create();
         _ws.WorkspaceFailed += (s, e) => Log.Default.Warning("Workspace failed: {error}", e.Diagnostic);
-        _targets = targets ?? throw new ArgumentNullException(nameof(targets));
     }
 
     public void Dispose() => _ws.Dispose();
 
+
     public Project Project { get; private set; }
 
-    public async Task Open(string outDir, string name)
+    public string DefaultNamespace { get; private set; }
+
+    public string OutputPath => Path.GetDirectoryName(Project.FilePath);
+
+    public string MissingTypesPath => Path.Combine(Path.GetDirectoryName(Project.FilePath), "MissingTypes");
+
+
+    public IReadOnlyCollection<ConversionTarget> Targets { get; private set; }
+
+    public IReadOnlyCollection<ConversionTarget> ActiveTargets { get; private set; }
+
+    public void SetActiveFilter(IReadOnlyCollection<string> filter)
     {
+        if (filter.Count == 0) {
+            ActiveTargets = Targets;
+            return;
+        }
+        else {
+            var targets = new List<ConversionTarget>();
+
+            foreach (var f in filter) {
+                targets.Add(Targets.FirstOrDefault(t => t.File.Name.Equals(f, StringComparison.CurrentCultureIgnoreCase))
+                    ?? throw new ArgumentException($"Target not found: {f}"));
+            }
+
+            ActiveTargets = targets;
+        }
+    }
+
+    public async Task Open(IReadOnlyCollection<ConversionTarget> targets, string outDir, string name)
+    {
+        Targets = targets ?? throw new ArgumentNullException(nameof(targets));
+
         outDir = Path.GetFullPath(outDir);
         if (!Directory.Exists(outDir)) {
             Directory.CreateDirectory(outDir);
@@ -50,89 +82,77 @@ public class ConversionWorkspace : IDisposable
                     <OutputType>Exe</OutputType>
                     <TargetFramework>net9.0</TargetFramework>
                     <LangVersion>latest</LangVersion>
+                    <UseWindowsForms>true</UseWindowsForms>
                   </PropertyGroup>
                 </Project>
                 """);
 
-            // Create a global usings file to replicate VB6's module accessibility
-            var globalUsings = CompilationUnitConverter.GetGlobalStaticUsings(_targets.Select(t => $"{name}.{t.File.Name}")).NormalizeWhitespace();
-            var globalUsingsPath = Path.Combine(outDir, "_VB6Usings.cs");
+            DefaultNamespace = name;
+        }
+
+        // Create a global usings file to replicate VB6's module accessibility
+        var globalUsingsPath = Path.Combine(outDir, "_VB6Usings.cs");
+        if (!File.Exists(globalUsingsPath)) {
+            var globalUsings = CompilationUnitConverter.GetGlobalStaticUsings().NormalizeWhitespace();
             File.WriteAllText(globalUsingsPath, globalUsings.ToFullString());
         }
 
         Project = await _ws.OpenProjectAsync(projectPath);
     }
 
-    public async ValueTask<bool> RunOperations(string oper, Func<ConversionTarget, CompilationUnitSyntax, ILogger, CancellationToken, ValueTask<CompilationUnitSyntax>> task)
+    public async Task<Project> ReloadProject()
     {
-        Log.Default.ForContext("operation", oper).Information($"{oper}...");
-
-        bool hasChanges = false;
-
-        await Parallel.ForEachAsync(_targets, async (target, cancel) => {
-            var log = Log.ForFile(target.Name).ForContext("operation", oper);
-
-            try {
-                var doc = GetOrCreateDocument(target);
-                var st  = await doc.GetSyntaxTreeAsync(cancel);
-                var cu  = st.GetCompilationUnitRoot(cancel);
-
-                var newcu = await task(target, cu, log, cancel);
-
-                if (!newcu.IsEquivalentTo(cu)) {
-                    doc = await SaveDocument(log, doc, newcu, cancel);
-                    Interlocked.Exchange(ref hasChanges, true);
-                }
-                else {
-                    Interlocked.Exchange(ref hasChanges, false);
-                }
-            }
-            catch (Exception ex) when (!Debugger.IsAttached) {
-                log.Error(ex, "{file} failed during {title}.");
-            }
-        });
-
-        return hasChanges;
+        _ws.CloseSolution();
+        Project = await _ws.OpenProjectAsync(Project.FilePath);
+        return Project;
     }
 
-    public async ValueTask<bool> RunRewrites(string title, Func<CompilationUnitSyntax, Compilation, ILogger, CancellationToken, ValueTask<CompilationUnitSyntax>> task)
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1068:CancellationToken parameters must come last", Justification = "This is a wrapper for a callback, which works best last.")]
+    public async ValueTask<bool> WithCompilationUnit(
+        ConversionTarget target, CancellationToken cancel, 
+        Func<CompilationUnitSyntax, ValueTask<CompilationUnitSyntax>> task)
     {
-        var usings = new UsingsRewriter();
+        var log = Log.ForFile(target.Name);
+        var doc = GetOrCreateDocument(target);
+        var st  = await doc.GetSyntaxTreeAsync(cancel);
+        var cu  = st.GetCompilationUnitRoot(cancel);
 
-        // Fixing some issues will often unblock additional issues that can only be found on the next compile
-        int count = 1;
-        bool hasChanges;
-        do {
-            var compilation = await GetCompilation();
+        if (!_overwriteNonGenerated) {
+            // If there's a class, check if it has the GeneratedCode attribute
+            var cls = cu.DescendantNodes(n => n is not ClassDeclarationSyntax)
+                .OfType<ClassDeclarationSyntax>()
+                .FirstOrDefault();
 
-            hasChanges = await RunOperations(title + $" ({count++})", async (t, cu, log, cancel) => {
-                var newcu = await task(cu, compilation, log, cancel);
+            if (cls is not null) {
+                var attribute = cls.AttributeLists
+                    .SelectMany(a => a.Attributes)
+                    .FirstOrDefault(a => a.Name.ToString() == "System.CodeDom.Compiler.GeneratedCode");
 
-                // Update                 
-                if (string.IsNullOrEmpty(newcu.SyntaxTree.FilePath)) {
-                    var st = newcu.SyntaxTree.WithFilePath(t.OutputPath);
-                    newcu = st.GetCompilationUnitRoot();
+                if (attribute is null) {
+                    log.Debug("{file} skipped because it is not generated code");
+                    return false;
                 }
-
-                // Run additional rewriters to update global state
-                // to update things like usings, etc.
-                foreach (var post in PostRewriters) {
-                    newcu = (CompilationUnitSyntax)post.Visit(newcu);
-                }
-
-                return newcu;
-            });
+            }
         }
-        while (hasChanges);
-        return hasChanges;
+
+        var newcu = await task(cu);
+
+        if (string.IsNullOrEmpty(newcu.SyntaxTree.FilePath)) {
+            st = newcu.SyntaxTree.WithFilePath(target.OutputPath);
+            newcu = st.GetCompilationUnitRoot(cancel);
+        }
+
+        if (!RoslynHelpers.IsEquivalentSyntax(cu, newcu)) {
+            doc = await SaveDocument(doc, newcu, cancel);
+            return true;
+        }
+        else {
+            return false;
+        }
     }
 
-    public async Task<Compilation> GetCompilation()
-    {
-        Log.Default.Information("Compiling...");
-        return await Project.GetCompilationAsync();
-    }
-
+    public IEnumerable<string> GetForms() => Targets.Where(t => t.File.Type == VisualBasicFileType.Form).Select(t => t.File.Name);
 
     Document GetOrCreateDocument(ConversionTarget target)
     {
@@ -140,7 +160,7 @@ public class ConversionWorkspace : IDisposable
             var doc = Project.Documents.FirstOrDefault(d => string.Equals(d.Name, target.OutputDocumentName, StringComparison.CurrentCultureIgnoreCase));
             
             if (doc is null) {
-                doc = Project.AddDocument(target.OutputDocumentName, string.Empty);
+                doc = Project.AddDocument(target.OutputDocumentName, string.Empty, filePath: target.OutputPath);
                 Project = doc.Project;
             }
 
@@ -148,18 +168,17 @@ public class ConversionWorkspace : IDisposable
         }
     }
 
-    async Task<Document> SaveDocument(ILogger log, Document doc, CompilationUnitSyntax cu, CancellationToken cancel)
+    async Task<Document> SaveDocument(Document doc, CompilationUnitSyntax cu, CancellationToken cancel)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(doc.FilePath));
 
         await File.WriteAllTextAsync(doc.FilePath, cu.ToFullString(), cancel);
+        doc = doc.WithText(cu.GetText());
 
         lock (_ws) {
-            doc = doc.WithSyntaxRoot(cu);
             Project = doc.Project;
         }
 
-        log.Debug("{file} saved.");
         return doc;
     }
 }

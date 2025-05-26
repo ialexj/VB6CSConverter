@@ -232,6 +232,39 @@ public static class ValueConverter
     {
         var values = oper.valueStmt().Select(v => GetValue(v, expr)).ToArray();
 
+        // Try to invert the inner expression
+        if (oper is VsNotContext not && values.Length == 1) {
+            if (values[0] is BinaryExpressionSyntax bin) {
+                if (bin.IsKind(SyntaxKind.EqualsExpression)) {
+                    return BinaryExpression(SyntaxKind.NotEqualsExpression, bin.Left, bin.Right);
+                }
+                else if (bin.IsKind(SyntaxKind.NotEqualsExpression)) {
+                    return BinaryExpression(SyntaxKind.EqualsExpression, bin.Left, bin.Right);
+                }
+                else if (bin.IsKind(SyntaxKind.IsExpression)) {
+                    if (bin.Right is LiteralExpressionSyntax lit) {
+                        return IsPatternExpression(bin.Left, UnaryPattern(ConstantPattern(lit)));
+                    }
+                }
+            }
+        }
+
+        // is null
+        IsPatternExpression(IdentifierName("a"),
+            ConstantPattern(
+                LiteralExpression(
+                    SyntaxKind.NullLiteralExpression)));
+
+        // is not null
+        IsPatternExpression(IdentifierName("a"),
+            UnaryPattern(
+                ConstantPattern(
+                    LiteralExpression(
+                        SyntaxKind.NullLiteralExpression))));
+
+
+        
+
         if (oper is VsPowContext pow) {
             return InvocationExpression(ParseName("Math.Pow"), ArgumentList(values));
         }

@@ -1,8 +1,9 @@
 ﻿using Antlr4.Runtime.Tree;
+using Microsoft.Build.Framework;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using VB6Converter.Rewriters;
@@ -10,6 +11,7 @@ using VB6Parser;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Converter.Conversion.CommonConverter;
 using static VB6Converter.Conversion.ValueConverter;
+using static VB6Converter.RoslynHelpers;
 using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter.Conversion;
@@ -17,59 +19,35 @@ public static class ClassConverter
 {
     public static ClassDeclarationSyntax GetClass(ModuleContext module, ClassContext ctx)
     {
-        IEnumerable<SyntaxToken> GetModifiers()
-        {
-            yield return Token(SyntaxKind.PublicKeyword);
-            if (ctx.Static) {
-                yield return Token(SyntaxKind.StaticKeyword);
-            }
-            yield return Token(SyntaxKind.PartialKeyword);
-        }
-
         var c = ClassDeclaration(ctx.Name)
-            .WithModifiers(TokenList(GetModifiers()));
-
-        // Control properties
-        if (module.controlProperties() is ControlPropertiesContext controlCtx) {
-            var root = GetControl(controlCtx);
-            root.Name = IdentifierName("this");
-
-            var variables = root.GetFields().Skip(1).ToArray(); // skip self
-            var arrays = root.GetArrays();
-
-            c = c.AddMembers(
-                FieldDeclaration(VariableDeclaration(
-                    IdentifierName(ctx.Name),
-                    SingletonSeparatedList(
-                        VariableDeclarator("_Instance")
-                            .WithInitializer(EqualsValueClause(
-                                ImplicitObjectCreationExpression()
-                            ))
-                    )
-                ))
-                .WithModifiers(TokenList(
-                    Token(SyntaxKind.PublicKeyword),
-                    Token(SyntaxKind.StaticKeyword),
-                    Token(SyntaxKind.ReadOnlyKeyword)
-                ))
-            );
-
-            c = c.WithBaseList(BaseList(SingletonSeparatedList<BaseTypeSyntax>(SimpleBaseType(root.Type))));
-
-            c = c.AddMembers([.. variables.Select(v => v.WithModifiers(TokenList(Token(SyntaxKind.InternalKeyword)))) ]);
-
-            c = c.AddMembers([.. arrays.Select(v => v.variable.WithModifiers(TokenList(Token(SyntaxKind.InternalKeyword)))) ]);
-
-            c = c.AddMembers(
-                MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), "InitializeComponent")
-                    .WithModifiers(TokenList(Token(SyntaxKind.ProtectedKeyword)))
-                    .WithBody(Block()
-                        .WithStatements(List(root.GetAssignments().Concat(arrays.SelectMany(a => a.initializers))))));
-        }
+            .WithModifiers(Modifiers(isPublic: true, isStatic: ctx.Static, isPartial: true))
+            .WithGeneratedCodeAttribute();
 
         // Main body
         if (module.moduleBody() is ModuleBodyContext body) {
             foreach (var member in body.moduleBodyElement()) {
+                if (member.propertyGetStmt() is PropertyGetStmtContext propGet) {
+                    // Implement IEnumerable
+                    if (propGet.ambiguousIdentifier()?.GetText() == "NewEnum" 
+                        && propGet.asTypeClause()?.type()?.GetText() == "IUnknown") {
+
+                        ExpressionSyntax bodyExpression = ThrowExpression(ObjectCreationExpression(IdentifierName("System.NotImplementedException"), ArgumentList(), default));
+                        var prop = GetProperty(propGet, ctx) as PropertyDeclarationSyntax;
+                        if (prop.AccessorList.Accessors.FirstOrDefault(a => a.IsKind(SyntaxKind.GetAccessorDeclaration))?.ExpressionBody?.Expression is MemberAccessExpressionSyntax elcc) {
+                            bodyExpression = InvocationExpression(elcc.WithName(IdentifierName("GetEnumerator")), ArgumentList());
+                        }
+
+                        c = c.AddBaseListTypes(SimpleBaseType(ParseName("System.Collections.IEnumerable")));
+                        c = c.AddMembers(
+                            MethodDeclaration(ParseName("System.Collections.IEnumerator"), "GetEnumerator") 
+                                .WithModifiers(Modifiers(isPublic: true, isStatic: false))
+                                .WithExpressionBody(ArrowExpressionClause(bodyExpression))
+                                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))
+                        );
+                    }
+                }
+
+
                 foreach (var decl in GetMembers(member, ctx)) {
                     if (decl is PropertyDeclarationSyntax property) {
                         var existing = c.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => Equals(p.Identifier.Text, property.Identifier.Text));
@@ -88,6 +66,51 @@ public static class ClassConverter
             }
         }
 
+        // Control properties
+        if (module.controlProperties() is ControlPropertiesContext controlCtx) {
+            var root = GetControl(controlCtx);
+            root.Name = IdentifierName("this");
+
+            // Base class
+            c = c.WithBaseList(BaseList(SingletonSeparatedList<BaseTypeSyntax>(SimpleBaseType(root.Type))));
+
+            // Instance
+            c = c.AddMembers(
+                FieldDeclaration(default,
+                    Modifiers(isPublic: true, isStatic: true, isReadOnly: true),
+                    VariableDeclaration(
+                        IdentifierName(ctx.Name), Identifier("_Instance"), 
+                        ImplicitObjectCreationExpression())
+                )
+                .WithLeadingTrivia(TriviaList(Trivia(
+                    RegionDirectiveTrivia(false)
+                        .WithEndOfDirectiveToken(Token(
+                            TriviaList(PreprocessingMessage("Control Properties")),
+                            SyntaxKind.EndOfDirectiveToken, TriviaList()
+                        ))
+                )))
+            );
+
+            // Variables
+            c = c.AddMembers([.. root.GetFields().Skip(1)]); // skip "this"
+
+            // Arrays
+            var arrays = root.GetArrays();
+            c = c.AddMembers([.. arrays.Select(v => v.variable.WithModifiers(TokenList(Token(SyntaxKind.InternalKeyword)))) ]);
+            c = c.AddMembers(
+                MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), "InitializeComponent")
+                    .WithModifiers(Modifiers(isProtected: true))
+                    .WithBody(Block(List(
+                        root.GetAssignments().Concat(arrays.SelectMany(a => a.initializers))
+                    )))
+                    .WithTrailingTrivia(
+                        TriviaList(Trivia(EndRegionDirectiveTrivia(true)))
+                    )
+            );
+        }
+
+        
+
         return c;
     }
 
@@ -100,7 +123,7 @@ public static class ClassConverter
 
         var children = control.cp_Properties().Select(c => c.controlProperties())
             .OfType<ControlPropertiesContext>()
-            .Select(c => GetControl(c))
+            .Select(GetControl)
             .ToArray();
 
         return new ClassControlInfo(type, name) {
@@ -191,7 +214,14 @@ public static class ClassConverter
                 yield return GetExtern(declare);
             }
             else if (e.propertyAccessor() is IPropertyContext prop) {
-                yield return GetProperty(prop, ctx);
+                if (prop is PropertyGetStmtContext getter 
+                    && prop.ambiguousIdentifier().GetText() == "NewEnum" 
+                    && getter.asTypeClause().type().GetText() == "IUnknown") {
+                    yield break;
+                }
+                else {
+                    yield return GetProperty(prop, ctx);
+                }
             }
             else if (e.eventStmt() is EventStmtContext @event) {
                 yield return GetEvent(@event, ctx);
@@ -286,7 +316,7 @@ public static class ClassConverter
     }
 
 
-    public static MethodDeclarationSyntax GetMethod(IMethodContext methodCtx, ClassContext ctx)
+    public static MemberDeclarationSyntax GetMethod(IMethodContext methodCtx, ClassContext ctx)
     {
         using var _ = new TraceMethod(methodCtx);
 
@@ -294,26 +324,36 @@ public static class ClassConverter
         var name = GetIdentifier(methodCtx.ambiguousIdentifier());
         var body = StatementConverter.GetBlock(methodCtx.block(), default);
 
-        var method = MethodDeclaration(type, name)
-            .WithModifiers(GetModifiers(methodCtx.visibility(), ctx.Static))
-            .WithParameterList(GetMethodParameters(methodCtx.argList()))
-            .WithBody(body);
+        MemberDeclarationSyntax method;
+        if (name.Text == "Class_Initialize") {
+            method = ConstructorDeclaration(ctx.Name)
+                .WithModifiers(Modifiers(isPublic: true))
+                .WithParameterList(GetMethodParameters(methodCtx.argList()))
+                .WithBody(body);
+        }
+        else {
+            method = MethodDeclaration(type, name)
+                .WithModifiers(GetModifiers(methodCtx.visibility(), ctx.Static))
+                .WithParameterList(GetMethodParameters(methodCtx.argList()))
+                .WithBody(body);
 
-        // Rewrite return style
-        var mr = new ReturnValueRewriter();
-        method = (MethodDeclarationSyntax)mr.Visit(method);
+            method = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(method);
+            method = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(method);
+        }
+
         return method;
     }
 
-    public static PropertyDeclarationSyntax GetProperty(IPropertyContext propCtx, ClassContext ctx)
+    public static MemberDeclarationSyntax GetProperty(IPropertyContext propCtx, ClassContext ctx)
     {
+        using var _ = new TraceMethod(propCtx);
+
+        var type = (TypeSyntax)PredefinedType(Token(SyntaxKind.ObjectKeyword));
         var name = GetIdentifier(propCtx.ambiguousIdentifier());
         var body = StatementConverter.GetBlock(propCtx.block(), default);
+        var parameters = GetMethodParameters(propCtx.argList());
 
         SyntaxKind kind;
-        TypeSyntax type = PredefinedType(Token(SyntaxKind.ObjectKeyword));
-
-        bool isMultiParameter = false;
 
         if (propCtx is PropertyGetStmtContext get) {
             kind = SyntaxKind.GetAccessorDeclaration;
@@ -322,37 +362,56 @@ public static class ClassConverter
         else if (propCtx is IPropertySetContext set) {
             kind = SyntaxKind.SetAccessorDeclaration;
 
-            var parameters = GetMethodParameters(set.argList());
             if (parameters.Parameters.Count > 0) {
                 type = parameters.Parameters[0].Type;
 
-                var identifier = parameters.Parameters[0].Identifier.ValueText;
+                var identifier = parameters.Parameters[0].Identifier.Text;
                 if (!Equals(identifier, "value")) {
-                    var renamer = new SimpleIdentifierRenamer(identifier, "value");
-                    body = (BlockSyntax)renamer.Visit(body);
+                    body = (BlockSyntax)new SimpleIdentifierRenamer(identifier, "value").Visit(body);
                 }
-            }
-            if (parameters.Parameters.Count > 1) {
-                isMultiParameter = true;
             }
         }
         else {
             throw new TransformException(propCtx, "Unknown property accessor");
         }
 
-        var prop = PropertyDeclaration(type, name)
-            .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
-            .WithAccessorList(AccessorList(
-                SingletonList(AccessorDeclaration(kind)
-                    .WithBody(body))));
+        var attr = propCtx.block().blockStmt().Select(b => b.attributeStmt())
+            .OfType<AttributeStmtContext>()
+            .FirstOrDefault();
 
-        if (isMultiParameter) {
-            prop = prop.WithError(TransformError.Create(propCtx, "Multi-value properties not supported"));
+        MemberDeclarationSyntax member;
+        if (attr != null 
+            && attr.implicitCallStmt_InStmt().GetText().EndsWith("VB_UserMemId") 
+            && attr.literal().Length == 1 && attr.literal()[0].INTEGERLITERAL() is ITerminalNode l && l.Symbol.Text == "0") {
+
+            member = IndexerDeclaration(type)
+                .WithModifiers(GetModifiers(propCtx.visibility(), false))
+                .WithParameterList(BracketedParameterList(SingletonSeparatedList(
+                    Parameter(parameters.Parameters[0].Identifier)
+                        .WithType(PredefinedType(Token(SyntaxKind.ObjectKeyword)))
+                )))
+                .WithAccessorList(AccessorList(
+                    SingletonList(AccessorDeclaration(kind)
+                        .WithBody(body))));
+
+            member = (MemberDeclarationSyntax)new ReturnValueRewriter(name).Visit(member);
+        }
+        else {
+            member = PropertyDeclaration(type, name)
+                .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
+                .WithAccessorList(AccessorList(
+                    SingletonList(AccessorDeclaration(kind)
+                        .WithBody(body))));
+        }
+        
+
+        if (parameters.Parameters.Count > 1) {
+            member = member.WithError(TransformError.Create(propCtx, "Multi-value properties not supported"));
         }
 
-        var mr = new ReturnValueRewriter();
-        prop = (PropertyDeclarationSyntax)mr.Visit(prop);
-        return prop;
+        member = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(member);
+        member = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(member);
+        return member;
     }
 
     public static MethodDeclarationSyntax GetExtern(DeclareStmtContext declare)

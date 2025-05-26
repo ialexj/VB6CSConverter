@@ -59,14 +59,19 @@ public static class CommonConverter
 
         TypeSyntax ts;
         if (type.complexType() is ComplexTypeContext complex) {
-            return complex.ToTypeSyntax();
+            if (complex.GetText() == "Currency") {
+                return PredefinedType(Token(SyntaxKind.DecimalKeyword));
+            }
+            else {
+                return complex.ToTypeSyntax();
+            }
         }
         else if (type.baseType() is BaseTypeContext baseType) {
             var typeSymbol = ((ITerminalNode)baseType.GetChild(0)).Symbol;
             ts = typeSymbol.Type switch {
                 BOOLEAN => Predefined(SyntaxKind.BoolKeyword),
                 BYTE => Predefined(SyntaxKind.ByteKeyword),
-                COLLECTION => ParseTypeName("List<object>").WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.Collections.Generic")),
+                COLLECTION => ParseTypeName("Collection"),
                 DATE => ParseTypeName("DateTime"),
                 DOUBLE => Predefined(SyntaxKind.DoubleKeyword),
                 INTEGER => Predefined(SyntaxKind.IntKeyword),

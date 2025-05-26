@@ -170,4 +170,28 @@ public class WithCallTests
         }
         """
         );
+
+    [TestMethod]
+    public void WithMemberAccess() => ValidateBodyMatches(
+        """
+        With a
+            b.c
+        End With
+        """,
+        """
+        b.c();
+        """);
+
+    [TestMethod]
+    public void WithSetAssign() => ValidateBodyMatches(
+        """
+        With a
+            Set .b.c = x
+        End With
+        """,
+        """
+        {
+            a.b.c = x;
+        }
+        """);
 }

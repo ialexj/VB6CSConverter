@@ -1,8 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.VisualBasic;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -74,7 +72,7 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
         var log = Log.ForFile(className);
 
         try {
-            var parse = Parse(input);
+            var parse = Parse(input, className);
             
             var cu = CompilationUnitConverter.GetCompilationUnit(
                 parse.Start.module(), nsName, className,

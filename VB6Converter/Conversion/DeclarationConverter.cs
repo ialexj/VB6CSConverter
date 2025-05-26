@@ -19,9 +19,9 @@ public static class DeclarationConverter
         foreach (var sub in @const.constSubStmt()) {
             var initializer = GetValue(sub.valueStmt(), default);
 
-            var type = sub.asTypeClause().ToTypeSyntax();
+            var type = sub.asTypeClause().ToTypeSyntax(true);
 
-            if (type is PredefinedTypeSyntax pre && pre.Keyword.IsKind(SyntaxKind.VoidKeyword)) {
+            if (type is PredefinedTypeSyntax pre && pre.Keyword.IsKind(SyntaxKind.ObjectKeyword)) {
                 if (initializer is LiteralExpressionSyntax literal) {
                     if (literal.IsKind(SyntaxKind.NumericLiteralExpression)) {
                         type = PredefinedType(Token(SyntaxKind.IntKeyword));
@@ -68,7 +68,7 @@ public static class DeclarationConverter
                 }
             }
 
-            var baseType = sub.asTypeClause().ToTypeSyntax();
+            var baseType = sub.asTypeClause().ToTypeSyntax(true);
             var type = isArray
                 ? ArrayType(baseType, SingletonList(ArrayRankSpecifier(SeparatedList<ExpressionSyntax>(omittedExpressions))))
                 : baseType;
