@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static VB6Converter.Tests.Validations;
 
-namespace VB6Converter.Tests;
+namespace VB6Converter.Tests.Conversion;
 
 [TestClass]
 public class SwitchTests
@@ -101,6 +101,51 @@ public class SwitchTests
         else
         {
             SomethingElse();
+        }
+        """);
+
+    [TestMethod]
+    public void MultipleValuesSwitch() => ValidateBodyMatches(
+        """
+        Select Case idx
+            Case 1, 2, 3
+                A
+            Case Else
+                B
+        End Select
+        """,
+        """
+        switch (idx)
+        {
+            case 1:
+            case 2:
+            case 3:
+                A();
+                break;
+            default:
+                B();
+                break;
+        }
+        """);
+
+    [TestMethod]
+    public void ToRangeFallbackIfChain() => ValidateBodyMatches(
+        """
+        Select Case idx
+            Case 1 To 5
+                A
+            Case Else
+                B
+        End Select
+        """,
+        """
+        if (idx >= 1 && idx <= 5)
+        {
+            A();
+        }
+        else
+        {
+            B();
         }
         """);
 }

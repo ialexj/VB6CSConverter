@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using static VB6Converter.Tests.Validations;
 
-namespace VB6Converter.Tests;
+namespace VB6Converter.Tests.Conversion;
 
 [TestClass]
 public class WithCallTests

@@ -1,6 +1,6 @@
 using static VB6Converter.Tests.Validations;
 
-namespace VB6Converter.Tests;
+namespace VB6Converter.Tests.Conversion;
 
 [TestClass]
 public class FunctionsTests

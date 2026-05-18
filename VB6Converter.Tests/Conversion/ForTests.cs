@@ -1,4 +1,4 @@
-namespace VB6Converter.Tests;
+namespace VB6Converter.Tests.Conversion;
 using static Validations;
 
 [TestClass]
@@ -85,6 +85,50 @@ public class ForTests
         """,
         """
         for (i = 1; i <= 10; i++)
+        {
+            break;
+        }
+        """);
+
+    [TestMethod]
+    public void ForEachConvertsToForeach() => ValidateBodyMatches(
+        """
+        Dim v As Variant
+        For Each v In values
+            UseValue v
+        Next
+        """,
+        """
+        object v = default;
+        foreach (var v in values)
+        {
+            UseValue(v);
+        }
+        """);
+
+    [TestMethod]
+    public void DoLoopConvertsToWhile() => ValidateBodyMatches(
+        """
+        Do While running
+            Tick
+        Loop
+        """,
+        """
+        while (running)
+        {
+            Tick();
+        }
+        """);
+
+    [TestMethod]
+    public void ExitDoBecomesBreak() => ValidateBodyMatches(
+        """
+        Do While running
+            Exit Do
+        Loop
+        """,
+        """
+        while (running)
         {
             break;
         }

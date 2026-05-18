@@ -7,6 +7,9 @@ using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests;
 
+// These tests are used to diagnose failures in real project conversions.
+// They should be used to isolate issues, generalize them, and find gaps in existing tests.
+
 [TestClass]
 public class DiagnosticTests
 {

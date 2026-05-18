@@ -1,6 +1,7 @@
 ﻿using static VB6Converter.Tests.Validations;
+using AwesomeAssertions;
 
-namespace VB6Converter.Tests;
+namespace VB6Converter.Tests.Conversion;
 
 [TestClass]
 public class RedimTests
@@ -31,4 +32,20 @@ public class RedimTests
         """
         arr = new object[10];
         """);
+
+    [TestMethod]
+    public void RedimPreserveMultiDimensionProducesTransformError()
+    {
+        var conversion = VB6ToCSharpConversion.ConvertString(
+            """
+            Sub Test()
+                ReDim Preserve arr(1, 2) As String
+            End Sub
+            """,
+            nameof(RedimPreserveMultiDimensionProducesTransformError));
+
+        conversion.ParseErrors.Should().BeEmpty();
+        conversion.SyntaxErrors.Should().BeEmpty();
+        conversion.TransformErrors.Should().Contain(e => e.Message.Contains("Multi-dimensional Redim Preserve not supported"));
+    }
 }
