@@ -20,3 +20,7 @@ In general, the way this works is:
 6. Attempt to generate stub classes for missing types and dependencies.
 8. As fixes accrue, the semantic model gets more refined, so the rewriters can do more work.
 9. Go back to 3 until the code stabilizes.
+
+## Coverage
+
+Use the `test: coverage` task or run `pwsh -File scripts/collect-coverage.ps1` to collect Cobertura coverage data for both test projects. Reports are copied into `TestResults/Coverage/<project>/coverage.cobertura.xml`, which keeps a stable workspace path for later inspection.
