@@ -128,7 +128,7 @@ public class DisambiguatorTests
     }
 
     [TestMethod]
-    public void Test()
+    public void CallOnObject_AssumesArray()
     {
         var cs = """
             class Test
