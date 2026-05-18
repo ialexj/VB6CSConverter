@@ -14,16 +14,16 @@ public class CompilationTests
     public void Compilation()
     {
         var cu1 = VB6ToCSharpConversion.ConvertString("""
-            Public Sub HelloWorld1()
+            Public Sub HelloWorld()
             End Sub
             """, 
-            "HelloWorld", "Test", VB6Parser.VisualBasicFileType.Module);
+            "HelloWorld1", "Test", VB6Parser.VisualBasicFileType.Module);
 
         var cu2 = VB6ToCSharpConversion.ConvertString("""
-            Public Sub HelloWorld2()
+            Public Sub HelloWorld()
             End Sub
             """,
-            "HelloWorld", "Test", VB6Parser.VisualBasicFileType.Module);
+            "HelloWorld2", "Test", VB6Parser.VisualBasicFileType.Module);
 
         var comp = VB6ToCSharpConversion.GetCompilation([cu1.CompilationUnit, cu2.CompilationUnit]);
 

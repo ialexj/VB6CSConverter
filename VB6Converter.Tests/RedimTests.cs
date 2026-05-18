@@ -14,6 +14,21 @@ public class RedimTests
         arr = new string[10, 10, 10];
         """);
 
-    // Redim without type to be fixed later with the semantic model
-    // Redim preserve tbd
+    [TestMethod]
+    public void RedimPreserve() => ValidateBodyMatches(
+        """
+        ReDim Preserve arr(10) As String
+        """,
+        """
+        Array.Resize(ref arr, 10);
+        """);
+
+    [TestMethod]
+    public void RedimWithoutTypeDefaultsToObject() => ValidateBodyMatches(
+        """
+        ReDim arr(10)
+        """,
+        """
+        arr = new object[10];
+        """);
 }

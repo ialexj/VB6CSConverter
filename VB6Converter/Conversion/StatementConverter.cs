@@ -419,16 +419,27 @@ public static class StatementConverter
     {
         using var _ = new TraceMethod(redim);
 
-        var statements = redim.redimSubStmt().Select(rd => {
+        var statements = redim.redimSubStmt().Select<RedimSubStmtContext, ExpressionSyntax>(rd => {
             var variable   = GetCallIdentifierExpression(rd.implicitCallStmt_InStmt(), ctx);
             var type       = rd.asTypeClause().ToTypeSyntax(true);
-            var subscripts = rd.subscripts().subscript().Select(s => GetValue(s.valueStmt(0), ctx));
-            var arrayType  = ArrayType(type, SingletonList(ArrayRankSpecifier(SeparatedList(subscripts))));
+            var subscripts = rd.subscripts().subscript().Select(s => GetValue(s.valueStmt(0), ctx)).ToArray();
 
             if (redim.PRESERVE() is not null) {
-                throw new TransformException(redim, "Redim Preserve not supported");
+                if (subscripts.Length != 1) {
+                    throw new TransformException(rd, "Multi-dimensional Redim Preserve not supported");
+                }
+
+                return InvocationExpression(
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName("Array"),
+                        IdentifierName("Resize")),
+                    ArgumentList(
+                        Argument(variable).WithRefKindKeyword(Token(SyntaxKind.RefKeyword)),
+                        Argument(subscripts[0])));
             }
             else {
+                var arrayType = ArrayType(type, SingletonList(ArrayRankSpecifier(SeparatedList(subscripts))));
                 return AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
                     variable, ArrayCreationExpression(arrayType));
             }

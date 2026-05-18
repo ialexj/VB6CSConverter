@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -12,7 +13,11 @@ public static class Validations
     public static void ValidateClassMatches(string vb, string cs, [CallerMemberName] string? name = null)
     {
         var cu = ConversionShouldSucceed(vb, name);
-        ValidateStringsMatch(cs, cu.Class.NormalizeWhitespace().ToFullString());
+
+        var normalizedClass = RemoveGeneratedCodeAttribute(cu.Class);
+
+
+        ValidateStringsMatch(cs, normalizedClass.NormalizeWhitespace().ToFullString());
     }
 
     public static void ValidateMemberMatches(string vb, string cs, [CallerMemberName] string? name = null)
@@ -94,5 +99,29 @@ public static class Validations
         actual = actual.ReplaceLineEndings(Environment.NewLine).TrimEnd(Environment.NewLine.ToCharArray());
         expected = expected.ReplaceLineEndings(Environment.NewLine).TrimEnd(Environment.NewLine.ToCharArray());
         actual.Should().Be(expected);
+    }
+
+    static ClassDeclarationSyntax RemoveGeneratedCodeAttribute(ClassDeclarationSyntax classDeclaration)
+    {
+        var attributesToRemove = classDeclaration.AttributeLists
+            .SelectMany(list => list.Attributes)
+            .Where(IsGeneratedCodeAttribute)
+            .ToList();
+
+        if (attributesToRemove.Count == 0) {
+            return classDeclaration;
+        }
+
+        var updatedClass = classDeclaration.RemoveNodes(attributesToRemove, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return updatedClass.WithAttributeLists(SyntaxFactory.List(updatedClass.AttributeLists.Where(list => list.Attributes.Count > 0)));
+    }
+
+    static bool IsGeneratedCodeAttribute(AttributeSyntax attribute)
+    {
+        var name = attribute.Name.ToString();
+        return name == "GeneratedCode"
+            || name == "GeneratedCodeAttribute"
+            || name.EndsWith(".GeneratedCode", StringComparison.Ordinal)
+            || name.EndsWith(".GeneratedCodeAttribute", StringComparison.Ordinal);
     }
 }

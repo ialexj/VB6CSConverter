@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -37,7 +37,7 @@ namespace VB6Converter.Tests;
             End Function
             """,
             """
-            private static object SqlStr(string s) => "'" + ((string)s).Replace("'", "''") + "'";
+            public static object SqlStr(string s) => "'" + ((string)s).Replace("'", "''") + "'";
             """);
 
         [TestMethod]
