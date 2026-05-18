@@ -1,5 +1,5 @@
-﻿namespace VB6Converter
-{
+﻿namespace VB6Converter;
+
     using Antlr4.Runtime;
     using System.IO;
 
@@ -13,4 +13,3 @@
             had_error = true;
         }
     }
-}

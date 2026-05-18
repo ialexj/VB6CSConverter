@@ -5,8 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using static VB6Parser.VisualBasic6Parser;
 
-namespace VB6Parser
-{
+namespace VB6Parser;
+
     public interface IMethodContext
     {
         bool IsFunction { get; }
@@ -36,4 +36,3 @@ namespace VB6Parser
             public bool IsFunction => true;
         }
     }
-}

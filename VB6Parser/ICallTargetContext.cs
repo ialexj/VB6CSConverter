@@ -1,8 +1,8 @@
 ﻿using Antlr4.Runtime.Tree;
 using static VB6Parser.VisualBasic6Parser;
 
-namespace VB6Parser
-{
+namespace VB6Parser;
+
     public interface ICallContext : IRuleNode, IParseTree, ISyntaxTree, ITree
     {
         bool IsPartial { get; }
@@ -240,4 +240,3 @@ namespace VB6Parser
             public IIdentifierContext identifier() => ambiguousIdentifier();
         }
     }
-}

@@ -14,7 +14,7 @@ See [README.md](README.md) for the motivation and high-level "How" overview.
 | `VB6Converter.Tests` | MSTest | Conversion integration and unit tests |
 | `VB6Parser.Tests` | MSTest | Parser-level unit tests |
 
-**Target Framework**: .NET 9.0, C# latest  
+**Target Framework**: .NET 10.0, C# latest  
 **Key Dependencies**: `Antlr4.Runtime.Standard`, `Microsoft.CodeAnalysis` (Roslyn), `CommandLineParser`, `Serilog`, `Spectre.Console`, `FluentAssertions` (tests)
 
 ---
@@ -23,10 +23,10 @@ See [README.md](README.md) for the motivation and high-level "How" overview.
 
 ```bash
 # Build entire solution
-dotnet build VB6Converter.sln
+dotnet build VB6Converter.slnx
 
 # Run all tests
-dotnet test VB6Converter.sln
+dotnet test VB6Converter.slnx
 
 # Run the converter
 dotnet run --project VB6Converter/VB6Converter.csproj -- \

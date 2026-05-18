@@ -6,8 +6,8 @@ using System.Text;
 using System.Threading.Tasks;
 using static VB6Parser.VisualBasic6Parser;
 
-namespace VB6Parser
-{
+namespace VB6Parser;
+
     public interface IOperatorContext : IParseTree
     {
         ValueStmtContext[] valueStmt();
@@ -53,4 +53,3 @@ namespace VB6Parser
         partial class VsIsContext : IOperatorContext { }
 
     }
-}

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="VB6Converter/VB6Converter.csproj" />
+    <Project Path="VB6Parser/VB6Parser.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="VB6Converter.Tests/VB6Converter.Tests.csproj" />
+    <Project Path="VB6Parser.Tests/VB6Parser.Tests.csproj" />
+  </Folder>
+</Solution>

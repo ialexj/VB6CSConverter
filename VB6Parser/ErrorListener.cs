@@ -1,6 +1,6 @@
 ﻿// Template generated code from Antlr4BuildTasks.Template v 8.17
-namespace VB6Parser
-{
+namespace VB6Parser;
+
     using Antlr4.Runtime;
     using Antlr4.Runtime.Misc;
     using System.IO;
@@ -29,4 +29,3 @@ namespace VB6Parser
             }
         }
     }
-}

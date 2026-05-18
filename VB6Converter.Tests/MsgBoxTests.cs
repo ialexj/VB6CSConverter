@@ -5,8 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using static VB6Converter.Tests.Validations;
 
-namespace VB6Converter.Tests
-{
+namespace VB6Converter.Tests;
+
     [TestClass]
     public class MsgBoxTests
     {
@@ -46,5 +46,3 @@ namespace VB6Converter.Tests
             "x = (z is null);");
 
     }
-
-}

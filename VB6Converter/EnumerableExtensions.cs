@@ -4,8 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace VB6Converter
-{
+namespace VB6Converter;
+
     public static class EnumerableExtensions
     {
         public static IEnumerable<T> Intersperse<T>(this IEnumerable<T> source, T element)
@@ -18,4 +18,3 @@ namespace VB6Converter
             }
         }
     }
-}

@@ -4,8 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace VB6Converter
-{
+namespace VB6Converter;
+
     public static class ConsoleColors
     {
         public static readonly string NL = Environment.NewLine; // shortcut
@@ -24,4 +24,3 @@ namespace VB6Converter
         public static readonly string REVERSE = Console.IsOutputRedirected ? "" : "\x1b[7m";
         public static readonly string NOREVERSE = Console.IsOutputRedirected ? "" : "\x1b[27m";
     }
-}

@@ -1,6 +1,6 @@
 ﻿// Template generated code from Antlr4BuildTasks.Template v 8.17
-namespace VB6Converter
-{
+namespace VB6Converter;
+
     using Antlr4.Runtime;
     using Antlr4.Runtime.Tree;
     using System.Text;
@@ -29,4 +29,3 @@ namespace VB6Converter
             return sb.ToString();
         }
     }
-}

@@ -2,8 +2,8 @@
 using Antlr4.Runtime.Tree;
 using System.Text;
 
-namespace VB6Parser
-{
+namespace VB6Parser;
+
     public static class TreeUtils
     {
         public static string ToStringTree(ITree t, IList<string> ruleNames)
@@ -50,4 +50,3 @@ namespace VB6Parser
             }
         }
     }
-}

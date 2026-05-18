@@ -5,8 +5,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace VB6Parser
-{
+namespace VB6Parser;
+
     public interface IVisibilityContext : IParseTree
     {
         ITerminalNode PRIVATE();
@@ -30,4 +30,3 @@ namespace VB6Parser
             public ITerminalNode FRIEND() => null;
         }
     }
-}

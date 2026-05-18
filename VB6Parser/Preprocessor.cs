@@ -19,7 +19,6 @@ internal static partial class Preprocessor
         var sb = new StringBuilder();
 
         bool inDesigner = false;
-        bool inContinuation = false;
 
         string continuedFrom = null;
 

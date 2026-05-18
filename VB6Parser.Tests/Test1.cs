@@ -1,24 +1,23 @@
-﻿using FluentAssertions;
+using AwesomeAssertions;
 
-namespace VB6Parser.Tests
+namespace VB6Parser.Tests;
+
+[TestClass]
+public sealed class Test1
 {
-    [TestClass]
-    public sealed class Test1
+    [TestMethod]
+    public void LineLabel()
     {
-        [TestMethod]
-        public void LineLabel()
-        {
-            var vb = """
-                Erro:
-                Exit Sub
-                """;
+        var vb = """
+            Erro:
+            Exit Sub
+            """;
 
-            var parse = VisualBasic6Parser.Parse(new StringReader(vb));
-            var block = parse.Parser.block();
-            var statements = block.blockStmt();
+        var parse = VisualBasic6Parser.Parse(new StringReader(vb));
+        var block = parse.Parser.block();
+        var statements = block.blockStmt();
 
-            statements.Should().HaveCount(2);
-            statements[0].lineLabel().Should().NotBeNull();
-        }
+        statements.Should().HaveCount(2);
+        statements[0].lineLabel().Should().NotBeNull();
     }
 }
