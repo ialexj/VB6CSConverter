@@ -172,6 +172,7 @@ blockStmt
    | implicitCallStmt_InBlock
    | inputStmt
    | killStmt
+   | setStmt
    | letStmt
    | lineInputStmt
    | lineLabel
@@ -202,7 +203,6 @@ blockStmt
    | selectCaseStmt
    | sendkeysStmt
    | setattrStmt
-   | setStmt
    | stopStmt
    | timeStmt
    | unloadStmt
