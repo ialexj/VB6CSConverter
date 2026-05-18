@@ -172,6 +172,7 @@ public static class Program
                 await RunRewriter(true, "Finding Types", (t, sm) => new TypeFinder(sm, ws.DefaultNamespace));              
                 await RunRewriter(true, "Finding Members", (t, sm) => new MemberFinder(sm));
                 await RunRewriter(true, "Disambiguate Array Access", (t, sm) => new ArrayCallDisambiguator(sm));
+                await RunRewriter(true, "Rewriting parameterized property setters", (t, sm) => new ParameterizedPropertyRewriter(sm));
 
 
                 var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();

@@ -1,7 +1,3 @@
-using AwesomeAssertions;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System.Runtime.CompilerServices;
 using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests.Conversion;
@@ -193,6 +189,31 @@ public sealed class ClassTests
             {
                 testVar = value;
             }
+        }
+        """);
+
+    [TestMethod]
+    public void ParameterizedPropertyGetter() => ValidateMemberMatches(
+        """
+        Public Property Get NotaEncomenda(ByVal NewTipoNE As Byte, ByVal NewIDNE As Long) As Long
+            NotaEncomenda = 0
+        End Property
+        """,
+        """
+        // VB6 multi-value property getter
+        public static int NotaEncomenda(byte NewTipoNE, int NewIDNE) => 0;
+        """);
+
+    [TestMethod]
+    public void ParameterizedPropertySetter() => ValidateMemberMatches(
+        """
+        Public Property Let NotaEncomenda(ByVal NewTipoNE As Byte, ByVal NewIDNE As Long, ByVal NewIdFrn As Long)
+        End Property
+        """,
+        """
+        // VB6 multi-value property setter
+        public static void SetNotaEncomenda(byte NewTipoNE, int NewIDNE, int NewIdFrn)
+        {
         }
         """);
 

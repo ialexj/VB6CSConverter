@@ -352,6 +352,30 @@ public static class ClassConverter
         var body = StatementConverter.GetBlock(propCtx.block(), default);
         var parameters = GetMethodParameters(propCtx.argList());
 
+        // Multi-value (parameterized) property: no direct C# equivalent, emit as methods.
+        if (propCtx is PropertyGetStmtContext getMulti && parameters.Parameters.Count > 0) {
+            var retType = CommonConverter.ToTypeSyntax(getMulti.asTypeClause(), true);
+            MemberDeclarationSyntax getter = MethodDeclaration(retType, name)
+                .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
+                .WithParameterList(parameters)
+                .WithBody(body);
+            getter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(getter);
+            getter = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(getter);
+            var getTrivia = getter.GetLeadingTrivia().Insert(0, Comment("// VB6 multi-value property getter"));
+            return getter.WithLeadingTrivia(getTrivia);
+        }
+
+        if (propCtx is IPropertySetContext && parameters.Parameters.Count > 1) {
+            var setName = Identifier("Set" + name.Text);
+            MemberDeclarationSyntax setter = MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), setName)
+                .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
+                .WithParameterList(parameters)
+                .WithBody(body);
+            setter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(setter);
+            var setTrivia = setter.GetLeadingTrivia().Insert(0, Comment("// VB6 multi-value property setter"));
+            return setter.WithLeadingTrivia(setTrivia);
+        }
+
         SyntaxKind kind;
 
         if (propCtx is PropertyGetStmtContext get) {
@@ -403,10 +427,6 @@ public static class ClassConverter
                         .WithBody(body))));
         }
         
-
-        if (parameters.Parameters.Count > 1) {
-            member = member.WithError(TransformError.Create(propCtx, "Multi-value properties not supported"));
-        }
 
         member = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(member);
         member = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(member);
