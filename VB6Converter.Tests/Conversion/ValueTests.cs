@@ -153,4 +153,140 @@ public class ValueTests
         """
         x = a is b;
         """);
+
+    [TestMethod]
+    public void NewExpressionInValue() => ValidateBodyMatches(
+        """
+        x = New Database
+        """,
+        """
+        x = new Database();
+        """);
+
+    [TestMethod]
+    public void AdditionOperator() => ValidateBodyMatches(
+        """
+        x = a + b
+        """,
+        """
+        x = a + b;
+        """);
+
+    [TestMethod]
+    public void SubtractionOperator() => ValidateBodyMatches(
+        """
+        x = a - b
+        """,
+        """
+        x = a - b;
+        """);
+
+    [TestMethod]
+    public void MultiplyOperator() => ValidateBodyMatches(
+        """
+        x = a * b
+        """,
+        """
+        x = a * b;
+        """);
+
+    [TestMethod]
+    public void DivideOperator() => ValidateBodyMatches(
+        """
+        x = a / b
+        """,
+        """
+        x = a / b;
+        """);
+
+    [TestMethod]
+    public void UnaryNegationOperator() => ValidateBodyMatches(
+        """
+        x = -a
+        """,
+        """
+        x = -a;
+        """);
+
+    [TestMethod]
+    public void LogicalAndOperator() => ValidateBodyMatches(
+        """
+        x = a And b
+        """,
+        """
+        x = a && b;
+        """);
+
+    [TestMethod]
+    public void LogicalOrOperator() => ValidateBodyMatches(
+        """
+        x = a Or b
+        """,
+        """
+        x = a || b;
+        """);
+
+    [TestMethod]
+    public void LogicalNotOperator() => ValidateBodyMatches(
+        """
+        x = Not a
+        """,
+        """
+        x = !a;
+        """);
+
+    [TestMethod]
+    public void GreaterThanOperator() => ValidateBodyMatches(
+        """
+        x = a > b
+        """,
+        """
+        x = a > b;
+        """);
+
+    [TestMethod]
+    public void GreaterThanOrEqualOperator() => ValidateBodyMatches(
+        """
+        x = a >= b
+        """,
+        """
+        x = a >= b;
+        """);
+
+    [TestMethod]
+    public void LessThanOperator() => ValidateBodyMatches(
+        """
+        x = a < b
+        """,
+        """
+        x = a < b;
+        """);
+
+    [TestMethod]
+    public void LessThanOrEqualOperator() => ValidateBodyMatches(
+        """
+        x = a <= b
+        """,
+        """
+        x = a <= b;
+        """);
+
+    [TestMethod]
+    public void ColorLiteralHexForm() => ValidateBodyMatches(
+        """
+        x = &HC0C0C0
+        """,
+        """
+        x = 0xC0C0C0;
+        """);
+    
+
+    [TestMethod]
+    public void FileNumberLiteralBecomesString() => ValidateBodyMatches(
+        """
+        x = #1
+        """,
+        """
+        x = "1";
+        """);
 }

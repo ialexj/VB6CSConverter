@@ -269,7 +269,7 @@ public static class ValueConverter
             return InvocationExpression(ParseName("Math.Pow"), ArgumentList(values));
         }
 
-        SyntaxKind kind = oper switch {
+        SyntaxKind? kind = oper switch {
             VsAmpContext => SyntaxKind.AddExpression, // string concat
 
             VsAddContext => SyntaxKind.AddExpression,
@@ -294,17 +294,23 @@ public static class ValueConverter
 
             VsIsContext => SyntaxKind.IsExpression,
 
-            _ => throw new TransformException(oper, "Invalid operator.")
+            _ => (SyntaxKind?)null
         };
 
+        if (kind is null) {
+            return ParseExpression("default")
+                .WithError(TransformError.Create(oper, "Invalid operator."));
+        }
+
         if (values.Length == 1) {
-            return PrefixUnaryExpression(kind, values[0]);
+            return PrefixUnaryExpression(kind.Value, values[0]);
         }
         else if (values.Length == 2) {
-            return BinaryExpression(kind, values[0], values[1]);
+            return BinaryExpression(kind.Value, values[0], values[1]);
         }
         else {
-            throw new TransformException(oper, "Invalid operator type");
+            return ParseExpression("default")
+                .WithError(TransformError.Create(oper, "Invalid operator type"));
         }
     }
 

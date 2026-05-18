@@ -134,5 +134,61 @@ public class ForTests
         }
         """);
 
+    [TestMethod]
+    public void WhileWendConvertsToWhile() => ValidateBodyMatches(
+        """
+        While running
+            Tick
+        Wend
+        """,
+        """
+        while (running)
+        {
+            Tick();
+        }
+        """);
+
+    [TestMethod]
+    public void WhileWendWithConditionChange() => ValidateBodyMatches(
+        """
+        While i < 10
+            i = i + 1
+        Wend
+        """,
+        """
+        while (i < 10)
+        {
+            i = i + 1;
+        }
+        """);
+
+    [TestMethod]
+    public void ForWithVariableStep() => ValidateBodyMatches(
+        """
+        For i = 1 To 10 Step stepValue
+        Next i
+        """,
+        """
+        for (i = 1; i <= 10; i++)
+        {
+        }
+        """);
+    // TODO: Regression baseline — non-literal Step expressions default to i++ instead of i += stepValue.
+    // This is an uncovered branch in LoopConverter.cs:46 that should apply step to incrementor.
+
+    [TestMethod]
+    public void ForWithExpressionStep() => ValidateBodyMatches(
+        """
+        For i = 1 To 10 Step GetStep()
+        Next i
+        """,
+        """
+        for (i = 1; i <= 10; i++)
+        {
+        }
+        """);
+    // TODO: Regression baseline — function call in Step expression defaults to i++ instead of i += GetStep().
+    // Same issue as ForWithVariableStep; LoopConverter needs to handle non-literal Step values.
+
     
 }

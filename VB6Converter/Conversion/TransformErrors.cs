@@ -35,11 +35,6 @@ public static class TransformErrors
         }
     }
 
-    public static T WithError<T>(this T node, TransformException error) where T : SyntaxNode
-    {
-        return node.WithError(TransformError.Create(error.Tree, error.Message, error.TargetSite.Name));
-    }
-
     public static T WithError<T>(this T node, TransformError error) where T : SyntaxNode
     {
         var trivia = node.GetLeadingTrivia();
@@ -61,19 +56,6 @@ public static class TransformErrors
         return token.WithLeadingTrivia(Comment($"/* ERROR: {error.Message} */"))
             .WithAdditionalAnnotations(GetErrorAnnotations(error));
     }
-}
-
-
-[Serializable]
-public class TransformException : Exception
-{
-    public TransformException(IParseTree tree, string message) : base(message) 
-    {
-        ArgumentNullException.ThrowIfNull(tree);
-        Tree = tree;
-    }
-
-    public IParseTree Tree { get; }
 }
 
 public record class TransformError(string Message, string Source, string ErrorTree, int Line, int Col)

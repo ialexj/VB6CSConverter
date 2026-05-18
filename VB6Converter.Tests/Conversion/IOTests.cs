@@ -36,6 +36,8 @@ public class IOTests
         body.Should().Contain("FileAccess.ReadWrite");
         body.Should().Contain("FileShare.None");
     }
+    // TODO: Regression baseline — VB6 "For Output" is write-only so should map to FileAccess.Write, not FileAccess.ReadWrite.
+    // StatementConverter Open-mode dispatch assigns ReadWrite for Output mode incorrectly.
 
     [TestMethod]
     public void OpenInputSharedUsesReadWriteShare()

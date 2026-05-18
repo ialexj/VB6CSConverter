@@ -57,38 +57,29 @@ public static class StatementConverter
         {
             using var _ = new TraceMethod(stmt);
 
-            try {
-                if (stmt.constStmt() is ConstStmtContext @const) {
-                    return DeclarationConverter.GetConstantDeclarations(@const).Select(LocalDeclarationStatement);
-                }
-                else if (stmt.variableStmt() is VariableStmtContext var) {
-                    return DeclarationConverter.GetVariableDeclarations(var, true).Select(LocalDeclarationStatement);
-                }
-                else if (stmt.eraseStmt() is EraseStmtContext erase) {
-                    return GetErase(erase, ctx);
-                }
-                else if (stmt.attributeStmt() is AttributeStmtContext attribute) {
-                    return []; // nothing
-                }
-                else if (stmt.sendkeysStmt() is SendkeysStmtContext sendKeys) {
-                    var sendExpr = QualifiedName(IdentifierName("SendKeys"), IdentifierName("Send"));
-                    return sendKeys.valueStmt().Select(send => {
-                        var value = GetValue(send, ctx);
-                        return ExpressionStatement(
-                            InvocationExpression(sendExpr, ArgumentList(value))
-                        );
-                    });
-                }
-                else {
-                    return [ GetMethodStatement(stmt, ctx) ];
-                }
+            if (stmt.constStmt() is ConstStmtContext @const) {
+                return DeclarationConverter.GetConstantDeclarations(@const).Select(LocalDeclarationStatement);
             }
-            catch (TransformException nse) {
-                return [
-                    EmptyStatement()
-                        .WithError(TransformError.Create(stmt, nse.Message, stmt.GetText()))
-                        .WithTrailingTrivia(Whitespace(Environment.NewLine))
-                ];
+            else if (stmt.variableStmt() is VariableStmtContext var) {
+                return DeclarationConverter.GetVariableDeclarations(var, true).Select(LocalDeclarationStatement);
+            }
+            else if (stmt.eraseStmt() is EraseStmtContext erase) {
+                return GetErase(erase, ctx);
+            }
+            else if (stmt.attributeStmt() is AttributeStmtContext attribute) {
+                return []; // nothing
+            }
+            else if (stmt.sendkeysStmt() is SendkeysStmtContext sendKeys) {
+                var sendExpr = QualifiedName(IdentifierName("SendKeys"), IdentifierName("Send"));
+                return sendKeys.valueStmt().Select(send => {
+                    var value = GetValue(send, ctx);
+                    return ExpressionStatement(
+                        InvocationExpression(sendExpr, ArgumentList(value))
+                    );
+                });
+            }
+            else {
+                return [ GetMethodStatement(stmt, ctx) ];
             }
         }
 
@@ -201,7 +192,8 @@ public static class StatementConverter
             }
 
             else {
-                throw new TransformException(stmt, "Unknown statement");
+                return EmptyStatement()
+                    .WithError(TransformError.Create(stmt, "Unknown statement"));
             }
         }
     }
@@ -278,7 +270,8 @@ public static class StatementConverter
             return current;
         }
         else {
-            throw new TransformException(ifthen, "Unknown if statement");
+            return EmptyStatement()
+                .WithError(TransformError.Create(ifthen, "Unknown if statement"));
         }
     }
 
@@ -286,49 +279,55 @@ public static class StatementConverter
     {
         var condition = GetValue(select.valueStmt(), ctx);
 
-        IEnumerable<SwitchSectionSyntax> GetSections()
-        {
-            foreach (var caseStmt in select.sC_Case()) {
-                var block = GetBlock(caseStmt.block(), ctx).AddStatements(BreakStatement());
+        static bool CanBeSwitch(SelectCaseStmtContext select) =>
+            select.sC_Case().All(c =>
+                c.sC_Cond() is CaseCondElseContext ||
+                (c.sC_Cond() is CaseCondExprContext expr &&
+                 expr.sC_CondExpr().All(e => e is CaseCondExprValueContext)));
 
-                if (caseStmt.sC_Cond() is CaseCondExprContext expr) {
-                    var labels = List(GetLabels(expr).ToArray());
-                    yield return SwitchSection(labels, block.Statements);
-                }
-                else if (caseStmt.sC_Cond() is CaseCondElseContext @else) {
-                    var labels = SingletonList<SwitchLabelSyntax>(DefaultSwitchLabel());
-                    yield return SwitchSection(labels, block.Statements);
-                }
-                else {
-                    throw new TransformException(caseStmt, "Unknown case arm");
+        if (CanBeSwitch(select)) {
+            IEnumerable<SwitchSectionSyntax> GetSections()
+            {
+                foreach (var caseStmt in select.sC_Case()) {
+                    var block = GetBlock(caseStmt.block(), ctx).AddStatements(BreakStatement());
+
+                    if (caseStmt.sC_Cond() is CaseCondExprContext expr) {
+                        var labels = List(GetLabels(expr).ToArray());
+                        yield return SwitchSection(labels, block.Statements);
+                    }
+                    else if (caseStmt.sC_Cond() is CaseCondElseContext) {
+                        yield return SwitchSection(
+                            SingletonList<SwitchLabelSyntax>(DefaultSwitchLabel()),
+                            block.Statements);
+                    }
+                    else {
+                        yield return SwitchSection(
+                            SingletonList<SwitchLabelSyntax>(
+                                CaseSwitchLabel(ParseExpression("default")
+                                    .WithError(TransformError.Create(caseStmt, "Unknown case arm")))),
+                            SingletonList<StatementSyntax>(BreakStatement()));
+                    }
                 }
             }
-        }
-        ;
 
-        IEnumerable<SwitchLabelSyntax> GetLabels(CaseCondExprContext cond)
-        {
-            foreach (var c in cond.sC_CondExpr()) {
-                if (c is CaseCondExprValueContext valueCond) {
-                    var value = GetValue(valueCond.valueStmt(), ctx);
-                    yield return CaseSwitchLabel(value);
-                }
-                else if (c is CaseCondExprIsContext isCond) {
-                    throw new TransformException(isCond, "Can't translate IS condition.");
-                }
-                else if (c is CaseCondExprToContext toCond) {
-                    throw new TransformException(toCond, "Can't translate TO condition.");
-                }
-                else {
-                    throw new TransformException(c, "Unknown case condition");
+            IEnumerable<SwitchLabelSyntax> GetLabels(CaseCondExprContext cond)
+            {
+                foreach (var c in cond.sC_CondExpr()) {
+                    if (c is CaseCondExprValueContext valueCond) {
+                        var value = GetValue(valueCond.valueStmt(), ctx);
+                        yield return CaseSwitchLabel(value);
+                    }
+                    else {
+                        yield return CaseSwitchLabel(
+                            ParseExpression("default")
+                                .WithError(TransformError.Create(c, "Unknown case condition")));
+                    }
                 }
             }
-        }
 
-        try {
             return SwitchStatement(condition, List(GetSections()));
         }
-        catch (TransformException) {
+        else {
             return SelectCaseAsIf(select, ctx);
         }
     }
@@ -349,52 +348,55 @@ public static class StatementConverter
                     clauses.Add(IfStatement(label, block));
                 }
             }
-            else if (caseStmt.sC_Cond() is CaseCondElseContext caseElse) {
+            else if (caseStmt.sC_Cond() is CaseCondElseContext) {
                 @else = ElseClause(block);
             }
             else {
-                throw new TransformException(caseStmt, "Unknown case arm");
+                clauses.Add(IfStatement(
+                        LiteralExpression(SyntaxKind.FalseLiteralExpression),
+                        Block())
+                    .WithError(TransformError.Create(caseStmt, "Unknown case arm")));
             }
         }
 
         ExpressionSyntax GetCondition(ExpressionSyntax condition, SC_CondExprContext c)
         {
-            switch (c) {
-                case CaseCondExprValueContext valueCond:
-                    var value = GetValue(valueCond.valueStmt(), ctx);
-                    return BinaryExpression(SyntaxKind.EqualsExpression, condition, value);
+            if (c is CaseCondExprValueContext valueCond) {
+                var value = GetValue(valueCond.valueStmt(), ctx);
+                return BinaryExpression(SyntaxKind.EqualsExpression, condition, value);
+            }
+            else if (c is CaseCondExprToContext toCond) {
+                var min = GetValue(toCond.valueStmt(0), ctx);
+                var max = GetValue(toCond.valueStmt(1), ctx);
+                return BinaryExpression(SyntaxKind.LogicalAndExpression,
+                    BinaryExpression(SyntaxKind.GreaterThanOrEqualExpression, condition, min),
+                    BinaryExpression(SyntaxKind.LessThanOrEqualExpression, condition, max));
+            }
+            else if (c is CaseCondExprIsContext isCond) {
+                var comparison = isCond.comparisonOperator();
+                SyntaxKind? kind = ((ITerminalNode)comparison.GetChild(0)).Symbol.Type switch {
+                    LT => SyntaxKind.LessThanExpression,
+                    LEQ => SyntaxKind.LessThanOrEqualExpression,
+                    GT => SyntaxKind.GreaterThanExpression,
+                    GEQ => SyntaxKind.GreaterThanOrEqualExpression,
+                    EQ => SyntaxKind.EqualsExpression,
+                    NEQ => SyntaxKind.NotEqualsExpression,
+                    _ => (SyntaxKind?)null
+                };
 
+                if (kind is null) {
+                    return ParseExpression("false")
+                        .WithError(TransformError.Create(comparison, $"Not supported '{comparison.GetText()}' condition"));
+                }
 
-                case CaseCondExprToContext toCond:
-                    var min = GetValue(toCond.valueStmt(0), ctx);
-                    var max = GetValue(toCond.valueStmt(1), ctx);
-
-                    return BinaryExpression(SyntaxKind.LogicalAndExpression,
-                        BinaryExpression(SyntaxKind.GreaterThanOrEqualExpression, condition, min),
-                        BinaryExpression(SyntaxKind.LessThanOrEqualExpression, condition, max));
-
-                case CaseCondExprIsContext isCond:
-                    var comparison = isCond.comparisonOperator();
-                    var kind = ((ITerminalNode)comparison.GetChild(0)).Symbol.Type switch {
-                        LT => SyntaxKind.LessThanExpression,
-                        LEQ => SyntaxKind.LessThanOrEqualExpression,
-                        GT => SyntaxKind.GreaterThanExpression,
-                        GEQ => SyntaxKind.GreaterThanOrEqualExpression,
-                        EQ => SyntaxKind.EqualsExpression,
-                        NEQ => SyntaxKind.NotEqualsExpression,
-                        IS => throw new TransformException(comparison, "Not supported 'IS' condition."),
-                        LIKE => throw new TransformException(comparison, "Not supported 'LIKE' case condition"),
-                        _ => throw new TransformException(comparison, "Unknown case condition")
-                    };
-
-                    var v = GetValue(isCond.valueStmt(), ctx);
-                    return BinaryExpression(kind, condition, v);
-
-                default:
-                    throw new TransformException(c, "Not supported case arm type");
+                var v = GetValue(isCond.valueStmt(), ctx);
+                return BinaryExpression(kind.Value, condition, v);
+            }
+            else {
+                return ParseExpression("false")
+                    .WithError(TransformError.Create(c, "Not supported case arm type"));
             }
         }
-
 
         if (clauses.Count == 1) {
             return @else != null ? clauses[0].WithElse(@else) : (StatementSyntax)clauses[0];
@@ -426,7 +428,8 @@ public static class StatementConverter
 
             if (redim.PRESERVE() is not null) {
                 if (subscripts.Length != 1) {
-                    throw new TransformException(rd, "Multi-dimensional Redim Preserve not supported");
+                    return ParseExpression("default")
+                        .WithError(TransformError.Create(rd, "Multi-dimensional Redim Preserve not supported"));
                 }
 
                 return InvocationExpression(
@@ -461,7 +464,8 @@ public static class StatementConverter
         var variable = name switch {
             IdentifierNameSyntax n => n,
             LiteralExpressionSyntax l => IdentifierName(l.Token.ValueText.Trim('"', '#')),
-            _ => throw new TransformException(open.valueStmt(1), "Unknown open type")
+            _ => IdentifierName("_unknown")
+                .WithError(TransformError.Create(open.valueStmt(1), "Unknown open type"))
         };
 
         string GetFileAccess()
@@ -538,17 +542,20 @@ public static class StatementConverter
 
         var outputs = print.outputList().outputList_Expression().Select(o => {
             if (o.SPC() is not null) {
-                throw new TransformException(o, "Print SPC not supported.");
+                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(""))
+                    .WithError(TransformError.Create(o, "Print SPC not supported."));
             }
             if (o.TAB() is not null) {
-                throw new TransformException(o, "Print TAB not supported.");
+                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(""))
+                    .WithError(TransformError.Create(o, "Print TAB not supported."));
             }
 
             if (o.valueStmt() is ValueStmtContext value) {
                 return GetValue(value, ctx);
             }
             else {
-                throw new TransformException(o, "Print without value");
+                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(""))
+                    .WithError(TransformError.Create(o, "Print without value"));
             }
         }).ToArray();
 
@@ -627,7 +634,8 @@ public static class StatementConverter
             return BreakStatement();
         }
         else {
-            throw new TransformException(exit, "Unknown exit type");
+            return EmptyStatement()
+                .WithError(TransformError.Create(exit, "Unknown exit type"));
         }
     }
 

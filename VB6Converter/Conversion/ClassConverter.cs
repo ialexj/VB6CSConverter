@@ -147,11 +147,13 @@ public static class ClassConverter
                             valueSyntax = GetIdentifierName(amb);
                         }
                         else {
-                            throw new TransformException(single, "Unknown property value");
+                            valueSyntax = ParseExpression("default")
+                                .WithError(TransformError.Create(single, "Unknown property value"));
                         }
                     }
                     else {
-                        throw new TransformException(single, "Property without value");
+                        valueSyntax = ParseExpression("default")
+                            .WithError(TransformError.Create(single, "Property without value"));
                     }
 
                     yield return (name, valueSyntax);
@@ -190,7 +192,7 @@ public static class ClassConverter
                             // ignore
                         }
                         else {
-                            throw new TransformException(stmt, "Unknown class member declaration");
+                            yield return GetErrorField(stmt, "Unknown class member declaration");
                         }
                     }
                 }
@@ -231,21 +233,18 @@ public static class ClassConverter
             }
 
             else {
-                throw new TransformException(e, "Unknown member declaration");
+                yield return GetErrorField(e, "Unknown member declaration");
             }
         }
 
-        try {
-            return [.. GetMembers()];
-        }
-        catch (TransformException nse) {
-            return [
-                FieldDeclaration(VariableDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)))
-                    .WithVariables(SingletonSeparatedList(VariableDeclarator("TransformError"))))
-                .WithError(nse)
-            ];
-        }
+        return [.. GetMembers()];
     }
+
+    static FieldDeclarationSyntax GetErrorField(IParseTree ctx, string message) =>
+        FieldDeclaration(
+            VariableDeclaration(PredefinedType(Token(SyntaxKind.ObjectKeyword)))
+                .WithVariables(SingletonSeparatedList(VariableDeclarator("_unknown"))))
+        .WithError(TransformError.Create(ctx, message));
 
 
     public static SyntaxTokenList GetModifiers(IVisibilityContext visibility, bool isStatic, params SyntaxKind[] extra)
@@ -395,7 +394,7 @@ public static class ClassConverter
             }
         }
         else {
-            throw new TransformException(propCtx, "Unknown property accessor");
+            return GetErrorField(propCtx, "Unknown property accessor");
         }
 
         var attr = propCtx.block().blockStmt().Select(b => b.attributeStmt())
