@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Antlr
+VB6Parser/.antlr*
+
+# Local launchSettings
+VB6Converter/Properties/launchSettings.json
