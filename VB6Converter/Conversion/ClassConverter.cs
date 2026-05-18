@@ -1,5 +1,4 @@
 ﻿using Antlr4.Runtime.Tree;
-using Microsoft.Build.Framework;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;

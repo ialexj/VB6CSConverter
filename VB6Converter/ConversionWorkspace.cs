@@ -1,9 +1,8 @@
-﻿using Microsoft.Build.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
-using Microsoft.Extensions.Options;
+using Microsoft.Build.Locator;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
@@ -12,13 +11,14 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using VB6Converter.Conversion;
-using VB6Converter.Rewriters;
 using VB6Parser;
 
 namespace VB6Converter;
 
 public sealed class ConversionWorkspace : IDisposable
 {
+    static readonly object _msbuildLock = new();
+
     readonly MSBuildWorkspace _ws;
     readonly bool _overwriteNonGenerated;
 
@@ -26,8 +26,33 @@ public sealed class ConversionWorkspace : IDisposable
     {
         _overwriteNonGenerated = overwriteNonGenerated;
 
+        EnsureMsBuildRegistered();
+
         _ws = MSBuildWorkspace.Create();
-        _ws.WorkspaceFailed += (s, e) => Log.Default.Warning("Workspace failed: {error}", e.Diagnostic);
+        _ws.RegisterWorkspaceFailedHandler(e => Log.Default.Warning("Workspace failed: {error}", e.Diagnostic));
+    }
+
+    static void EnsureMsBuildRegistered()
+    {
+        lock (_msbuildLock) {
+            if (MSBuildLocator.IsRegistered) {
+                return;
+            }
+
+            var instances = MSBuildLocator.QueryVisualStudioInstances()
+                .OrderByDescending(i => i.Version)
+                .ToArray();
+
+            if (instances.Length > 0) {
+                var instance = instances[0];
+                MSBuildLocator.RegisterInstance(instance);
+                Log.Default.Information("Using MSBuild from {path} ({version})", instance.MSBuildPath, instance.Version);
+            }
+            else {
+                var instance = MSBuildLocator.RegisterDefaults();
+                Log.Default.Information("Using MSBuild from {path} ({version})", instance.MSBuildPath, instance.Version);
+            }
+        }
     }
 
     public void Dispose() => _ws.Dispose();
@@ -80,7 +105,7 @@ public sealed class ConversionWorkspace : IDisposable
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
                     <OutputType>Exe</OutputType>
-                    <TargetFramework>net9.0</TargetFramework>
+                    <TargetFramework>net10.0</TargetFramework>
                     <LangVersion>latest</LangVersion>
                     <UseWindowsForms>true</UseWindowsForms>
                   </PropertyGroup>

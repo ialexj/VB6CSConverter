@@ -1,4 +1,4 @@
-﻿using CommandLine;
+using CommandLine;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -8,7 +8,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Numerics;
 using System.Threading.Tasks;
 using VB6Converter.Rewriters;
 using VB6Converter.Rewriters.Semantic;
@@ -52,7 +51,15 @@ public static class Program
         public bool OverwriteNonGenerated { get; set; }
     }
 
-    public static Task Main(string[] args) => Run(Parser.Default.ParseArguments<CommandLineOptions>(args).Value);
+    public static Task Main(string[] args)
+    {
+        var parsed = Parser.Default.ParseArguments<CommandLineOptions>(args);
+        if (parsed.Errors.Any()) {
+            return Task.CompletedTask;
+        }
+
+        return Run(parsed.Value);
+    }
 
     static async Task Run(CommandLineOptions options)
     {
