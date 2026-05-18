@@ -1,4 +1,4 @@
-﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -18,7 +18,7 @@ public static class DiagnosticsReport
         writer.WriteLine("=======================================================");
         writer.WriteLine("Files:");
 
-        foreach (var file in diagnostics.Where(d => d.Location != null).GroupBy(d => d.Location.SourceTree.FilePath).OrderByDescending(f => f.Count())) {
+        foreach (var file in diagnostics.Where(d => d.Location?.SourceTree != null).GroupBy(d => d.Location.SourceTree.FilePath).OrderByDescending(f => f.Count())) {
             writer.WriteLine($"--- {Path.GetFileNameWithoutExtension(file.Key)} ---");
             WriteStatistics(writer, file, "   ");
 

@@ -105,7 +105,7 @@ public sealed class ConversionWorkspace : IDisposable
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
                     <OutputType>Exe</OutputType>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net10.0-windows</TargetFramework>
                     <LangVersion>latest</LangVersion>
                     <UseWindowsForms>true</UseWindowsForms>
                   </PropertyGroup>
