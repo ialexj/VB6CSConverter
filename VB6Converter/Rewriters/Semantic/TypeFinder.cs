@@ -5,7 +5,7 @@ using System;
 
 namespace VB6Converter.Rewriters.Semantic;
 
-public class TypeFinder(SemanticModel sem, string defaultNamespace) : LoggedRewriter
+public class TypeFinder(SemanticModel sem) : LoggedRewriter
 {
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
         => Log.Rewrite(this, node, node => {

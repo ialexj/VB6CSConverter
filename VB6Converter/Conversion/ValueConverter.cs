@@ -1,4 +1,4 @@
-﻿using Antlr4.Runtime.Tree;
+using Antlr4.Runtime.Tree;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -161,7 +161,7 @@ public static class ValueConverter
         else if (lit.DATELITERAL() is ITerminalNode @date) {
             var text = date.Symbol.Text.Trim('#');
             return InvocationExpression(
-                ParseExpression("DateTime.Parse"),
+                ParseExpression("System.DateTime.Parse"),
                 ArgumentList(
                     LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(text))
                 ));

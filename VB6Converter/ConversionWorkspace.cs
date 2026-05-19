@@ -184,7 +184,15 @@ public sealed class ConversionWorkspace : IDisposable
     Document GetOrCreateDocument(ConversionTarget target)
     {
         lock (_ws) {
-            var doc = Project.Documents.FirstOrDefault(d => string.Equals(d.Name, target.OutputDocumentName, StringComparison.CurrentCultureIgnoreCase));
+            var targetPath = Path.GetFullPath(target.OutputPath);
+
+            var doc = Project.Documents.FirstOrDefault(d => !string.IsNullOrEmpty(d.FilePath)
+                && string.Equals(Path.GetFullPath(d.FilePath), targetPath, StringComparison.CurrentCultureIgnoreCase));
+
+            if (doc is null) {
+                doc = Project.Documents.FirstOrDefault(d => string.IsNullOrEmpty(d.FilePath)
+                    && string.Equals(d.Name, target.OutputDocumentName, StringComparison.CurrentCultureIgnoreCase));
+            }
             
             if (doc is null) {
                 doc = Project.AddDocument(target.OutputDocumentName, string.Empty, filePath: target.OutputPath);

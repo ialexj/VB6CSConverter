@@ -92,8 +92,8 @@ public static class ReferenceStubGenerator
     {
         MemberDeclarationSyntax? decl = type.Kind switch {
             LibraryTypeKind.Enum                                              => GenerateEnum(type, emittedTypeName),
-            LibraryTypeKind.DispatchInterface or LibraryTypeKind.Interface
-                or LibraryTypeKind.Class or LibraryTypeKind.Module             => GenerateClass(type, emittedTypeName),
+            LibraryTypeKind.DispatchInterface or LibraryTypeKind.Interface     => GenerateInterface(type, emittedTypeName),
+            LibraryTypeKind.Class or LibraryTypeKind.Module                    => GenerateClass(type, emittedTypeName),
             LibraryTypeKind.Struct                                            => GenerateStruct(type, emittedTypeName, cyclicFields),
             _                                                                  => null,
         };
@@ -149,7 +149,82 @@ public static class ReferenceStubGenerator
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Class / dispatch interface / module
+    // Interface / dispatch interface
+    // ──────────────────────────────────────────────────────────────────────
+
+    static InterfaceDeclarationSyntax GenerateInterface(LibraryTypeModel type, string emittedTypeName)
+    {
+        var memberDecls = new List<MemberDeclarationSyntax>();
+        // Seed with the interface name to prevent CS0542 (member name same as enclosing type)
+        var usedMemberNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { emittedTypeName };
+
+        var propertyGroups = type.Members
+            .Where(m => m.Kind == LibraryMemberKind.PropertyGet || m.Kind == LibraryMemberKind.PropertySet)
+            .GroupBy(m => m.Name)
+            .ToList();
+
+        foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
+            var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
+            var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
+            string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+
+            string propType = getter != null ? getter.ReturnCSharpType : "object";
+            if (propType == "void") propType = "object";
+
+            var accessors = new List<AccessorDeclarationSyntax>();
+            if (getter != null) {
+                accessors.Add(
+                    AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
+            if (setter != null) {
+                accessors.Add(
+                    AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
+
+            var prop = PropertyDeclaration(ParseTypeName(propType), Identifier(propertyName))
+                .WithAccessorList(AccessorList(List(accessors)));
+
+            memberDecls.Add(prop);
+        }
+
+        foreach (var method in type.Members
+                     .Where(m => m.Kind == LibraryMemberKind.Method)
+                     .OrderBy(m => m.Name)) {
+            string methodName = MakeUniqueName(MakeSafeIdentifier(method.Name), usedMemberNames);
+            var parameters = BuildParameters(method.Parameters).ToArray();
+
+            var methodDecl = MethodDeclaration(
+                    ParseTypeName(method.ReturnCSharpType),
+                    Identifier(methodName))
+                .WithParameterList(ParameterList(SeparatedList(parameters)))
+                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+
+            memberDecls.Add(methodDecl);
+        }
+
+        var decl = InterfaceDeclaration(Identifier(emittedTypeName))
+            .WithModifiers(Modifiers(isPublic: true))
+            .WithGeneratedCodeAttribute()
+            .WithMembers(List(memberDecls));
+
+        var baseInterfaces = (type.ImplementedInterfaces ?? [])
+            .Where(i => !string.IsNullOrWhiteSpace(i))
+            .Select(MakeSafeIdentifier)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(n => (BaseTypeSyntax)SimpleBaseType(ParseTypeName(n)))
+            .ToArray();
+
+        if (baseInterfaces.Length > 0) {
+            decl = decl.WithBaseList(BaseList(SeparatedList(baseInterfaces)));
+        }
+
+        return decl;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Class / module
     // ──────────────────────────────────────────────────────────────────────
 
     static ClassDeclarationSyntax GenerateClass(LibraryTypeModel type, string emittedTypeName)
@@ -218,10 +293,25 @@ public static class ReferenceStubGenerator
             memberDecls.Add(methodDecl);
         }
 
-        return ClassDeclaration(Identifier(emittedTypeName))
+        var decl = ClassDeclaration(Identifier(emittedTypeName))
             .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
             .WithGeneratedCodeAttribute()
             .WithMembers(List(memberDecls));
+
+        if (!isStatic) {
+            var baseInterfaces = (type.ImplementedInterfaces ?? [])
+                .Where(i => !string.IsNullOrWhiteSpace(i))
+                .Select(MakeSafeIdentifier)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(n => (BaseTypeSyntax)SimpleBaseType(ParseTypeName(n)))
+                .ToArray();
+
+            if (baseInterfaces.Length > 0) {
+                decl = decl.WithBaseList(BaseList(SeparatedList(baseInterfaces)));
+            }
+        }
+
+        return decl;
     }
 
     // ──────────────────────────────────────────────────────────────────────

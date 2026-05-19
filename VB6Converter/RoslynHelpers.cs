@@ -46,6 +46,9 @@ internal static class RoslynHelpers
     public static StructDeclarationSyntax WithGeneratedCodeAttribute(this StructDeclarationSyntax structSyntax)
         => structSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
 
+    public static InterfaceDeclarationSyntax WithGeneratedCodeAttribute(this InterfaceDeclarationSyntax interfaceSyntax)
+        => interfaceSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
+
     public static SyntaxTokenList Modifiers(
         bool isPublic = false, bool isInternal = false, bool isProtected = false,
         bool isStatic = false, 

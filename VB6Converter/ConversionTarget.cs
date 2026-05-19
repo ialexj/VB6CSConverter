@@ -23,9 +23,20 @@ public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
     public bool HasErrors => System.IO.File.Exists($"{OutputPath}.log");
 
 
-    public static ConversionTarget Create(VisualBasicProjectFile file, string outDir)
+    public static ConversionTarget Create(VisualBasicProjectFile file, string outDir, string projectBasePath)
     {
-        return new ConversionTarget(file, Path.Combine(outDir, $"{file.Name}.cs"));
+        var relativePath = Path.GetRelativePath(projectBasePath, file.Path);
+
+        var isOutsideProject = relativePath.Equals("..", StringComparison.Ordinal)
+            || relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+            || relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
+
+        if (isOutsideProject) {
+            return new ConversionTarget(file, Path.Combine(outDir, $"{file.Name}.cs"));
+        }
+
+        var outputRelativePath = Path.ChangeExtension(relativePath, ".cs");
+        return new ConversionTarget(file, Path.Combine(outDir, outputRelativePath));
     }
 }
   

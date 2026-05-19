@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
@@ -148,6 +149,7 @@ public sealed class TypeLibraryInspector
             List<LibraryMemberModel>    members    = [];
             List<LibraryEnumValueModel> enumValues = [];
             string? aliasedType = null;
+            List<string> implementedInterfaces = [];
 
             if (kind == LibraryTypeKind.Alias) {
                 aliasedType = ResolveType(typeLib, typeInfo, typeAttr.tdescAlias, discoveredDeps);
@@ -156,17 +158,20 @@ public sealed class TypeLibraryInspector
                 enumValues = InspectEnumValues(typeInfo, typeAttr.cVars);
             }
             else if (kind == LibraryTypeKind.Class) {
-                // For a coclass, follow the default source interface
-                members = InspectCoclassMembers(typeLib, typeInfo, typeAttr, discoveredDeps);
+                var coclassInfo = InspectCoclassMembers(typeLib, typeInfo, typeAttr, discoveredDeps);
+                members = coclassInfo.Members;
+                implementedInterfaces = coclassInfo.ImplementedInterfaces;
             }
             else if (kind == LibraryTypeKind.Struct) {
                 members = InspectStructFields(typeLib, typeInfo, typeAttr.cVars, discoveredDeps);
             }
             else {
-                members = InspectFunctions(typeLib, typeInfo, typeAttr.cFuncs, discoveredDeps);
+                var interfaceInfo = InspectInterfaceMembers(typeLib, typeInfo, typeAttr, discoveredDeps);
+                members = interfaceInfo.Members;
+                implementedInterfaces = interfaceInfo.BaseInterfaces;
             }
 
-            return new LibraryTypeModel(typeName, kind, members, enumValues, aliasedType);
+            return new LibraryTypeModel(typeName, kind, members, enumValues, aliasedType, implementedInterfaces);
         }
         catch (Exception ex) {
             throw new InvalidOperationException(
@@ -263,24 +268,29 @@ public sealed class TypeLibraryInspector
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Coclass — follow the default dispatch interface
+    // Coclass / interface graph walking
     // ──────────────────────────────────────────────────────────────────────
 
-    static List<LibraryMemberModel> InspectCoclassMembers(
+    const int IMPLTYPEFLAG_FSOURCE     = 0x2;
+    const int IMPLTYPEFLAG_FRESTRICTED = 0x4;
+
+    static (List<LibraryMemberModel> Members, List<string> ImplementedInterfaces) InspectCoclassMembers(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo coclassTypeInfo,
         System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
         HashSet<DiscoveredDependency> discoveredDeps)
     {
-        const int IMPLTYPEFLAG_FDEFAULT = 0x1;
-        const int IMPLTYPEFLAG_FSOURCE  = 0x2;
+        var members = new List<LibraryMemberModel>();
+        var memberSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var implementedInterfaces = new List<string>();
+        var implementedInterfaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visitedInterfaces = new HashSet<Guid>();
 
         for (int i = 0; i < typeAttr.cImplTypes; i++) {
             try {
                 coclassTypeInfo.GetImplTypeFlags(i, out System.Runtime.InteropServices.ComTypes.IMPLTYPEFLAGS implFlags);
                 int flags = (int)implFlags;
-                if ((flags & IMPLTYPEFLAG_FDEFAULT) == 0) continue;
-                if ((flags & IMPLTYPEFLAG_FSOURCE)  != 0) continue;  // skip event source
+                if ((flags & IMPLTYPEFLAG_FSOURCE) != 0) continue;
 
                 coclassTypeInfo.GetRefTypeOfImplType(i, out int href);
                 coclassTypeInfo.GetRefTypeInfo(href, out var implTypeInfo);
@@ -294,7 +304,27 @@ public sealed class TypeLibraryInspector
 
                 try {
                     var implAttr = Marshal.PtrToStructure<System.Runtime.InteropServices.ComTypes.TYPEATTR>(pImplAttr);
-                    return InspectFunctions(typeLib, implTypeInfo, implAttr.cFuncs, discoveredDeps);
+
+                    if (implAttr.typekind != System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_INTERFACE
+                        && implAttr.typekind != System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_DISPATCH) {
+                        continue;
+                    }
+
+                    implTypeInfo.GetDocumentation(-1, out string interfaceName, out _, out _, out _);
+                    if (!string.IsNullOrWhiteSpace(interfaceName) && implementedInterfaceNames.Add(interfaceName)) {
+                        implementedInterfaces.Add(interfaceName);
+                    }
+
+                    CollectInterfaceMembersRecursive(
+                        typeLib,
+                        implTypeInfo,
+                        implAttr,
+                        discoveredDeps,
+                        visitedInterfaces,
+                        members,
+                        memberSignatures,
+                        includeBaseInterfaces: false,
+                        baseInterfaces: null);
                 }
                 finally {
                     implTypeInfo.ReleaseTypeAttr(pImplAttr);
@@ -304,7 +334,113 @@ public sealed class TypeLibraryInspector
             catch { /* try next interface */ }
         }
 
-        return [];
+        return (members, implementedInterfaces);
+    }
+
+    static (List<LibraryMemberModel> Members, List<string> BaseInterfaces) InspectInterfaceMembers(
+        System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
+        System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
+        System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
+        HashSet<DiscoveredDependency> discoveredDeps)
+    {
+        var members = new List<LibraryMemberModel>();
+        var memberSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var baseInterfaces = new List<string>();
+        var baseInterfaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visitedInterfaces = new HashSet<Guid>();
+
+        CollectInterfaceMembersRecursive(
+            typeLib,
+            typeInfo,
+            typeAttr,
+            discoveredDeps,
+            visitedInterfaces,
+            members,
+            memberSignatures,
+            includeBaseInterfaces: true,
+            baseInterfaces: (baseInterfaces, baseInterfaceNames));
+
+        return (members, baseInterfaces);
+    }
+
+    static void CollectInterfaceMembersRecursive(
+        System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
+        System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
+        System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
+        HashSet<DiscoveredDependency> discoveredDeps,
+        HashSet<Guid> visitedInterfaces,
+        List<LibraryMemberModel> members,
+        HashSet<string> memberSignatures,
+        bool includeBaseInterfaces,
+        (List<string> Names, HashSet<string> Seen)? baseInterfaces)
+    {
+        if (!visitedInterfaces.Add(typeAttr.guid)) {
+            return;
+        }
+
+        foreach (var member in InspectFunctions(typeLib, typeInfo, typeAttr.cFuncs, discoveredDeps)) {
+            if (memberSignatures.Add(GetMemberSignature(member))) {
+                members.Add(member);
+            }
+        }
+
+        for (int i = 0; i < typeAttr.cImplTypes; i++) {
+            try {
+                typeInfo.GetImplTypeFlags(i, out System.Runtime.InteropServices.ComTypes.IMPLTYPEFLAGS implFlags);
+                int flags = (int)implFlags;
+
+                if ((flags & IMPLTYPEFLAG_FSOURCE) != 0) continue;
+
+                typeInfo.GetRefTypeOfImplType(i, out int href);
+                typeInfo.GetRefTypeInfo(href, out var parentTypeInfo);
+                if (parentTypeInfo == null) continue;
+
+                parentTypeInfo.GetTypeAttr(out IntPtr pParentAttr);
+                if (pParentAttr == IntPtr.Zero) {
+                    Marshal.ReleaseComObject(parentTypeInfo);
+                    continue;
+                }
+
+                try {
+                    var parentAttr = Marshal.PtrToStructure<System.Runtime.InteropServices.ComTypes.TYPEATTR>(pParentAttr);
+                    if (parentAttr.typekind != System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_INTERFACE
+                        && parentAttr.typekind != System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_DISPATCH) {
+                        continue;
+                    }
+
+                    if (includeBaseInterfaces && baseInterfaces != null) {
+                        parentTypeInfo.GetDocumentation(-1, out string parentName, out _, out _, out _);
+                        if (!string.IsNullOrWhiteSpace(parentName) && baseInterfaces.Value.Seen.Add(parentName)) {
+                            baseInterfaces.Value.Names.Add(parentName);
+                        }
+                    }
+
+                    CollectInterfaceMembersRecursive(
+                        typeLib,
+                        parentTypeInfo,
+                        parentAttr,
+                        discoveredDeps,
+                        visitedInterfaces,
+                        members,
+                        memberSignatures,
+                        includeBaseInterfaces,
+                        baseInterfaces);
+                }
+                finally {
+                    parentTypeInfo.ReleaseTypeAttr(pParentAttr);
+                    Marshal.ReleaseComObject(parentTypeInfo);
+                }
+            }
+            catch {
+                // Best effort: inheritance inspection should not abort the type.
+            }
+        }
+    }
+
+    static string GetMemberSignature(LibraryMemberModel member)
+    {
+        string parameterTypes = string.Join(",", member.Parameters.Select(p => p.CSharpType));
+        return $"{member.Kind}:{member.Name}({parameterTypes})=>{member.ReturnCSharpType}";
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -367,11 +503,22 @@ public sealed class TypeLibraryInspector
                             continue;
                         }
 
-                        bool isOptional = (elemDesc.desc.paramdesc.wParamFlags
+                        var flags = elemDesc.desc.paramdesc.wParamFlags;
+                        bool isRetVal = (flags
+                            & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FRETVAL) != 0;
+
+                        // Dual-interface members commonly expose HRESULT as the COM return type
+                        // and place the real value in a [retval] parameter.
+                        if (isRetVal) {
+                            returnType = paramType;
+                            continue;
+                        }
+
+                        bool isOptional = (flags
                             & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FOPT) != 0;
-                        bool isOut = (elemDesc.desc.paramdesc.wParamFlags
+                        bool isOut = (flags
                             & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FOUT) != 0
-                            && (elemDesc.desc.paramdesc.wParamFlags
+                            && (flags
                             & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FIN) == 0;
 
                         parameters.Add(new LibraryParameterModel(paramName, paramType, isOptional, isOut));

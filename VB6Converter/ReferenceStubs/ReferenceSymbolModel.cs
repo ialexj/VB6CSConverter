@@ -64,7 +64,8 @@ public record LibraryTypeModel(
     LibraryTypeKind Kind,
     IReadOnlyList<LibraryMemberModel> Members,
     IReadOnlyList<LibraryEnumValueModel> EnumValues,
-    string? AliasedCSharpType = null);
+    string? AliasedCSharpType = null,
+    IReadOnlyList<string>? ImplementedInterfaces = null);
 
 /// <summary>
 /// A foreign type library that was referenced while inspecting a COM type library.

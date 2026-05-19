@@ -89,11 +89,11 @@ public class ReferenceStubGeneratorTests
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Class / dispatch interface generation
+    // Interface / class generation
     // ──────────────────────────────────────────────────────────────────────
 
     [TestMethod]
-    public void Generate_DispatchInterface_EmitsClassWithMethods()
+    public void Generate_DispatchInterface_EmitsInterfaceWithMembers()
     {
         var library = MakeLibrary("TestLib",
             new LibraryTypeModel("Recordset", LibraryTypeKind.DispatchInterface,
@@ -113,11 +113,40 @@ public class ReferenceStubGeneratorTests
 
             written.Should().ContainSingle();
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("public class Recordset");
+            source.Should().Contain("public interface Recordset");
             source.Should().Contain("MoveNext");
             source.Should().Contain("Open");
             source.Should().Contain("bool EOF");
-            source.Should().Contain("NotImplementedException");
+            source.Should().NotContain("NotImplementedException");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void Generate_Interface_EmitsInterfaceDeclaration()
+    {
+        var library = MakeLibrary("TestLib",
+            new LibraryTypeModel("IAnimation", LibraryTypeKind.Interface,
+                Members: [
+                    new("Play", LibraryMemberKind.Method, "void", []),
+                    new("Visible", LibraryMemberKind.PropertyGet, "bool", []),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            written.Should().ContainSingle();
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("public interface IAnimation");
+            source.Should().Contain("void Play(");
+            source.Should().Contain("bool Visible");
+            source.Should().NotContain("NotImplementedException");
         }
         finally {
             if (Directory.Exists(tempDir)) {
@@ -173,6 +202,31 @@ public class ReferenceStubGeneratorTests
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_Class_ImplementsConfiguredInterfaces()
+    {
+        var library = MakeLibrary("TestLib",
+            new LibraryTypeModel("Animation", LibraryTypeKind.Class,
+                Members: [new("Play", LibraryMemberKind.Method, "void", [])],
+                EnumValues: [],
+                ImplementedInterfaces: ["IAnimation", "IDispatch"]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            written.Should().ContainSingle();
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("public class Animation : IAnimation, IDispatch");
+            source.Should().Contain("NotImplementedException");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) {
+                Directory.Delete(tempDir, recursive: true);
+            }
         }
     }
 

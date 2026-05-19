@@ -358,6 +358,110 @@ public class TypeLibraryInspectorIntegrationTests
     }
 
     [TestMethod]
+    public void Inspect_VbRuntimeSubLib_UserControl_ImplementsInterfaces()
+    {
+        if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
+
+        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
+
+        var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
+        var model = TypeLibraryInspector.Inspect(reference, path!)!;
+
+        var userControl = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "UserControl", StringComparison.OrdinalIgnoreCase));
+        if (userControl == null) {
+            Assert.Inconclusive("VB runtime UserControl type not present on this machine's registered type library");
+        }
+
+        userControl!.ImplementedInterfaces.Should().NotBeNull();
+        if (userControl.Kind == LibraryTypeKind.Class) {
+            userControl.ImplementedInterfaces!.Should().NotBeEmpty(
+                "coclasses should capture all non-restricted implemented COM interfaces");
+        }
+    }
+
+    [TestMethod]
+    public void Inspect_VbRuntimeSubLib_UserControl_ContainsClientHeight()
+    {
+        if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
+
+        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
+
+        var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
+        var model = TypeLibraryInspector.Inspect(reference, path!)!;
+
+        var userControl = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "UserControl", StringComparison.OrdinalIgnoreCase));
+        if (userControl == null) {
+            Assert.Inconclusive("VB runtime UserControl type not present on this machine's registered type library");
+        }
+
+        userControl!.Members.Should().Contain(m =>
+            string.Equals(m.Name, "ClientHeight", StringComparison.OrdinalIgnoreCase)
+            && (m.Kind == LibraryMemberKind.PropertyGet || m.Kind == LibraryMemberKind.PropertySet),
+            "inherited COM interface properties should be included in extracted members");
+    }
+
+    [TestMethod]
+    public void Inspect_VbRuntimeSubLib_DataCaption_GetterTypeIsString()
+    {
+        if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
+
+        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
+There
+        var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
+        var model = TypeLibraryInspector.Inspect(reference, path!)!;
+
+        var dataType = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "Data", StringComparison.OrdinalIgnoreCase));
+        if (dataType == null) {
+            Assert.Inconclusive("VB runtime Data type not present on this machine's registered type library");
+        }
+
+        dataType!.Members.Should().Contain(m =>
+            string.Equals(m.Name, "Caption", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.PropertyGet
+            && string.Equals(m.ReturnCSharpType, "string", StringComparison.Ordinal),
+            "VB.Data.Caption should be surfaced as a string property getter");
+    }
+
+    [TestMethod]
+    public void Inspect_VbRuntimeSubLib_Font_ContainsInheritedFontProperties()
+    {
+        if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
+
+        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
+
+        var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
+        var model = TypeLibraryInspector.Inspect(reference, path!)!;
+
+        var fontType = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "Font", StringComparison.OrdinalIgnoreCase));
+        if (fontType == null) {
+            Assert.Inconclusive("VB runtime Font type not present on this machine's registered type library");
+        }
+
+        fontType!.Members.Should().Contain(m =>
+            string.Equals(m.Name, "Name", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.PropertyGet,
+            "VB.Font should surface the inherited Name property");
+
+        fontType.Members.Should().Contain(m =>
+            string.Equals(m.Name, "Size", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.PropertyGet,
+            "VB.Font should surface the inherited Size property");
+
+        fontType.Members.Should().Contain(m =>
+            string.Equals(m.Name, "Charset", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.PropertyGet,
+            "VB.Font should surface the inherited Charset property");
+    }
+
+    [TestMethod]
     public void Generate_VbRuntimeSubLib_ProducesStubFiles()
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");

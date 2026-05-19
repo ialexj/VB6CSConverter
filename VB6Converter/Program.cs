@@ -79,7 +79,8 @@ public static class Program
 
         // Open/Create C# project
         using var ws = new ConversionWorkspace(options.OverwriteNonGenerated);
-        var allTargets = vbProject.Files.Select(f => ConversionTarget.Create(f, options.OutputDir)).OrderBy(t => t.Name).ToArray();
+        var projectBasePath = Path.GetDirectoryName(Path.GetFullPath(options.Project)) ?? Directory.GetCurrentDirectory();
+        var allTargets = vbProject.Files.Select(f => ConversionTarget.Create(f, options.OutputDir, projectBasePath)).OrderBy(t => t.Name).ToArray();
         await ws.Open(allTargets, options.OutputDir, vbProject.Name);
         ws.SetActiveFilter([.. options.Filter]);
 
@@ -171,10 +172,10 @@ public static class Program
                 await RunRewriter(false, "Creating control singletons", (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
                 await RunRewriter(false, "Fixing Foreach Variable", (t, sm) => new ForEachVariableRewriter());
 
-                await RunRewriter(true, "Finding Types", (t, sm) => new TypeFinder(sm, ws.DefaultNamespace));              
+                await RunRewriter(true, "Finding Types", (t, sm) => new TypeFinder(sm));
                 await RunRewriter(true, "Finding Members", (t, sm) => new MemberFinder(sm));
                 await RunRewriter(true, "Disambiguate Array Access", (t, sm) => new ArrayCallDisambiguator(sm));
-                await RunRewriter(true, "Rewriting parameterized property setters", (t, sm) => new ParameterizedPropertyRewriter(sm));
+                //await RunRewriter(true, "Rewriting parameterized property setters", (t, sm) => new ParameterizedPropertyRewriter(sm));
 
 
                 var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
@@ -247,120 +248,113 @@ public static class Program
         VisualBasicProject vbProject,
         string outputDir)
     {
-        Directory.CreateDirectory(outputDir);
+        await AnsiConsole.Progress()
+            .HideCompleted(true)
+            .AutoClear(true)
+            .Columns(
+                new TaskDescriptionColumn(),
+                new ProgressBarColumn(),
+                new ElapsedTimeColumn()
+            )
+            .StartAsync(async ctx => {
+                var overallTask = ctx.AddTask("Creating stubs for references...");
 
-        int resolved = 0, generated = 0, unresolved = 0;
-        var reportLines = new List<string>();
-        var models = new List<LibraryModel>();
-        var inspected = new ConcurrentBag<(int Index, VisualBasicProjectReference Reference, LibraryModel Model, bool Unresolved)>();
-        var indexedReferences = vbProject.References.Select((reference, index) => (reference, index)).ToArray();
+                Directory.CreateDirectory(outputDir);
 
-        await AnsiConsole.Status()
-            .StartAsync("Inspecting COM type libraries...", async ctx => {
-                await Parallel.ForEachAsync(indexedReferences, async (entry, cancel) => {
-                    var reference = entry.reference;
-                    var index = entry.index;
+                int resolved = 0, generated = 0, unresolved = 0;
+                var reportLines = new ConcurrentBag<string>();
+                var models = new ConcurrentBag<LibraryModel>();
+                var seenGuids = new ConcurrentDictionary<Guid, Guid>();
+                
+                var inspectQueue = new ConcurrentQueue<VisualBasicProjectReference>();
+                foreach (var reference in vbProject.References) {
+                    inspectQueue.Enqueue(reference);
+                }
 
-                    ctx.Status($"Inspecting {reference.Description}...");
-
-                    if (reference.ResolvedPath == null) {
-                        Interlocked.Increment(ref unresolved);
-                        Log.Default.Warning("Reference {description} ({guid}) could not be resolved", reference.Description, reference.Guid);
-                        inspected.Add((index, reference, null, true));
-                        return;
+                while (inspectQueue.Count > 0) {
+                    var batch = new List<VisualBasicProjectReference>();
+                    while (inspectQueue.TryDequeue(out var item)) {
+                        batch.Add(item);
                     }
 
-                    Interlocked.Increment(ref resolved);
+                    overallTask.MaxValue = batch.Count;
 
-                    var model = TypeLibraryInspector.Inspect(reference, reference.ResolvedPath);
-                    inspected.Add((index, reference, model, false));
+                    await Parallel.ForEachAsync(batch, async (reference, cancel) => {
+                        var progress = ctx.AddTask(Path.GetFileName(reference.ResolvedPath));
+                        progress.IsIndeterminate = true;
 
-                    await Task.Yield();
-                });
+                        try {
+                            if (!seenGuids.TryAdd(reference.Guid, reference.Guid)) {
+                                return;
+                            }
+
+                            if (reference.ResolvedPath == null) {
+                                Interlocked.Increment(ref unresolved);
+                                Log.Default.Warning("Reference {description} ({guid}) could not be resolved", reference.Description, reference.Guid);
+                                reportLines.Add($"UNRESOLVED  {reference.Description}  {{{reference.Guid}}}  v{reference.MajorVersion}.{reference.MinorVersion}");
+                                return;
+                            }
+
+                            Interlocked.Increment(ref resolved);
+
+                            var model = TypeLibraryInspector.Inspect(reference, reference.ResolvedPath);
+                            if (model == null) {
+                                reportLines.Add($"FAILED      {reference.Description}  {reference.ResolvedPath}");
+                                return;
+                            }
+
+                            models.Add(model);
+
+                            // Resolve transitive dependencies and enqueue for analysis in the next batch.
+                            foreach (var dep in model.DiscoveredDependencies.Where(d => !seenGuids.ContainsKey(d.Guid))) {
+                                var path = VisualBasicProject.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);
+                                var depRef = new VisualBasicProjectReference(
+                                    ProjectReferenceKind.TypeLibrary, dep.Guid, dep.Major, dep.Minor, 0,
+                                    dep.Guid.ToString("B"), path, path);
+
+                                inspectQueue.Enqueue(depRef);
+                            }
+
+                            // Generate the stubs
+                            var written = ReferenceStubGenerator.Generate(model, outputDir);
+                            Interlocked.Add(ref generated, written.Count);
+
+                            reportLines.Add($"OK          {model.Name}  {reference.ResolvedPath}  ({written.Count} types)");
+                            AnsiConsole.WriteLine($"  {model.Name}: {written.Count} stubs from {Path.GetFileName(reference.ResolvedPath)}");
+                        }
+                        catch (Exception ex) when (!System.Diagnostics.Debugger.IsAttached) {
+                            Log.Default.Warning(ex, "Failed inspecting type library {description} ({guid})", reference.Description, reference.Guid);
+                            reportLines.Add($"FAILED      {reference.Description}  {reference.ResolvedPath}");
+                        }
+                        finally {
+                            progress.StopTask();
+                            overallTask.Increment(1);
+                            await Task.Yield();
+                        }
+                    });
+                }
+
+                // Collect aliases from all libraries (direct + transitive) and pass them as a
+                // flat sequence so ReferenceUsingsGenerator can deduplicate by name.  Multiple COM
+                // libraries (e.g. stdole and oleaut32) often define the same alias (OLE_COLOR, …)
+                // and per-library global usings would cause CS0105 "appeared previously" errors.
+                var allAliases = models.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
+                var referenceUsingsPath = ReferenceUsingsGenerator.Generate(models, outputDir, allAliases);
+
+                // Write summary report
+                var reportPath = Path.Combine(outputDir, "_ReferenceStubs.txt");
+                await File.WriteAllLinesAsync(reportPath, new[] {
+                    $"Reference stubs generated: {generated}",
+                    $"Libraries resolved:        {resolved}",
+                    $"Libraries unresolved:      {unresolved}",
+                    $"Reference usings file:     {referenceUsingsPath}",
+                    string.Empty,
+                }.Concat(reportLines));
+
+                AnsiConsole.MarkupLineInterpolated(
+                    $"[green]Reference stubs:[/] {generated} types from {resolved} libraries ({unresolved} unresolved). Report: {reportPath}");
             });
-
-        foreach (var result in inspected.OrderBy(r => r.Index)) {
-            var reference = result.Reference;
-
-            if (result.Unresolved) {
-                reportLines.Add($"UNRESOLVED  {reference.Description}  {{{reference.Guid}}}  v{reference.MajorVersion}.{reference.MinorVersion}");
-                continue;
-            }
-
-            if (result.Model == null) {
-                reportLines.Add($"FAILED      {reference.Description}  {reference.ResolvedPath}");
-                continue;
-            }
-
-            models.Add(result.Model);
-
-            var written = ReferenceStubGenerator.Generate(result.Model, outputDir);
-            generated += written.Count;
-
-            reportLines.Add($"OK          {result.Model.Name}  {reference.ResolvedPath}  ({written.Count} types)");
-            AnsiConsole.WriteLine($"  {result.Model.Name}: {written.Count} stubs from {Path.GetFileName(reference.ResolvedPath)}");
-        }
-
-        // ── Transitive dependency scan ───────────────────────────────────
-        // Seed the seen-set from the project's explicit references so we
-        // don't re-process anything already handled above.
-        var seenGuids = new HashSet<Guid>(vbProject.References.Select(r => r.Guid));
-        var depQueue  = new Queue<DiscoveredDependency>(
-            models.SelectMany(m => m.DiscoveredDependencies)
-                  .Where(d => seenGuids.Add(d.Guid)));
-
-        while (depQueue.Count > 0) {
-            var dep  = depQueue.Dequeue();
-            var path = VisualBasicProject.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);
-            if (path == null) {
-                Log.Default.Warning("Transitive dependency {guid} v{major}.{minor} could not be resolved in the registry",
-                    dep.Guid, dep.Major, dep.Minor);
-                reportLines.Add($"DEP-UNRES   {{{dep.Guid}}} v{dep.Major}.{dep.Minor}");
-                continue;
-            }
-
-            var depRef = new VisualBasicProjectReference(
-                ProjectReferenceKind.TypeLibrary, dep.Guid, dep.Major, dep.Minor, 0,
-                dep.Guid.ToString("B"), path, path);
-
-            var model = TypeLibraryInspector.Inspect(depRef, path);
-            if (model == null) {
-                reportLines.Add($"DEP-FAILED  {path}");
-                continue;
-            }
-
-            models.Add(model);
-            var written = ReferenceStubGenerator.Generate(model, outputDir);
-            generated += written.Count;
-            Interlocked.Increment(ref resolved);
-
-            reportLines.Add($"DEP-OK      {model.Name}  {path}  ({written.Count} types)");
-            AnsiConsole.WriteLine($"  [dep] {model.Name}: {written.Count} stubs from {Path.GetFileName(path)}");
-
-            // Enqueue any newly discovered transitive dependencies.
-            foreach (var newDep in model.DiscoveredDependencies.Where(d => seenGuids.Add(d.Guid)))
-                depQueue.Enqueue(newDep);
-        }
-        // ────────────────────────────────────────────────────────────────
-
-        // Collect aliases from all libraries (direct + transitive) and pass them as a
-        // flat sequence so ReferenceUsingsGenerator can deduplicate by name.  Multiple COM
-        // libraries (e.g. stdole and oleaut32) often define the same alias (OLE_COLOR, …)
-        // and per-library global usings would cause CS0105 "appeared previously" errors.
-        var allAliases = models.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
-        var referenceUsingsPath = ReferenceUsingsGenerator.Generate(models, outputDir, allAliases);
-
-        // Write summary report
-        var reportPath = Path.Combine(outputDir, "_ReferenceStubs.txt");
-        await File.WriteAllLinesAsync(reportPath, new[] {
-            $"Reference stubs generated: {generated}",
-            $"Libraries resolved:        {resolved}",
-            $"Libraries unresolved:      {unresolved}",
-            $"Reference usings file:     {referenceUsingsPath}",
-            string.Empty,
-        }.Concat(reportLines));
-
-        AnsiConsole.MarkupLineInterpolated(
-            $"[green]Reference stubs:[/] {generated} types from {resolved} libraries ({unresolved} unresolved). Report: {reportPath}");
+        
+        
     }
 }

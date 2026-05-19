@@ -1,4 +1,4 @@
-﻿using Antlr4.Runtime.Tree;
+using Antlr4.Runtime.Tree;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -72,7 +72,7 @@ public static class CommonConverter
                 BOOLEAN => Predefined(SyntaxKind.BoolKeyword),
                 BYTE => Predefined(SyntaxKind.ByteKeyword),
                 COLLECTION => ParseTypeName("Collection"),
-                DATE => ParseTypeName("DateTime"),
+                DATE => ParseTypeName("System.DateTime"),
                 DOUBLE => Predefined(SyntaxKind.DoubleKeyword),
                 INTEGER => Predefined(SyntaxKind.IntKeyword),
                 LONG => Predefined(SyntaxKind.IntKeyword),

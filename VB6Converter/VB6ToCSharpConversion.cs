@@ -25,6 +25,11 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
 
         var conversion = Convert(reader, className, nsName, type);
 
+        var outputDir = Path.GetDirectoryName(output);
+        if (!string.IsNullOrWhiteSpace(outputDir)) {
+            Directory.CreateDirectory(outputDir);
+        }
+
         // Write output
         File.WriteAllText(output, conversion.CompilationUnit.ToFullString());
 

@@ -137,6 +137,44 @@ public class ProjectReferenceTests
         }
     }
 
+    [TestMethod]
+    public void Load_FilesInSubfolders_ResolvesAbsolutePaths()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"vbptest_{Guid.NewGuid():N}");
+        var formsDir = Path.Combine(tempDir, "Forms");
+        var modulesDir = Path.Combine(tempDir, "Modules");
+        Directory.CreateDirectory(formsDir);
+        Directory.CreateDirectory(modulesDir);
+
+        var tempFile = Path.Combine(tempDir, "test.vbp");
+        var formPath = Path.Combine(formsDir, "MainForm.frm");
+        var modulePath = Path.Combine(modulesDir, "Utils.bas");
+
+        try {
+            File.WriteAllText(formPath, "");
+            File.WriteAllText(modulePath, "");
+            File.WriteAllText(tempFile, """
+                Form=Forms/MainForm.frm
+                Module=Utils; Modules/Utils.bas
+                """);
+
+            var project = VisualBasicProject.Load(tempFile);
+
+            project.Files.Should().HaveCount(2);
+
+            var formFile = project.Files.Single(f => f.Name == "MainForm");
+            formFile.Path.Should().Be(Path.GetFullPath(formPath));
+            formFile.Type.Should().Be(VisualBasicFileType.Form);
+
+            var moduleFile = project.Files.Single(f => f.Name == "Utils");
+            moduleFile.Path.Should().Be(Path.GetFullPath(modulePath));
+            moduleFile.Type.Should().Be(VisualBasicFileType.Module);
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Malformed / edge-case lines
     // -----------------------------------------------------------------------
