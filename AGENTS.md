@@ -21,7 +21,9 @@ See [README.md](README.md) for the motivation and high-level "How" overview.
 
 ## Build & Test
 
-```bash
+When running commands, prefer `pwsh`. Do not use other console languages.
+
+```pwsh
 # Build entire solution
 dotnet build VB6Converter.slnx
 
@@ -29,9 +31,7 @@ dotnet build VB6Converter.slnx
 dotnet test VB6Converter.slnx
 
 # Run the converter
-dotnet run --project VB6Converter/VB6Converter.csproj -- \
-  -p <path/to/project.vbp> \
-  -o <output_dir>
+dotnet run --project VB6Converter/VB6Converter.csproj -- -p <path/to/project.vbp> -o <output_dir>
 ```
 
 ### CLI Options (`Program.CommandLineOptions`)

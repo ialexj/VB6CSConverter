@@ -66,6 +66,8 @@ public sealed class ConversionWorkspace : IDisposable
 
     public string MissingTypesPath => Path.Combine(Path.GetDirectoryName(Project.FilePath), "MissingTypes");
 
+    public string ReferenceStubsPath => Path.Combine(Path.GetDirectoryName(Project.FilePath), "_Reference");
+
 
     public IReadOnlyCollection<ConversionTarget> Targets { get; private set; }
 

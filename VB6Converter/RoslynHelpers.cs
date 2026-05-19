@@ -23,21 +23,28 @@ internal static class RoslynHelpers
                         : cls))
             .NormalizeWhitespace();
 
-    public static ClassDeclarationSyntax WithGeneratedCodeAttribute(this ClassDeclarationSyntax classSyntax) 
-        => classSyntax.WithAttributeLists(SingletonList(
-            AttributeList(SingletonSeparatedList(
-                Attribute(ParseName("System.CodeDom.Compiler.GeneratedCode"), AttributeArgumentList(
-                    SeparatedList<AttributeArgumentSyntax>(
-                        new SyntaxNodeOrToken[] {
-                            AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("VB6Converter"))),
-                            Token(SyntaxKind.CommaToken),
-                            AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(Version)))
-                        }
-                    )
-                ))
-                .WithLeadingTrivia(TriviaList(Whitespace(Environment.NewLine)))
+    static AttributeListSyntax GeneratedCodeAttributeList()
+        => AttributeList(SingletonSeparatedList(
+            Attribute(ParseName("System.CodeDom.Compiler.GeneratedCode"), AttributeArgumentList(
+                SeparatedList<AttributeArgumentSyntax>(
+                    new SyntaxNodeOrToken[] {
+                        AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("VB6Converter"))),
+                        Token(SyntaxKind.CommaToken),
+                        AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(Version)))
+                    }
+                )
             ))
+            .WithLeadingTrivia(TriviaList(Whitespace(Environment.NewLine)))
         ));
+
+    public static ClassDeclarationSyntax WithGeneratedCodeAttribute(this ClassDeclarationSyntax classSyntax) 
+        => classSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
+
+    public static EnumDeclarationSyntax WithGeneratedCodeAttribute(this EnumDeclarationSyntax enumSyntax)
+        => enumSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
+
+    public static StructDeclarationSyntax WithGeneratedCodeAttribute(this StructDeclarationSyntax structSyntax)
+        => structSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
 
     public static SyntaxTokenList Modifiers(
         bool isPublic = false, bool isInternal = false, bool isProtected = false,

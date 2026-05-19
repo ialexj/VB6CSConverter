@@ -14,12 +14,12 @@ In general, the way this works is:
 
 1. Parse VB6 using ANTLR and create a syntax tree.
 2. Walk the tree and produce a C# syntax tree using Roslyn.
-3. Try to build the output.
-4. Run a set of rewriters to fix up the resulting code by using the semantic model.
-5. Try to infer types and resolve ambiguities, like arrays vs. function calls.
-6. Attempt to generate stub classes for missing types and dependencies.
-8. As fixes accrue, the semantic model gets more refined, so the rewriters can do more work.
-9. Go back to 3 until the code stabilizes.
+3. Inspect the COM references of the VB6 project. Generate C# stubs for all the imported types as a library reference.
+4. Try to build the output.
+5. Run a set of rewriters to fix up the resulting code by using the semantic model.
+6. Try to infer types and resolve ambiguities, like arrays vs. function calls.
+7. As fixes accrue, the semantic model gets more refined, so the rewriters can do more work.
+8. Go back to 3 until the code stabilizes.
 
 ## Coverage
 
