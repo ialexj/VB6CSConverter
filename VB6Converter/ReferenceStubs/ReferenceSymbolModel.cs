@@ -81,4 +81,5 @@ public record LibraryModel(
     int Major,
     int Minor,
     IReadOnlyList<LibraryTypeModel> Types,
-    IReadOnlyList<DiscoveredDependency> DiscoveredDependencies);
+    IReadOnlyList<DiscoveredDependency> DiscoveredDependencies,
+    bool IsTransitive = false);

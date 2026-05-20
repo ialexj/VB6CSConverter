@@ -24,6 +24,7 @@ public enum ProjectReferenceKind
 /// <param name="ResolvedPath">
 /// Absolute path after resolution, or <see langword="null"/> if the file could not be found.
 /// </param>
+/// <param name="IsTransitive">Indicates whether this reference comes as a dependency from another reference.</param>
 public record class VisualBasicProjectReference(
     ProjectReferenceKind Kind,
     Guid Guid,
@@ -32,4 +33,5 @@ public record class VisualBasicProjectReference(
     int Lcid,
     string Description,
     string DeclaredPath,
-    string? ResolvedPath);
+    string? ResolvedPath,
+    bool IsTransitive = false);

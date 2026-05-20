@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using AwesomeAssertions;
 using VB6Converter.ReferenceStubs;
@@ -358,7 +359,7 @@ public class TypeLibraryInspectorIntegrationTests
     }
 
     [TestMethod]
-    public void Inspect_VbRuntimeSubLib_UserControl_ImplementsInterfaces()
+    public void Inspect_VbRuntimeSubLib_PropertyBag_ImplementsInterfaces()
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
@@ -368,21 +369,20 @@ public class TypeLibraryInspectorIntegrationTests
         var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
         var model = TypeLibraryInspector.Inspect(reference, path!)!;
 
-        var userControl = model.Types.FirstOrDefault(t =>
-            string.Equals(t.Name, "UserControl", StringComparison.OrdinalIgnoreCase));
-        if (userControl == null) {
-            Assert.Inconclusive("VB runtime UserControl type not present on this machine's registered type library");
-        }
+        // PropertyBag is the only TKIND_COCLASS in MSVBVM60.DLL\3.
+        // It implements _PropertyBag (a dispatch interface that carries Read/Write/Contents).
+        var propertyBag = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "PropertyBag", StringComparison.OrdinalIgnoreCase)
+            && t.Kind == LibraryTypeKind.Class);
+        propertyBag.Should().NotBeNull("PropertyBag is always present in MSVBVM60.DLL\\3");
 
-        userControl!.ImplementedInterfaces.Should().NotBeNull();
-        if (userControl.Kind == LibraryTypeKind.Class) {
-            userControl.ImplementedInterfaces!.Should().NotBeEmpty(
-                "coclasses should capture all non-restricted implemented COM interfaces");
-        }
+        propertyBag!.ImplementedInterfaces.Should().NotBeNull();
+        propertyBag.ImplementedInterfaces!.Should().NotBeEmpty(
+            "PropertyBag coclass implements _PropertyBag");
     }
 
     [TestMethod]
-    public void Inspect_VbRuntimeSubLib_UserControl_ContainsClientHeight()
+    public void Inspect_VbRuntimeSubLib_PropertyBag_ContainsInheritedMembers()
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
@@ -392,73 +392,114 @@ public class TypeLibraryInspectorIntegrationTests
         var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
         var model = TypeLibraryInspector.Inspect(reference, path!)!;
 
-        var userControl = model.Types.FirstOrDefault(t =>
-            string.Equals(t.Name, "UserControl", StringComparison.OrdinalIgnoreCase));
-        if (userControl == null) {
-            Assert.Inconclusive("VB runtime UserControl type not present on this machine's registered type library");
-        }
+        // PropertyBag is the only TKIND_COCLASS in MSVBVM60.DLL\3.
+        // Its _PropertyBag dispatch interface exposes ReadProperty, WriteProperty and Contents.
+        // The coclass inspector must collect these members by walking implemented interfaces.
+        var propertyBag = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "PropertyBag", StringComparison.OrdinalIgnoreCase)
+            && t.Kind == LibraryTypeKind.Class);
+        propertyBag.Should().NotBeNull("PropertyBag is always present in MSVBVM60.DLL\\3");
 
-        userControl!.Members.Should().Contain(m =>
-            string.Equals(m.Name, "ClientHeight", StringComparison.OrdinalIgnoreCase)
-            && (m.Kind == LibraryMemberKind.PropertyGet || m.Kind == LibraryMemberKind.PropertySet),
-            "inherited COM interface properties should be included in extracted members");
+        propertyBag!.Members.Should().Contain(m =>
+            string.Equals(m.Name, "ReadProperty", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.Method,
+            "members inherited from the _PropertyBag dispatch interface must be collected for the coclass");
+
+        propertyBag.Members.Should().Contain(m =>
+            string.Equals(m.Name, "WriteProperty", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.Method,
+            "members inherited from the _PropertyBag dispatch interface must be collected for the coclass");
     }
 
     [TestMethod]
-    public void Inspect_VbRuntimeSubLib_DataCaption_GetterTypeIsString()
+    public void Inspect_Stdole2_Font_DispatchInterfaceHasVarDispatchProperties()
     {
-        if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
+        if (!File.Exists(Stdole2Path)) Assert.Inconclusive("stdole2.tlb not found — skipping");
 
-        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
-        if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
-There
-        var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
-        var model = TypeLibraryInspector.Inspect(reference, path!)!;
-
-        var dataType = model.Types.FirstOrDefault(t =>
-            string.Equals(t.Name, "Data", StringComparison.OrdinalIgnoreCase));
-        if (dataType == null) {
-            Assert.Inconclusive("VB runtime Data type not present on this machine's registered type library");
-        }
-
-        dataType!.Members.Should().Contain(m =>
-            string.Equals(m.Name, "Caption", StringComparison.OrdinalIgnoreCase)
-            && m.Kind == LibraryMemberKind.PropertyGet
-            && string.Equals(m.ReturnCSharpType, "string", StringComparison.Ordinal),
-            "VB.Data.Caption should be surfaced as a string property getter");
-    }
-
-    [TestMethod]
-    public void Inspect_VbRuntimeSubLib_Font_ContainsInheritedFontProperties()
-    {
-        if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
-
-        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
-        if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
-
-        var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
-        var model = TypeLibraryInspector.Inspect(reference, path!)!;
+        var reference = MakeReference(Stdole2Guid, 2, 0, "OLE Automation", Stdole2Path);
+        var model = TypeLibraryInspector.Inspect(reference, Stdole2Path)!;
 
         var fontType = model.Types.FirstOrDefault(t =>
-            string.Equals(t.Name, "Font", StringComparison.OrdinalIgnoreCase));
-        if (fontType == null) {
-            Assert.Inconclusive("VB runtime Font type not present on this machine's registered type library");
-        }
+            string.Equals(t.Name, "Font", StringComparison.OrdinalIgnoreCase)
+            && t.Kind == LibraryTypeKind.DispatchInterface);
+        if (fontType == null) Assert.Inconclusive("Font dispinterface not present in stdole2 on this machine");
 
+        // stdole2.Font uses the ODL "properties:" section (VAR_DISPATCH VARDESCs) to describe
+        // its members, not INVOKE_PROPERTYGET/PUT FUNCDESCs.  The inspector must read cVars for
+        // TKIND_DISPATCH so these properties are not silently dropped.
         fontType!.Members.Should().Contain(m =>
             string.Equals(m.Name, "Name", StringComparison.OrdinalIgnoreCase)
             && m.Kind == LibraryMemberKind.PropertyGet,
-            "VB.Font should surface the inherited Name property");
+            "Font.Name should be surfaced from its VAR_DISPATCH VARDESC");
 
         fontType.Members.Should().Contain(m =>
             string.Equals(m.Name, "Size", StringComparison.OrdinalIgnoreCase)
             && m.Kind == LibraryMemberKind.PropertyGet,
-            "VB.Font should surface the inherited Size property");
+            "Font.Size should be surfaced from its VAR_DISPATCH VARDESC");
+    }
 
-        fontType.Members.Should().Contain(m =>
+    [TestMethod]
+    public void Inspect_Stdole2_IFont_ContainsDirectFontProperties()
+    {
+        if (!File.Exists(Stdole2Path)) Assert.Inconclusive("stdole2.tlb not found — skipping");
+
+        var reference = MakeReference(Stdole2Guid, 2, 0, "OLE Automation", Stdole2Path);
+        var model = TypeLibraryInspector.Inspect(reference, Stdole2Path)!;
+
+        var iFontType = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "IFont", StringComparison.OrdinalIgnoreCase));
+        if (iFontType == null) {
+            Assert.Inconclusive("IFont type not present in stdole2 type library on this machine");
+        }
+
+        // Diagnostic: show what IFont actually has
+        var memberNames = string.Join(", ", iFontType!.Members.Select(m => $"{m.Name}:{m.Kind}"));
+        var inheritedInterfaces = string.Join(", ", iFontType.ImplementedInterfaces ?? []);
+
+        System.Diagnostics.Debug.WriteLine($"IFont Kind: {iFontType.Kind}");
+        System.Diagnostics.Debug.WriteLine($"IFont Members ({iFontType.Members.Count}): {memberNames}");
+        System.Diagnostics.Debug.WriteLine($"IFont Implemented Interfaces: {inheritedInterfaces}");
+
+        iFontType.Members.Should().Contain(m =>
+            string.Equals(m.Name, "Name", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.PropertyGet,
+            "IFont should have the Name property");
+
+        iFontType.Members.Should().Contain(m =>
+            string.Equals(m.Name, "Size", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.PropertyGet,
+            "IFont should have the Size property");
+
+        iFontType.Members.Should().Contain(m =>
             string.Equals(m.Name, "Charset", StringComparison.OrdinalIgnoreCase)
             && m.Kind == LibraryMemberKind.PropertyGet,
-            "VB.Font should surface the inherited Charset property");
+            "IFont should have the Charset property");
+    }
+
+    [TestMethod]
+    public void Inspect_Stdole2_IPicture_InheritanceTest()
+    {
+        if (!File.Exists(Stdole2Path)) Assert.Inconclusive("stdole2.tlb not found — skipping");
+
+        var reference = MakeReference(Stdole2Guid, 2, 0, "OLE Automation", Stdole2Path);
+        var model = TypeLibraryInspector.Inspect(reference, Stdole2Path)!;
+
+        // IPicture is another interface in stdole2 that may have inheritance
+        var iPictureType = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "IPicture", StringComparison.OrdinalIgnoreCase));
+        if (iPictureType == null) {
+            Assert.Inconclusive("IPicture type not present in stdole2 type library on this machine");
+        }
+
+        var memberNames = string.Join(", ", iPictureType!.Members.Select(m => $"{m.Name}"));
+        var inheritedInterfaces = string.Join(", ", iPictureType.ImplementedInterfaces ?? []);
+
+        System.Diagnostics.Debug.WriteLine($"IPicture Kind: {iPictureType.Kind}");
+        System.Diagnostics.Debug.WriteLine($"IPicture Members ({iPictureType.Members.Count}): {memberNames}");
+        System.Diagnostics.Debug.WriteLine($"IPicture Implemented Interfaces: {inheritedInterfaces}");
+
+        // IPicture should have members from itself and/or inherited interfaces
+        iPictureType.Members.Should().NotBeEmpty("IPicture should have at least some members");
     }
 
     [TestMethod]
@@ -484,6 +525,64 @@ There
         finally {
             if (Directory.Exists(outDir)) Directory.Delete(outDir, recursive: true);
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // VB6.OLB  (Visual Basic 6 Object Library — ships with VB6 IDE)
+    // GUID: {FCFB3D2E-A0FA-1068-A738-08002B3371B5}  version 4.0
+    // Contains: Form, UserControl, MDIForm, App, Clipboard, Screen, etc.
+    // ──────────────────────────────────────────────────────────────────────
+
+    const string Vb6OlbPath = @"C:\Program Files (x86)\Microsoft Visual Studio\VB98\VB6.OLB";
+    static readonly Guid Vb6OlbGuid = new("FCFB3D2E-A0FA-1068-A738-08002B3371B5");
+
+    [TestMethod]
+    public void Vb6Olb_Inspect_ReturnsNonNullModel()
+    {
+        if (!File.Exists(Vb6OlbPath)) Assert.Inconclusive("VB6.OLB not found — skipping");
+
+        var reference = MakeReference(Vb6OlbGuid, 4, 0, "Visual Basic For Applications", Vb6OlbPath);
+        var model = TypeLibraryInspector.Inspect(reference, Vb6OlbPath);
+
+        model.Should().NotBeNull();
+    }
+
+    [TestMethod]
+    public void Vb6Olb_Inspect_ListAllTypes()
+    {
+        if (!File.Exists(Vb6OlbPath)) Assert.Inconclusive("VB6.OLB not found — skipping");
+
+        var reference = MakeReference(Vb6OlbGuid, 4, 0, "Visual Basic For Applications", Vb6OlbPath);
+        var model = TypeLibraryInspector.Inspect(reference, Vb6OlbPath)!;
+
+        var allTypeNames = string.Join(", ", model.Types.Select(t => $"{t.Name}({t.Kind})").OrderBy(x => x));
+        System.Diagnostics.Debug.WriteLine($"VB6.OLB Types: {allTypeNames}");
+
+        model.Types.Should().NotBeEmpty();
+    }
+
+    [TestMethod]
+    public void Vb6Olb_Inspect_UserControl_ContainsClientHeight()
+    {
+        if (!File.Exists(Vb6OlbPath)) Assert.Inconclusive("VB6.OLB not found — skipping");
+
+        var reference = MakeReference(Vb6OlbGuid, 4, 0, "Visual Basic For Applications", Vb6OlbPath);
+        var model = TypeLibraryInspector.Inspect(reference, Vb6OlbPath)!;
+
+        var userControl = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "UserControl", StringComparison.OrdinalIgnoreCase));
+        if (userControl == null) Assert.Inconclusive("UserControl not found in VB6.OLB on this machine");
+
+        var memberNames = string.Join(", ", userControl!.Members.Select(m => $"{m.Name}:{m.Kind}"));
+        var implementedInterfaces = string.Join(", ", userControl.ImplementedInterfaces ?? []);
+        System.Diagnostics.Debug.WriteLine($"UserControl Kind: {userControl.Kind}");
+        System.Diagnostics.Debug.WriteLine($"UserControl Members ({userControl.Members.Count}): {memberNames}");
+        System.Diagnostics.Debug.WriteLine($"UserControl Implemented Interfaces: {implementedInterfaces}");
+
+        userControl.Members.Should().Contain(m =>
+            string.Equals(m.Name, "ClientHeight", StringComparison.OrdinalIgnoreCase)
+            && (m.Kind == LibraryMemberKind.PropertyGet || m.Kind == LibraryMemberKind.PropertySet),
+            "UserControl should expose ClientHeight");
     }
 
     // ──────────────────────────────────────────────────────────────────────

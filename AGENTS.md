@@ -36,19 +36,7 @@ dotnet run --project VB6Converter/VB6Converter.csproj -- -p <path/to/project.vbp
 
 ### CLI Options (`Program.CommandLineOptions`)
 
-| Flag | Description |
-|---|---|
-| `-p, --project` | *(required)* Path to `.vbp` VB6 project file |
-| `-o, --output` | *(required)* Output directory for generated C# files |
-| `-u, --update` | Re-convert specific files (or `*` for all) even if they already exist |
-| `-f, --filter` | Only process the specified files |
-| `--show-output` | Print converted source to console |
-| `--skip-transform` | Skip VB6→C# transform; attempt build with existing files |
-| `--skip-fixup` | Skip semantic rewriter loop |
-| `--skip-missing` | Skip missing-type stub generation |
-| `--skip-diagnostics` | Skip final diagnostics collection |
-| `--overwrite-user` | Overwrite files that lack `[GeneratedCode]` attribute |
-
+See the `Program.CommandLineOptions` class for the list of CLI command-line options.
 ---
 
 ## Architecture & Data Flow
@@ -77,7 +65,6 @@ VB6 source (.bas / .cls / .frm / .ctl)
      TypeRefiner (cross-file variable collection)
      TypeCastRewriter · DAORewriter
      + UsingsRewriter applied after each pass
-  ↓  MissingTypeScanner  →  stub classes in MissingTypes/
   ↓  _Diagnostics.txt written to output dir
 ```
 
@@ -155,13 +142,6 @@ All rewriters extend `LoggedRewriter` (which extends `CSharpSyntaxRewriter`) and
 | [ArrayCallDisambiguator.cs](VB6Converter/Rewriters/Semantic/ArrayCallDisambiguator.cs) | Distinguishes `arr(i)` (array index) from `fn(i)` (call) |
 | [DAORewriter.cs](VB6Converter/Rewriters/Semantic/DAORewriter.cs) | Data Access Object pattern rewrites |
 
-**Missing-type infrastructure**:
-
-| File | Role |
-|---|---|
-| [MissingTypeScanner.cs](VB6Converter/Rewriters/MissingTypeScanner.cs) | Walks compilation; collects undefined symbols |
-| [MissingTypes.cs](VB6Converter/Rewriters/MissingTypes.cs) | Accumulates and generates stub `CompilationUnit`s for unknown types |
-
 ---
 
 ## Test Conventions
@@ -214,7 +194,6 @@ var cu = Validations.ConversionShouldSucceed(vbCode);
 - **`[GeneratedCode]` attribute**: all converter-output classes carry `[System.CodeDom.Compiler.GeneratedCode("VB6Converter", "1.0")]`; used to decide what can be overwritten on re-run
 - **Rewriter base class**: every rewriter extends `LoggedRewriter` (not `CSharpSyntaxRewriter` directly); provides structured Serilog logging and error accumulation
 - **Error files**: parse/transform errors write a `.log` file alongside each `.cs` output; `.vb6` copy of the source is written when parse errors occur
-- **Missing types output**: stub classes are generated under `<output>/MissingTypes/` with namespace-based subdirectories
 - **Global VB6 compat usings**: `_VB6Usings.cs` is generated in the output dir and provides `using static` for `FileSystem`, `Strings`, and other VB runtime members
 - **VB6 file type mapping**:
 

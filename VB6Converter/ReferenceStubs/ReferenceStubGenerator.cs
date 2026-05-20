@@ -6,8 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Converter.RoslynHelpers;
 
@@ -111,6 +109,13 @@ public static class ReferenceStubGenerator
                         .WithMembers(SingletonList(decl))))
             .NormalizeWhitespace();
 
+        // Post-process: rewrite mscorlib/System.* type references to their canonical .NET
+        // equivalents, but only for libraries that actually depend on those type libraries.
+        if (DotnetLibraryGuids.RequiresNormalization(library)) {
+            cu = (CompilationUnitSyntax)new MscorlibTypeNormalizingRewriter().Visit(cu)!;
+            cu = cu.NormalizeWhitespace();
+        }
+
         return cu.ToFullString();
     }
 
@@ -211,7 +216,8 @@ public static class ReferenceStubGenerator
 
         var baseInterfaces = (type.ImplementedInterfaces ?? [])
             .Where(i => !string.IsNullOrWhiteSpace(i))
-            .Select(MakeSafeIdentifier)
+            .Where(i => i != "_Object")
+            .Select(i => i.Contains('.') ? i : MakeSafeIdentifier(i))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(n => (BaseTypeSyntax)SimpleBaseType(ParseTypeName(n)))
             .ToArray();
@@ -301,7 +307,8 @@ public static class ReferenceStubGenerator
         if (!isStatic) {
             var baseInterfaces = (type.ImplementedInterfaces ?? [])
                 .Where(i => !string.IsNullOrWhiteSpace(i))
-                .Select(MakeSafeIdentifier)
+                .Where(i => i != "_Object")  // _Object is a COM plumbing artefact; omit it
+                .Select(i => i.Contains('.') ? i : MakeSafeIdentifier(i))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(n => (BaseTypeSyntax)SimpleBaseType(ParseTypeName(n)))
                 .ToArray();
@@ -451,8 +458,7 @@ public static class ReferenceStubGenerator
         bool makeOptional = p.IsOptional || forceOptional;
         bool useRef = p.IsOut && !makeOptional;
         var syntax = Parameter(Identifier(MakeSafeIdentifier(p.Name)))
-            .WithType(ParseTypeName(useRef ? "ref " + p.CSharpType : p.CSharpType));
-
+        .WithType(ParseTypeName(useRef ? "ref " + p.CSharpType : p.CSharpType));
         if (makeOptional) {
             syntax = syntax.WithDefault(
                 EqualsValueClause(
@@ -521,4 +527,5 @@ public static class ReferenceStubGenerator
             suffix++;
         }
     }
+
 }

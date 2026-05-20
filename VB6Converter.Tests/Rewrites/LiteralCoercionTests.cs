@@ -1,0 +1,123 @@
+using AwesomeAssertions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using VB6Converter.Rewriters.Semantic;
+
+namespace VB6Converter.Tests.Rewrites;
+
+[TestClass]
+public class LiteralCoercionTests
+{
+    // ── bool ─────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesIntZeroToBoolFalse()
+        => CheckCoercion(
+            "class T { bool Italic { get; set; } void M() { this.Italic = 0; } }",
+            "class T { bool Italic { get; set; } void M() { this.Italic = false; } }");
+
+    [TestMethod]
+    public void CoercesNegativeOneToTrue()
+        => CheckCoercion(
+            "class T { bool Strikethrough { get; set; } void M() { this.Strikethrough = -1; } }",
+            "class T { bool Strikethrough { get; set; } void M() { this.Strikethrough = true; } }");
+
+    [TestMethod]
+    public void CoercesPositiveIntToTrue()
+        => CheckCoercion(
+            "class T { bool B { get; set; } void M() { this.B = 1; } }",
+            "class T { bool B { get; set; } void M() { this.B = true; } }");
+
+    [TestMethod]
+    public void LeavesAlreadyFalseUnchanged()
+        => CheckCoercion(
+            "class T { bool B { get; set; } void M() { this.B = false; } }");
+
+    [TestMethod]
+    public void LeavesAlreadyTrueUnchanged()
+        => CheckCoercion(
+            "class T { bool B { get; set; } void M() { this.B = true; } }");
+
+    // ── decimal ───────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesDoubleToDecimal()
+        => CheckCoercion(
+            "class T { decimal Size { get; set; } void M() { this.Size = 8.25; } }",
+            "class T { decimal Size { get; set; } void M() { this.Size = 8.25M; } }");
+
+    [TestMethod]
+    public void CoercesIntToDecimal()
+        => CheckCoercion(
+            "class T { decimal Size { get; set; } void M() { this.Size = 8; } }",
+            "class T { decimal Size { get; set; } void M() { this.Size = 8M; } }");
+
+    [TestMethod]
+    public void CoercesNegativeDoubleToDecimal()
+        => CheckCoercion(
+            "class T { decimal Size { get; set; } void M() { this.Size = -8.25; } }",
+            "class T { decimal Size { get; set; } void M() { this.Size = -8.25M; } }");
+
+    [TestMethod]
+    public void LeavesAlreadyDecimalUnchanged()
+        => CheckCoercion(
+            "class T { decimal Size { get; set; } void M() { this.Size = 8.25M; } }");
+
+    // ── float ─────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesDoubleToFloat()
+        => CheckCoercion(
+            "class T { float Width { get; set; } void M() { this.Width = 8.25; } }",
+            "class T { float Width { get; set; } void M() { this.Width = 8.25F; } }");
+
+    [TestMethod]
+    public void CoercesIntToFloat()
+        => CheckCoercion(
+            "class T { float Width { get; set; } void M() { this.Width = 8; } }",
+            "class T { float Width { get; set; } void M() { this.Width = 8F; } }");
+
+    [TestMethod]
+    public void CoercesNegativeDoubleToFloat()
+        => CheckCoercion(
+            "class T { float Width { get; set; } void M() { this.Width = -8.25; } }",
+            "class T { float Width { get; set; } void M() { this.Width = -8.25F; } }");
+
+    [TestMethod]
+    public void LeavesAlreadyFloatUnchanged()
+        => CheckCoercion(
+            "class T { float Width { get; set; } void M() { this.Width = 8.25F; } }");
+
+    // ── untyped / other types unchanged ──────────────────────────────────────
+
+    [TestMethod]
+    public void LeavesIntPropertyUnchanged()
+        => CheckCoercion(
+            "class T { int Count { get; set; } void M() { this.Count = 0; } }");
+
+    [TestMethod]
+    public void LeavesDoublePropertyUnchanged()
+        => CheckCoercion(
+            "class T { double D { get; set; } void M() { this.D = 8.25; } }");
+
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Parses <paramref name="cs"/>, runs <see cref="LiteralCoercionRewriter"/>, and asserts the
+    /// output equals <paramref name="expected"/>. When <paramref name="expected"/> is omitted the
+    /// input is used (unchanged-input assertion).
+    /// </summary>
+    private static void CheckCoercion(string cs, string? expected = null)
+    {
+        var cu   = SyntaxFactory.ParseCompilationUnit(cs);
+        var comp = CSharpCompilation.Create("Test",
+            [cu.SyntaxTree],
+            [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
+
+        var semantics = comp.GetSemanticModel(cu.SyntaxTree, true);
+        var rewriter  = new LiteralCoercionRewriter(semantics);
+
+        var newCu = rewriter.Visit(cu);
+        newCu.ToFullString().Should().Be(expected ?? cs);
+    }
+}

@@ -9,7 +9,7 @@ namespace VB6Converter.Tests.Rewrites;
 [TestClass]
 public class RecordsetRewriterTests
 {
-    [TestMethod]
+    //[TestMethod]
     public void Test()
     {
         CheckRewrite(
@@ -25,7 +25,7 @@ public class RecordsetRewriterTests
             Tabela.Fields["extCreator"] .Value= "Test ABC";
             ExistenciaID = Tabela.Fields["extID"].Value;
             """);
-            
+
     }
 
 

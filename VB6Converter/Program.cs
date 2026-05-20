@@ -143,6 +143,12 @@ public static class Program
                 hasChanges = false;
                 Compilation compilation = null;
 
+                // Reload from disk to avoid stale in-memory project state caused by
+                // parallel SaveDocument writes during the conversion phase (each
+                // thread's doc.Project snapshot only carries its own file's update,
+                // so the last writer wins and all other documents appear empty).
+                await ws.ReloadProject();
+
                 async Task RunRewriter(bool compile, string title, Func<ConversionTarget, SemanticModel, LoggedRewriter> rewriter)
                 {
                     if (compile && compilation is null || hasChanges) {
@@ -184,7 +190,7 @@ public static class Program
                     compilation = await GetCompilation();
                 }
 
-                await RunOperations("Collecting Variables", ws.Targets, 
+                await RunOperations("Collecting Variables", ws.Targets,
                     (t, ctx, cancel) => ws.WithCompilationUnit(t, cancel, async cu => {
                         var sm = compilation.GetSemanticModel(cu.SyntaxTree, false);
                         await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
@@ -193,9 +199,11 @@ public static class Program
 
                 await RunRewriter(true, "Refining Types", (t, sm) => new TypeRefiner(varTypes));
 
+                await RunRewriter(true, "Coercing Literals", (t, sm) => new LiteralCoercionRewriter(sm));
+
                 await RunRewriter(true, "Adding Type Casts", (t, sm) => new TypeCastRewriter(sm));
                 //await RunRewriter(true, "Rewriting DAO", (t, sm) => new DAORewriter(sm));
-                
+
                 if (hasChanges) {
                     count++;
                     AnsiConsole.MarkupLineInterpolated($"[yellow]Changes were made, re-running fixups ({count})...[/]");
@@ -265,7 +273,7 @@ public static class Program
                 var reportLines = new ConcurrentBag<string>();
                 var models = new ConcurrentBag<LibraryModel>();
                 var seenGuids = new ConcurrentDictionary<Guid, Guid>();
-                
+
                 var inspectQueue = new ConcurrentQueue<VisualBasicProjectReference>();
                 foreach (var reference in vbProject.References) {
                     inspectQueue.Enqueue(reference);
@@ -295,6 +303,12 @@ public static class Program
                                 return;
                             }
 
+                            if (DotnetLibraryGuids.Contains(reference.Guid)) {
+                                Log.Default.Information("Skipping reference {description} ({guid})", reference.Description, reference.Guid);
+                                reportLines.Add($"SKIPPED     {reference.Description}  {reference.ResolvedPath}");
+                                return;
+                            }
+
                             Interlocked.Increment(ref resolved);
 
                             var model = TypeLibraryInspector.Inspect(reference, reference.ResolvedPath);
@@ -310,7 +324,7 @@ public static class Program
                                 var path = VisualBasicProject.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);
                                 var depRef = new VisualBasicProjectReference(
                                     ProjectReferenceKind.TypeLibrary, dep.Guid, dep.Major, dep.Minor, 0,
-                                    dep.Guid.ToString("B"), path, path);
+                                    dep.Guid.ToString("B"), path, path, true);
 
                                 inspectQueue.Enqueue(depRef);
                             }
@@ -319,7 +333,7 @@ public static class Program
                             var written = ReferenceStubGenerator.Generate(model, outputDir);
                             Interlocked.Add(ref generated, written.Count);
 
-                            reportLines.Add($"OK          {model.Name}  {reference.ResolvedPath}  ({written.Count} types)");
+                            reportLines.Add($"OK          {model.Name} - {model.Guid} - {reference.ResolvedPath}  ({written.Count} types)");
                             AnsiConsole.WriteLine($"  {model.Name}: {written.Count} stubs from {Path.GetFileName(reference.ResolvedPath)}");
                         }
                         catch (Exception ex) when (!System.Diagnostics.Debugger.IsAttached) {
@@ -338,7 +352,7 @@ public static class Program
                 // flat sequence so ReferenceUsingsGenerator can deduplicate by name.  Multiple COM
                 // libraries (e.g. stdole and oleaut32) often define the same alias (OLE_COLOR, …)
                 // and per-library global usings would cause CS0105 "appeared previously" errors.
-                var allAliases = models.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
+                var allAliases = models.Where(m => !m.IsTransitive).SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
                 var referenceUsingsPath = ReferenceUsingsGenerator.Generate(models, outputDir, allAliases);
 
                 // Write summary report
@@ -354,7 +368,7 @@ public static class Program
                 AnsiConsole.MarkupLineInterpolated(
                     $"[green]Reference stubs:[/] {generated} types from {resolved} libraries ({unresolved} unresolved). Report: {reportPath}");
             });
-        
-        
+
+
     }
 }

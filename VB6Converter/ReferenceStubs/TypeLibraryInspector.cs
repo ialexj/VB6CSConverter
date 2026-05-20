@@ -108,7 +108,87 @@ public sealed class TypeLibraryInspector
             }
         }
 
-        return new LibraryModel(libName, safeName, reference.Guid, reference.MajorVersion, reference.MinorVersion, types, [.. discoveredDeps]);
+        // Post-process: a DispatchInterface with 0 members (e.g. stdole.Font) often has a
+        // corresponding vtable Interface that carries all the real members (e.g. stdole.IFont).
+        // COM doesn't encode this relationship explicitly, but the naming convention is consistent:
+        //   dispinterface "X"  ←→  interface "IX"
+        // Add the vtable interface as a base so the generated C# stub exposes those members.
+        var vtableInterfaceNames = types
+            .Where(t => t.Kind == LibraryTypeKind.Interface)
+            .ToLookup(t => t.Name, StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < types.Count; i++) {
+            var t = types[i];
+            if (t.Kind != LibraryTypeKind.DispatchInterface) continue;
+            if (t.Members.Count > 0) continue;
+
+            string candidate = "I" + t.Name;
+            if (!vtableInterfaceNames.Contains(candidate)) continue;
+
+            var existing = t.ImplementedInterfaces ?? [];
+            if (existing.Any(n => string.Equals(n, candidate, StringComparison.OrdinalIgnoreCase))) continue;
+
+            types[i] = t with { ImplementedInterfaces = [.. existing, candidate] };
+        }
+
+        // Post-process: inject VB6 runtime-intrinsic members that are not present in any
+        // COM type library because they are provided by the VB6 container at runtime.
+        // These are keyed by (libraryGuid, typeName).
+        InjectSyntheticMembers(reference.Guid, types);
+
+        return new LibraryModel(libName, safeName, reference.Guid, reference.MajorVersion, reference.MinorVersion, types, [.. discoveredDeps], reference.IsTransitive);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Synthetic / runtime-intrinsic member injection
+    // ──────────────────────────────────────────────────────────────────────
+
+    // Some VB6 object-model properties are not in any COM type library — the VB6 runtime
+    // or container injects them at run-time.  We add them here so the generated C# stubs
+    // compile and the converter can resolve member access expressions.
+    //
+    // Key:   (library GUID, type name, case-insensitive)
+    // Value: members to add (only added if not already present with the same name+kind)
+    static readonly Guid Vb6OlbGuid = new("FCFB3D2E-A0FA-1068-A738-08002B3371B5");
+
+    static readonly Dictionary<(Guid LibGuid, string TypeName), IReadOnlyList<LibraryMemberModel>> SyntheticMembers
+        = new()
+        {
+            // VB6.OLB — UserControl client-area properties
+            // These describe the drawable area inside the control borders.
+            // The VB6 runtime supplies them; they appear nowhere in VB6.OLB itself.
+            [(Vb6OlbGuid, "UserControl")] =
+            [
+                new("ClientLeft",   LibraryMemberKind.PropertyGet, "float", []),
+                new("ClientTop",    LibraryMemberKind.PropertyGet, "float", []),
+                new("ClientWidth",  LibraryMemberKind.PropertyGet, "float", []),
+                new("ClientHeight", LibraryMemberKind.PropertyGet, "float", []),
+            ],
+            [(Vb6OlbGuid, "Form")] =
+            [
+                new("ClientLeft",   LibraryMemberKind.PropertyGet, "float", []),
+                new("ClientTop",    LibraryMemberKind.PropertyGet, "float", []),
+                new("ClientWidth",  LibraryMemberKind.PropertyGet, "float", []),
+                new("ClientHeight", LibraryMemberKind.PropertyGet, "float", []),
+            ],
+        };
+
+    static void InjectSyntheticMembers(Guid libraryGuid, List<LibraryTypeModel> types)
+    {
+        for (int i = 0; i < types.Count; i++) {
+            var t = types[i];
+            if (!SyntheticMembers.TryGetValue((libraryGuid, t.Name), out var synthetic)) continue;
+
+            var toAdd = synthetic
+                .Where(sm => !t.Members.Any(m =>
+                    string.Equals(m.Name, sm.Name, StringComparison.OrdinalIgnoreCase)
+                    && m.Kind == sm.Kind))
+                .ToList();
+
+            if (toAdd.Count == 0) continue;
+
+            types[i] = t with { Members = [.. t.Members, .. toAdd] };
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -378,9 +458,21 @@ public sealed class TypeLibraryInspector
             return;
         }
 
-        foreach (var member in InspectFunctions(typeLib, typeInfo, typeAttr.cFuncs, discoveredDeps)) {
+        foreach (var member in InspectFunctions(typeLib, typeInfo, typeAttr.cFuncs, typeAttr.typekind, discoveredDeps)) {
             if (memberSignatures.Add(GetMemberSignature(member))) {
                 members.Add(member);
+            }
+        }
+
+        // Pure dispinterfaces may describe their properties as VAR_DISPATCH VARDESCs
+        // (the "properties:" section in ODL/IDL) rather than as INVOKE_PROPERTYGET/PUT
+        // FUNCDESCs.  Read cVars so those properties are not silently dropped.
+        if (typeAttr.typekind == System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_DISPATCH
+            && typeAttr.cVars > 0) {
+            foreach (var member in InspectDispatchVarProperties(typeLib, typeInfo, typeAttr.cVars, discoveredDeps)) {
+                if (memberSignatures.Add(GetMemberSignature(member))) {
+                    members.Add(member);
+                }
             }
         }
 
@@ -444,16 +536,61 @@ public sealed class TypeLibraryInspector
     }
 
     // ──────────────────────────────────────────────────────────────────────
+    // Dispatch interface VAR_DISPATCH properties
+    // ──────────────────────────────────────────────────────────────────────
+
+    static List<LibraryMemberModel> InspectDispatchVarProperties(
+        System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
+        System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
+        short cVars,
+        HashSet<DiscoveredDependency> discoveredDeps)
+    {
+        var members = new List<LibraryMemberModel>(cVars * 2);
+
+        for (int i = 0; i < cVars; i++) {
+            typeInfo.GetVarDesc(i, out IntPtr pVarDesc);
+            if (pVarDesc == IntPtr.Zero) continue;
+
+            try {
+                var varDesc = Marshal.PtrToStructure<System.Runtime.InteropServices.ComTypes.VARDESC>(pVarDesc);
+                if (varDesc.varkind != System.Runtime.InteropServices.ComTypes.VARKIND.VAR_DISPATCH) continue;
+
+                typeInfo.GetDocumentation(varDesc.memid, out string memberName, out _, out _, out _);
+                if (string.IsNullOrWhiteSpace(memberName)) continue;
+
+                string propType = ResolveType(typeLib, typeInfo, varDesc.elemdescVar.tdesc, discoveredDeps);
+                if (propType == "void") propType = "object";
+
+                members.Add(new LibraryMemberModel(memberName, LibraryMemberKind.PropertyGet, propType, []));
+
+                bool isReadOnly = (varDesc.wVarFlags & VARFLAG_FREADONLY) != 0;
+                if (!isReadOnly) {
+                    members.Add(new LibraryMemberModel(memberName, LibraryMemberKind.PropertySet, "void",
+                        [new LibraryParameterModel("value", propType, false, false)]));
+                }
+            }
+            catch { /* skip this property */ }
+            finally {
+                typeInfo.ReleaseVarDesc(pVarDesc);
+            }
+        }
+
+        return members;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
     // Methods and properties
     // ──────────────────────────────────────────────────────────────────────
 
     const short FUNCFLAG_FRESTRICTED = 0x1;
     const short FUNCFLAG_FHIDDEN     = 0x40;
+    const short VARFLAG_FREADONLY    = 0x1;
 
     static List<LibraryMemberModel> InspectFunctions(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         short cFuncs,
+        System.Runtime.InteropServices.ComTypes.TYPEKIND typekind,
         HashSet<DiscoveredDependency> discoveredDeps)
     {
         var members = new List<LibraryMemberModel>(cFuncs);
@@ -465,8 +602,12 @@ public sealed class TypeLibraryInspector
             try {
                 var funcDesc = Marshal.PtrToStructure<System.Runtime.InteropServices.ComTypes.FUNCDESC>(pFuncDesc);
 
-                // Skip restricted (internal COM plumbing) functions
-                if ((funcDesc.wFuncFlags & FUNCFLAG_FRESTRICTED) != 0) continue;
+                // Skip restricted functions only for vtable interfaces (TKIND_INTERFACE), where
+                // FUNCFLAG_FRESTRICTED marks the inherited IUnknown/IDispatch plumbing slots.
+                // For dispatch interfaces (TKIND_DISPATCH) these slots are NOT in cFuncs, so
+                // FRESTRICTED there marks legitimately hidden but callable properties (e.g. ClientHeight).
+                if (typekind == System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_INTERFACE
+                    && (funcDesc.wFuncFlags & FUNCFLAG_FRESTRICTED) != 0) continue;
 
                 typeInfo.GetDocumentation(funcDesc.memid, out string memberName, out _, out _, out _);
                 if (string.IsNullOrWhiteSpace(memberName)) continue;

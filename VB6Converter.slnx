@@ -7,4 +7,5 @@
     <Project Path="VB6Converter.Tests/VB6Converter.Tests.csproj" />
     <Project Path="VB6Parser.Tests/VB6Parser.Tests.csproj" />
   </Folder>
+  <Project Path="../../../AppData/Local/Temp/tlbinspect123/tlbinspect.csproj" />
 </Solution>

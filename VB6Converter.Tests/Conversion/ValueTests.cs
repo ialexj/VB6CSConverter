@@ -77,9 +77,9 @@ public class ValueTests
     public void DateLiteralUsesDateTimeParse() => ValidateBodyMatches(
         """
         x = #2020-01-02#
-        """, 
+        """,
         """
-        x = DateTime.Parse("2020-01-02");
+        x = System.DateTime.Parse("2020-01-02");
         """);
 
     [TestMethod]
@@ -279,7 +279,7 @@ public class ValueTests
         """
         x = 0xC0C0C0;
         """);
-    
+
 
     [TestMethod]
     public void FileNumberLiteralBecomesString() => ValidateBodyMatches(

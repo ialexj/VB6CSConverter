@@ -19,8 +19,8 @@ public class VBCoreRewriter : LoggedRewriter
             }
 
             return node.Identifier.Text switch {
-                "Now" => ParseExpression("DateTime.Now"),
-                "Date" => ParseExpression("DateTime.Now.Date"),
+                "Now" => ParseExpression("System.DateTime.Now"),
+                "Date" => ParseExpression("System.DateTime.Now.Date"),
                 _ => base.VisitIdentifierName(node),
             };
         });
@@ -103,7 +103,7 @@ public class VBCoreRewriter : LoggedRewriter
     static SyntaxNode ConvertChr(InvocationExpressionSyntax node)
     {
         var arg = node.ArgumentList.Arguments[0].Expression;
-        if (arg is LiteralExpressionSyntax literal 
+        if (arg is LiteralExpressionSyntax literal
             && literal.IsKind(SyntaxKind.NumericLiteralExpression)) {
             return LiteralExpression(
                 SyntaxKind.CharacterLiteralExpression,
@@ -141,7 +141,7 @@ public class VBCoreRewriter : LoggedRewriter
     static SyntaxNode ConvertAsc(InvocationExpressionSyntax node)
     {
         var args = node.ArgumentList.Arguments[0].Expression;
-        if (args is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression) 
+        if (args is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression)
             && literal.Token.ValueText.Length == 1) {
             return LiteralExpression(
                 SyntaxKind.CharacterLiteralExpression,
@@ -166,7 +166,7 @@ public class VBCoreRewriter : LoggedRewriter
             ParseExpression(expression),
             ArgumentList(node.ArgumentList.Arguments[0].Expression));
 
-    static SyntaxNode ConvertToMemberAccess(InvocationExpressionSyntax node) 
+    static SyntaxNode ConvertToMemberAccess(InvocationExpressionSyntax node)
     {
         if (node.Expression is IdentifierNameSyntax name) {
             var value = node.ArgumentList.Arguments[0];
@@ -211,7 +211,7 @@ public class VBCoreRewriter : LoggedRewriter
                 IdentifierName("Substring")),
             ArgumentList(
                 Argument(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0))),
-                len));        
+                len));
     }
 
     static SyntaxNode ConvertUBound(InvocationExpressionSyntax node)
@@ -239,7 +239,7 @@ public class VBCoreRewriter : LoggedRewriter
         );
     }
 
-    static SyntaxNode ConvertIsNull(InvocationExpressionSyntax node) 
+    static SyntaxNode ConvertIsNull(InvocationExpressionSyntax node)
         => ParenthesizedExpression(
             IsPatternExpression(node.ArgumentList.Arguments[0].Expression, ConstantPattern(
                 LiteralExpression(
