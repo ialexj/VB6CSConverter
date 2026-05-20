@@ -7,9 +7,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
-using static VB6Converter.RoslynHelpers;
+using static ComStubGenerator.StubGenHelpers;
 
-namespace VB6Converter.ReferenceStubs;
+namespace ComStubGenerator;
 
 /// <summary>
 /// Generates C# stub source files from a <see cref="LibraryModel"/> and writes

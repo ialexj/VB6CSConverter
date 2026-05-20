@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace VB6Converter.ReferenceStubs;
+namespace ComStubGenerator;
 
 /// <summary>
 /// Generates <c>_ReferenceUsings.cs</c> in the output directory so generated

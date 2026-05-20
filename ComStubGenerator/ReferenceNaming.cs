@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 
-namespace VB6Converter.ReferenceStubs;
+namespace ComStubGenerator;
 
 /// <summary>
 /// Pure utility methods for normalising COM library and identifier names

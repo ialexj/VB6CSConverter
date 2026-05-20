@@ -11,7 +11,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace VB6Converter.ReferenceStubs;
+namespace ComStubGenerator;
 
 /// <summary>
 /// Identifies .NET runtime type-library GUIDs (mscorlib and System.*) so that

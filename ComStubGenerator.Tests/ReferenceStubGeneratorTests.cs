@@ -1,7 +1,7 @@
 using AwesomeAssertions;
-using VB6Converter.ReferenceStubs;
+using ComStubGenerator;
 
-namespace VB6Converter.Tests.ReferenceStubs;
+namespace ComStubGenerator.Tests;
 
 [TestClass]
 public class ReferenceStubGeneratorTests

@@ -1,10 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using AwesomeAssertions;
-using VB6Converter.ReferenceStubs;
+using ComStubGenerator;
 using VB6Parser;
 
-namespace VB6Converter.Tests.ReferenceStubs;
+namespace ComStubGenerator.Tests;
 
 /// <summary>
 /// Live integration tests that exercise <see cref="TypeLibraryInspector"/> against

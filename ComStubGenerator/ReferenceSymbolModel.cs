@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace VB6Converter.ReferenceStubs;
+namespace ComStubGenerator;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Enumerations

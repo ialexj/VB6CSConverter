@@ -2,10 +2,14 @@
   <Folder Name="/src/">
     <Project Path="VB6Converter/VB6Converter.csproj" />
     <Project Path="VB6Parser/VB6Parser.csproj" />
+    <Project Path="ComStubGenerator/ComStubGenerator.csproj">
+      <Platform Project="x86" />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
     <Project Path="VB6Converter.Tests/VB6Converter.Tests.csproj" />
     <Project Path="VB6Parser.Tests/VB6Parser.Tests.csproj" />
+    <Project Path="ComStubGenerator.Tests/ComStubGenerator.Tests.csproj" />
   </Folder>
   <Project Path="../../../AppData/Local/Temp/tlbinspect123/tlbinspect.csproj" />
 </Solution>

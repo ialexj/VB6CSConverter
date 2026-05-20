@@ -8,7 +8,7 @@ using System.Runtime.Versioning;
 using Microsoft.Win32;
 using VB6Parser;
 
-namespace VB6Converter.ReferenceStubs;
+namespace ComStubGenerator;
 
 /// <summary>
 /// Inspects COM type libraries using the Windows OLE Automation API and builds

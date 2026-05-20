@@ -6,11 +6,12 @@ using Spectre.Console;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using VB6Converter.ReferenceStubs;
 using VB6Converter.Rewriters;
 using VB6Converter.Rewriters.Semantic;
 using VB6Parser;
@@ -73,7 +74,7 @@ public static class Program
         // ── Pre-conversion: generate COM reference stubs ────────────────────
         if (!options.SkipReferenceStubs && vbProject.References.Count > 0) {
             var referenceDir = Path.Join(options.OutputDir, "_References");
-            await GenerateReferenceStubs(vbProject, referenceDir);
+            await GenerateReferenceStubs(options.Project, referenceDir);
         }
         // ────────────────────────────────────────────────────────────────────
 
@@ -232,11 +233,11 @@ public static class Program
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Reference stub generation
+    // Reference stub generation — delegates to the ComStubGenerator executable
     // ─────────────────────────────────────────────────────────────────────
 
     static async Task GenerateReferenceStubs(
-        VisualBasicProject vbProject,
+        string projectPath,
         string outputDir)
     {
         AnsiConsole.MarkupLine("[yellow]Generating COM reference stubs...[/]");
@@ -246,129 +247,57 @@ public static class Program
             return;
         }
 
-        if (OperatingSystem.IsWindows()) {
-            await GenerateReferenceStubsWindows(vbProject, outputDir);
+        string stubGenExe = FindComStubGeneratorExe();
+        if (stubGenExe == null) {
+            AnsiConsole.MarkupLine("[red]ComStubGenerator.exe not found alongside converter. Skipping reference stub generation.[/]");
+            Log.Default.Warning("ComStubGenerator.exe not found; reference stubs will not be generated");
+            return;
+        }
+
+        var psi = new ProcessStartInfo {
+            FileName = stubGenExe,
+            ArgumentList = { "-p", projectPath, "-o", outputDir },
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        using var process = Process.Start(psi)!;
+
+        // Relay output to console while the subprocess runs
+        var stdoutTask = RelayOutputAsync(process.StandardOutput);
+        var stderrTask = RelayOutputAsync(process.StandardError);
+
+        await process.WaitForExitAsync();
+        await Task.WhenAll(stdoutTask, stderrTask);
+
+        if (process.ExitCode != 0) {
+            AnsiConsole.MarkupLineInterpolated($"[yellow]ComStubGenerator exited with code {process.ExitCode}; some reference stubs may be missing.[/]");
+        }
+
+        static async Task RelayOutputAsync(System.IO.TextReader reader)
+        {
+            string line;
+            while ((line = await reader.ReadLineAsync()) != null) {
+                AnsiConsole.WriteLine(line);
+            }
         }
     }
 
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    static async Task GenerateReferenceStubsWindows(
-        VisualBasicProject vbProject,
-        string outputDir)
+    static string FindComStubGeneratorExe()
     {
-        await AnsiConsole.Progress()
-            .HideCompleted(true)
-            .AutoClear(true)
-            .Columns(
-                new TaskDescriptionColumn(),
-                new ProgressBarColumn(),
-                new ElapsedTimeColumn()
-            )
-            .StartAsync(async ctx => {
-                var overallTask = ctx.AddTask("Creating stubs for references...");
+        string baseDir = AppContext.BaseDirectory;
+        string exeName = "ComStubGenerator.exe";
 
-                Directory.CreateDirectory(outputDir);
+        // Prefer the x86 build (matches the current converter platform target).
+        string x86Path = Path.Combine(baseDir, "stubs", "x86", exeName);
+        if (File.Exists(x86Path)) return x86Path;
 
-                int resolved = 0, generated = 0, unresolved = 0;
-                var reportLines = new ConcurrentBag<string>();
-                var models = new ConcurrentBag<LibraryModel>();
-                var seenGuids = new ConcurrentDictionary<Guid, Guid>();
+        // Fall back to x64 if only that build is present.
+        string x64Path = Path.Combine(baseDir, "stubs", "x64", exeName);
+        if (File.Exists(x64Path)) return x64Path;
 
-                var inspectQueue = new ConcurrentQueue<VisualBasicProjectReference>();
-                foreach (var reference in vbProject.References) {
-                    inspectQueue.Enqueue(reference);
-                }
-
-                while (inspectQueue.Count > 0) {
-                    var batch = new List<VisualBasicProjectReference>();
-                    while (inspectQueue.TryDequeue(out var item)) {
-                        batch.Add(item);
-                    }
-
-                    overallTask.MaxValue = batch.Count;
-
-                    await Parallel.ForEachAsync(batch, async (reference, cancel) => {
-                        var progress = ctx.AddTask(Path.GetFileName(reference.ResolvedPath));
-                        progress.IsIndeterminate = true;
-
-                        try {
-                            if (!seenGuids.TryAdd(reference.Guid, reference.Guid)) {
-                                return;
-                            }
-
-                            if (reference.ResolvedPath == null) {
-                                Interlocked.Increment(ref unresolved);
-                                Log.Default.Warning("Reference {description} ({guid}) could not be resolved", reference.Description, reference.Guid);
-                                reportLines.Add($"UNRESOLVED  {reference.Description}  {{{reference.Guid}}}  v{reference.MajorVersion}.{reference.MinorVersion}");
-                                return;
-                            }
-
-                            if (DotnetLibraryGuids.Contains(reference.Guid)) {
-                                Log.Default.Information("Skipping reference {description} ({guid})", reference.Description, reference.Guid);
-                                reportLines.Add($"SKIPPED     {reference.Description}  {reference.ResolvedPath}");
-                                return;
-                            }
-
-                            Interlocked.Increment(ref resolved);
-
-                            var model = TypeLibraryInspector.Inspect(reference, reference.ResolvedPath);
-                            if (model == null) {
-                                reportLines.Add($"FAILED      {reference.Description}  {reference.ResolvedPath}");
-                                return;
-                            }
-
-                            models.Add(model);
-
-                            // Resolve transitive dependencies and enqueue for analysis in the next batch.
-                            foreach (var dep in model.DiscoveredDependencies.Where(d => !seenGuids.ContainsKey(d.Guid))) {
-                                var path = VisualBasicProject.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);
-                                var depRef = new VisualBasicProjectReference(
-                                    ProjectReferenceKind.TypeLibrary, dep.Guid, dep.Major, dep.Minor, 0,
-                                    dep.Guid.ToString("B"), path, path, true);
-
-                                inspectQueue.Enqueue(depRef);
-                            }
-
-                            // Generate the stubs
-                            var written = ReferenceStubGenerator.Generate(model, outputDir);
-                            Interlocked.Add(ref generated, written.Count);
-
-                            reportLines.Add($"OK          {model.Name} - {model.Guid} - {reference.ResolvedPath}  ({written.Count} types)");
-                            AnsiConsole.WriteLine($"  {model.Name}: {written.Count} stubs from {Path.GetFileName(reference.ResolvedPath)}");
-                        }
-                        catch (Exception ex) when (!System.Diagnostics.Debugger.IsAttached) {
-                            Log.Default.Warning(ex, "Failed inspecting type library {description} ({guid})", reference.Description, reference.Guid);
-                            reportLines.Add($"FAILED      {reference.Description}  {reference.ResolvedPath}");
-                        }
-                        finally {
-                            progress.StopTask();
-                            overallTask.Increment(1);
-                            await Task.Yield();
-                        }
-                    });
-                }
-
-                // Collect aliases from all libraries (direct + transitive) and pass them as a
-                // flat sequence so ReferenceUsingsGenerator can deduplicate by name.  Multiple COM
-                // libraries (e.g. stdole and oleaut32) often define the same alias (OLE_COLOR, …)
-                // and per-library global usings would cause CS0105 "appeared previously" errors.
-                var allAliases = models.Where(m => !m.IsTransitive).SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
-                var referenceUsingsPath = ReferenceUsingsGenerator.Generate(models, outputDir, allAliases);
-
-                // Write summary report
-                var reportPath = Path.Combine(outputDir, "_ReferenceStubs.txt");
-                await File.WriteAllLinesAsync(reportPath, new[] {
-                    $"Reference stubs generated: {generated}",
-                    $"Libraries resolved:        {resolved}",
-                    $"Libraries unresolved:      {unresolved}",
-                    $"Reference usings file:     {referenceUsingsPath}",
-                    string.Empty,
-                }.Concat(reportLines));
-
-                AnsiConsole.MarkupLineInterpolated(
-                    $"[green]Reference stubs:[/] {generated} types from {resolved} libraries ({unresolved} unresolved). Report: {reportPath}");
-            });
-
-
+        return null;
     }
 }
+
