@@ -12,7 +12,7 @@ using static ComStubGenerator.StubGenHelpers;
 namespace ComStubGenerator;
 
 /// <summary>
-/// Generates C# stub source files from a <see cref="LibraryModel"/> and writes
+/// Generates C# stub source files from a <see cref="ComQueryLibrary"/> and writes
 /// them under <c>_Reference/{SafeLibraryName}/{TypeName}.cs</c>.
 /// </summary>
 public static class ReferenceStubGenerator
@@ -24,7 +24,7 @@ public static class ReferenceStubGenerator
     /// <see cref="CollectAliases"/> and pass all libraries' aliases to
     /// <see cref="ReferenceUsingsGenerator.Generate"/> for global deduplication.
     /// </summary>
-    public static IReadOnlyList<string> Generate(LibraryModel library, string referenceRoot, bool filterComPlumbing = true, bool force = false)
+    public static IReadOnlyList<string> Generate(ComQueryLibrary library, string referenceRoot, bool filterComPlumbing = true)
     {
         var written = new List<string>();
         var usedTypeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -32,12 +32,14 @@ public static class ReferenceStubGenerator
         string libDir = Path.Combine(referenceRoot, library.SafeName);
         Directory.CreateDirectory(libDir);
 
+        var types = library.Types ?? [];
+
         // Pre-pass: compute emitted names and build the qualified-name → emitted-name map
         // for every struct in this library.  Used by cycle detection below.
         var structQualifiedToEmitted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         {
             var prepassNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var type in library.Types.OrderBy(t => t.Name)) {
+            foreach (var type in types.OrderBy(t => t.Name)) {
                 if (type.Kind == LibraryTypeKind.Alias) continue;
                 string emitted = MakeUniqueName(MakeSafeIdentifier(type.Name), prepassNames);
                 if (type.Kind == LibraryTypeKind.Struct)
@@ -46,7 +48,7 @@ public static class ReferenceStubGenerator
         }
         var cyclicFields = DetectStructCycles(library, structQualifiedToEmitted);
 
-        foreach (var type in library.Types.OrderBy(t => t.Name)) {
+        foreach (var type in types.OrderBy(t => t.Name)) {
             if (type.Kind == LibraryTypeKind.Alias) continue;  // handled by CollectAliases / ReferenceUsingsGenerator
 
             string emittedTypeName = MakeUniqueName(MakeSafeIdentifier(type.Name), usedTypeNames);
@@ -54,7 +56,6 @@ public static class ReferenceStubGenerator
             if (source == null) continue;
 
             string filePath = Path.Combine(libDir, $"{emittedTypeName}.cs");
-            if (!force && File.Exists(filePath)) continue;
             File.WriteAllText(filePath, source);
             written.Add(filePath);
         }
@@ -69,12 +70,12 @@ public static class ReferenceStubGenerator
     /// alias name from different libraries, e.g. <c>OLE_COLOR</c> from stdole and oleaut32)
     /// are deduplicated into a single <c>global using</c> directive.
     /// </summary>
-    public static IReadOnlyList<(string Name, string CSharpType)> CollectAliases(LibraryModel library)
+    public static IReadOnlyList<(string Name, string CSharpType)> CollectAliases(ComQueryLibrary library)
     {
         var aliases = new List<(string Name, string CSharpType)>();
-        foreach (var type in library.Types) {
-            if (type.Kind == LibraryTypeKind.Alias && !string.IsNullOrWhiteSpace(type.AliasedCSharpType))
-                aliases.Add((MakeSafeIdentifier(type.Name), type.AliasedCSharpType!));
+        foreach (var type in library.Types ?? []) {
+            if (type.Kind == LibraryTypeKind.Alias && !string.IsNullOrWhiteSpace(type.AliasedType))
+                aliases.Add((MakeSafeIdentifier(type.Name), type.AliasedType!));
         }
         return aliases;
     }
@@ -84,8 +85,8 @@ public static class ReferenceStubGenerator
     // ──────────────────────────────────────────────────────────────────────
 
     static string? GenerateType(
-        LibraryModel library,
-        LibraryTypeModel type,
+        ComQueryLibrary library,
+        ComQueryType type,
         string emittedTypeName,
         HashSet<(string TypeName, string FieldName)> cyclicFields,
         bool filterComPlumbing)
@@ -144,11 +145,11 @@ public static class ReferenceStubGenerator
     // Enum
     // ──────────────────────────────────────────────────────────────────────
 
-    static EnumDeclarationSyntax GenerateEnum(LibraryTypeModel type, string emittedTypeName)
+    static EnumDeclarationSyntax GenerateEnum(ComQueryType type, string emittedTypeName)
     {
-        bool needsLong = type.EnumValues.Any(v => v.Value < int.MinValue || v.Value > int.MaxValue);
+        bool needsLong = (type.EnumValues ?? []).Any(v => v.Value < int.MinValue || v.Value > int.MaxValue);
 
-        var members = type.EnumValues
+        var members = (type.EnumValues ?? [])
             .OrderBy(v => v.Value)
             .Select(v => EnumMemberDeclaration(
                 Identifier(MakeSafeIdentifier(v.Name)))
@@ -178,13 +179,13 @@ public static class ReferenceStubGenerator
     // Interface / dispatch interface
     // ──────────────────────────────────────────────────────────────────────
 
-    static InterfaceDeclarationSyntax GenerateInterface(LibraryModel library, LibraryTypeModel type, string emittedTypeName)
+    static InterfaceDeclarationSyntax GenerateInterface(ComQueryLibrary library, ComQueryType type, string emittedTypeName)
     {
         var memberDecls = new List<MemberDeclarationSyntax>();
         // Seed with the interface name to prevent CS0542 (member name same as enclosing type)
         var usedMemberNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { emittedTypeName };
 
-        var propertyGroups = type.Members
+        var propertyGroups = (type.Members ?? [])
             .Where(m => m.Kind == LibraryMemberKind.PropertyGet || m.Kind == LibraryMemberKind.PropertySet)
             .GroupBy(m => m.Name)
             .ToList();
@@ -193,7 +194,7 @@ public static class ReferenceStubGenerator
             var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
 
-            string propType = getter != null ? getter.ReturnCSharpType : "object";
+            string propType = getter != null ? getter.ReturnType : "object";
             if (propType == "void") propType = "object";
 
             var accessors = new List<AccessorDeclarationSyntax>();
@@ -226,15 +227,15 @@ public static class ReferenceStubGenerator
         }
 
         var usedMethodSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var method in type.Members
+        foreach (var method in (type.Members ?? [])
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
-            string paramSig = string.Join(",", method.Parameters.Select(p => p.CSharpType));
+            string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
             string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
             var parameters = BuildParameters(method.Parameters).ToArray();
 
             var methodDecl = MethodDeclaration(
-                    ParseTypeName(method.ReturnCSharpType),
+                    ParseTypeName(method.ReturnType),
                     Identifier(methodName))
                 .WithParameterList(ParameterList(SeparatedList(parameters)))
                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
@@ -269,7 +270,7 @@ public static class ReferenceStubGenerator
     // Class / module
     // ──────────────────────────────────────────────────────────────────────
 
-    static ClassDeclarationSyntax GenerateClass(LibraryModel library, LibraryTypeModel type, string emittedTypeName)
+    static ClassDeclarationSyntax GenerateClass(ComQueryLibrary library, ComQueryType type, string emittedTypeName)
     {
         bool isStatic = type.Kind == LibraryTypeKind.Module;
 
@@ -278,7 +279,7 @@ public static class ReferenceStubGenerator
         var usedMemberNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { emittedTypeName };
 
         // Group by name + kind to collapse get/set pairs into one property
-        var propertyGroups = type.Members
+        var propertyGroups = (type.Members ?? [])
             .Where(m => m.Kind == LibraryMemberKind.PropertyGet || m.Kind == LibraryMemberKind.PropertySet)
             .GroupBy(m => m.Name)
             .ToList();
@@ -289,7 +290,7 @@ public static class ReferenceStubGenerator
             var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
 
-            string propType = getter != null ? getter.ReturnCSharpType : "object";
+            string propType = getter != null ? getter.ReturnType : "object";
             if (propType == "void") propType = "object";
 
             var accessors = new List<AccessorDeclarationSyntax>();
@@ -331,16 +332,16 @@ public static class ReferenceStubGenerator
 
         // Methods (skip anything already emitted as property)
         var usedMethodSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var method in type.Members
+        foreach (var method in (type.Members ?? [])
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
-            string paramSig = string.Join(",", method.Parameters.Select(p => p.CSharpType));
+            string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
             string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
 
             var parameters = BuildParameters(method.Parameters).ToArray();
 
             var methodDecl = MethodDeclaration(
-                    ParseTypeName(method.ReturnCSharpType),
+                    ParseTypeName(method.ReturnType),
                     Identifier(methodName))
                 .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                 .WithParameterList(ParameterList(SeparatedList(parameters)))
@@ -393,33 +394,33 @@ public static class ReferenceStubGenerator
     /// </para>
     /// </summary>
     static MemberDeclarationSyntax? TryBuildDefaultForwardingIndexer(
-        LibraryModel library,
-        LibraryTypeModel type,
+        ComQueryLibrary library,
+        ComQueryType type,
         bool isForInterface)
     {
         // Find DISPID 0 PropertyGet with NO parameters (e.g. Fields on Recordset).
-        var noParamDefault = type.Members.FirstOrDefault(
+        var noParamDefault = (type.Members ?? []).FirstOrDefault(
             m => m.Kind == LibraryMemberKind.PropertyGet && m.IsDefault && m.Parameters.Count == 0);
         if (noParamDefault == null) return null;
 
         // Resolve the return type to a type in the same library.
-        string returnTypeName = noParamDefault.ReturnCSharpType;
+        string returnTypeName = noParamDefault.ReturnType;
         string simpleTypeName = returnTypeName.Contains('.')
             ? returnTypeName[(returnTypeName.LastIndexOf('.') + 1)..]
             : returnTypeName;
 
-        var innerType = library.Types.FirstOrDefault(t =>
+        var innerType = (library.Types ?? []).FirstOrDefault(t =>
             string.Equals(t.Name, simpleTypeName, StringComparison.OrdinalIgnoreCase));
         if (innerType == null) return null;
 
         // Check whether the inner type itself has a parameterised default member
         // (i.e. it is a collection with this[]).
-        var innerIndexer = innerType.Members.FirstOrDefault(
+        var innerIndexer = (innerType.Members ?? []).FirstOrDefault(
             m => m.Kind == LibraryMemberKind.PropertyGet && m.IsDefault && m.Parameters.Count > 0);
         if (innerIndexer == null) return null;
 
         string propName  = MakeSafeIdentifier(noParamDefault.Name);
-        string returnCsType = innerIndexer.ReturnCSharpType;
+        string returnCsType = innerIndexer.ReturnType;
         var indexerParams   = BuildParameters(innerIndexer.Parameters).ToArray();
 
         var accessors = new List<AccessorDeclarationSyntax>();
@@ -451,7 +452,7 @@ public static class ReferenceStubGenerator
     // ──────────────────────────────────────────────────────────────────────
 
     static StructDeclarationSyntax GenerateStruct(
-        LibraryTypeModel type,
+        ComQueryType type,
         string emittedTypeName,
         HashSet<(string TypeName, string FieldName)> cyclicFields)
     {
@@ -459,7 +460,7 @@ public static class ReferenceStubGenerator
         var usedFieldNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { emittedTypeName };
         var fieldDecls = new List<MemberDeclarationSyntax>();
 
-        foreach (var field in type.Members.Where(m => m.Kind == LibraryMemberKind.Field)) {
+        foreach (var field in (type.Members ?? []).Where(m => m.Kind == LibraryMemberKind.Field)) {
             string fieldName = MakeUniqueName(MakeSafeIdentifier(field.Name), usedFieldNames);
 
             if (cyclicFields.Contains((emittedTypeName, field.Name))) {
@@ -475,13 +476,13 @@ public static class ReferenceStubGenerator
                                 VariableDeclarator(Identifier(fieldName)))))
                     .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword)))
                     .WithLeadingTrivia(
-                        Comment($"// was: {field.ReturnCSharpType} — COM pointer field; replaced with nint to avoid struct layout cycle")));
+                        Comment($"// was: {field.ReturnType} — COM pointer field; replaced with nint to avoid struct layout cycle")));
                 continue;
             }
 
             fieldDecls.Add(
                 FieldDeclaration(
-                    VariableDeclaration(ParseTypeName(field.ReturnCSharpType))
+                    VariableDeclaration(ParseTypeName(field.ReturnType))
                         .WithVariables(SingletonSeparatedList(
                             VariableDeclarator(Identifier(fieldName)))))
                 .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword))));
@@ -504,20 +505,20 @@ public static class ReferenceStubGenerator
     /// by-value member, causing an illegal recursive struct layout in C#.
     /// </summary>
     static HashSet<(string TypeName, string FieldName)> DetectStructCycles(
-        LibraryModel library,
+        ComQueryLibrary library,
         Dictionary<string, string> structQualifiedToEmitted)
     {
         // Build adjacency list: emittedTypeName → [(fieldName, emittedTargetTypeName)]
         // Only edges that point to other structs within the same library are included.
         var deps = new Dictionary<string, List<(string FieldName, string Target)>>(StringComparer.Ordinal);
 
-        foreach (var type in library.Types.Where(t => t.Kind == LibraryTypeKind.Struct)) {
+        foreach (var type in (library.Types ?? []).Where(t => t.Kind == LibraryTypeKind.Struct)) {
             string qualName = $"{library.SafeName}.{type.Name}";
             if (!structQualifiedToEmitted.TryGetValue(qualName, out string? emitted)) continue;
 
             var edges = new List<(string, string)>();
-            foreach (var field in type.Members.Where(m => m.Kind == LibraryMemberKind.Field)) {
-                if (structQualifiedToEmitted.TryGetValue(field.ReturnCSharpType, out string? targetEmitted))
+            foreach (var field in (type.Members ?? []).Where(m => m.Kind == LibraryMemberKind.Field)) {
+                if (structQualifiedToEmitted.TryGetValue(field.ReturnType, out string? targetEmitted))
                     edges.Add((field.Name, targetEmitted));
             }
             deps[emitted] = edges;
@@ -566,7 +567,7 @@ public static class ReferenceStubGenerator
     // C# requires that once a parameter has a default value, all subsequent parameters must
     // also have defaults.  Walk the list and force-optionalize any required `ref` param that
     // follows an optional one.  See docs/com.md for the known caveats.
-    static IEnumerable<ParameterSyntax> BuildParameters(IReadOnlyList<LibraryParameterModel> ps)
+    static IEnumerable<ParameterSyntax> BuildParameters(IReadOnlyList<ComQueryParam> ps)
     {
         bool seenOptional = false;
         foreach (var p in ps) {
@@ -575,7 +576,7 @@ public static class ReferenceStubGenerator
         }
     }
 
-    static ParameterSyntax BuildParameter(LibraryParameterModel p, bool forceOptional = false)
+    static ParameterSyntax BuildParameter(ComQueryParam p, bool forceOptional = false)
     {
         // C# does not allow `ref` parameters to have default values, and does not allow
         // required parameters to follow optional ones.  In both cases we drop `ref` and
@@ -583,7 +584,7 @@ public static class ReferenceStubGenerator
         bool makeOptional = p.IsOptional || forceOptional;
         bool useRef = p.IsOut && !makeOptional;
         var syntax = Parameter(Identifier(MakeSafeIdentifier(p.Name)))
-        .WithType(ParseTypeName(useRef ? "ref " + p.CSharpType : p.CSharpType));
+        .WithType(ParseTypeName(useRef ? "ref " + p.Type : p.Type));
         if (makeOptional) {
             syntax = syntax.WithDefault(
                 EqualsValueClause(
