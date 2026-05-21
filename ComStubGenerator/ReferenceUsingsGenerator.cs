@@ -25,7 +25,8 @@ public static class ReferenceUsingsGenerator
     public static string Generate(
         IEnumerable<LibraryModel> libraries,
         string outputDir,
-        IEnumerable<(string Name, string CSharpType)>? aliases = null)
+        IEnumerable<(string Name, string CSharpType)>? aliases = null,
+        bool force = false)
     {
         Directory.CreateDirectory(outputDir);
 
@@ -35,7 +36,6 @@ public static class ReferenceUsingsGenerator
             .Select(l => l.SafeName)
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var enumTypeUsings = libraryList
@@ -43,13 +43,56 @@ public static class ReferenceUsingsGenerator
                 .Where(t => t.Kind == LibraryTypeKind.Enum)
                 .Select(t => $"{l.SafeName}.{t.Name}"))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         // Deduplicate aliases by name (first declaration wins).
         var seenAliasNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var dedupedAliases = (aliases ?? [])
             .Where(a => !string.IsNullOrWhiteSpace(a.Name) && seenAliasNames.Add(a.Name))
+            .ToList();
+
+        string path = Path.Combine(outputDir, "_ReferenceUsings.cs");
+
+        // When not forcing, merge any entries already present in the file so that two
+        // successive runs (e.g. x86 then x64) accumulate rather than overwrite.
+        if (!force && File.Exists(path)) {
+            foreach (var line in File.ReadAllLines(path)) {
+                string trimmed = line.Trim();
+                if (!trimmed.StartsWith("global using ", StringComparison.Ordinal)) continue;
+
+                string body = trimmed["global using ".Length..].TrimEnd(';');
+
+                if (body.StartsWith("static ", StringComparison.Ordinal)) {
+                    string enumType = body["static ".Length..].Trim();
+                    if (!enumTypeUsings.Contains(enumType, StringComparer.OrdinalIgnoreCase))
+                        enumTypeUsings.Add(enumType);
+                } else {
+                    int eqIdx = body.IndexOf(" = ", StringComparison.Ordinal);
+                    if (eqIdx >= 0) {
+                        string aliasName = body[..eqIdx].Trim();
+                        string aliasType = body[(eqIdx + 3)..].Trim();
+                        if (seenAliasNames.Add(aliasName))
+                            dedupedAliases.Add((aliasName, aliasType));
+                    } else {
+                        string ns = body.Trim();
+                        if (!namespaces.Contains(ns, StringComparer.OrdinalIgnoreCase))
+                            namespaces.Add(ns);
+                    }
+                }
+            }
+        }
+
+        namespaces = namespaces
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        enumTypeUsings = enumTypeUsings
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        dedupedAliases = dedupedAliases
             .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -77,7 +120,6 @@ public static class ReferenceUsingsGenerator
             }
         }
 
-        string path = Path.Combine(outputDir, "_ReferenceUsings.cs");
         File.WriteAllText(path, builder.ToString());
 
         return path;

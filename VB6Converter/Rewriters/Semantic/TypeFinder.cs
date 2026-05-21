@@ -10,6 +10,9 @@ public class TypeFinder(SemanticModel sem) : LoggedRewriter
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
         => Log.Rewrite(this, node, node => {
             if (node.Parent is VariableDeclarationSyntax || node.Parent is ParameterSyntax) {
+                if (sem.GetSymbolInfo(node).Symbol is ITypeSymbol) {
+                    return base.VisitIdentifierName(node);
+                }
                 var type = FindType(node.Identifier.Text);
                 if (type != null && !string.Equals(type.ToString(), node.Identifier.Text, StringComparison.Ordinal)) {
                     return node.WithIdentifier(SyntaxFactory.Identifier(type.Name))
@@ -23,6 +26,9 @@ public class TypeFinder(SemanticModel sem) : LoggedRewriter
     public override SyntaxNode VisitQualifiedName(QualifiedNameSyntax node)
         => Log.Rewrite(this, node, node => {
             if (node.Parent is VariableDeclarationSyntax || node.Parent is ParameterSyntax) {
+                if (sem.GetSymbolInfo(node).Symbol is ITypeSymbol) {
+                    return node;
+                }
                 var type = FindType(node.ToString());
                 if (type != null && !string.Equals(type.ToString(), node.ToString(), StringComparison.Ordinal)) {
                     return SyntaxFactory.ParseName(type.ToString());

@@ -26,22 +26,4 @@
   <ItemGroup>
     <ProjectReference Include="..\VB6Parser\VB6Parser.csproj" />
   </ItemGroup>
-
-  <!--
-    Build ComStubGenerator for both x86 and x64 after VB6Converter builds.
-    Outputs land in $(OutDir)stubs\x86\ and $(OutDir)stubs\x64\ so the converter
-    can find them at runtime via AppContext.BaseDirectory.
-  -->
-  <Target Name="BuildComStubGeneratorX86" AfterTargets="Build">
-    <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComStubGenerator\ComStubGenerator.csproj"
-             Properties="Configuration=$(Configuration);PlatformTarget=x86;OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\stubs\x86\"
-             Targets="Build" />
-  </Target>
-
-  <Target Name="BuildComStubGeneratorX64" AfterTargets="BuildComStubGeneratorX86">
-    <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComStubGenerator\ComStubGenerator.csproj"
-             Properties="Configuration=$(Configuration);PlatformTarget=x64;OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\stubs\x64\"
-             Targets="Build" />
-  </Target>
-
 </Project>

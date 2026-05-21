@@ -300,13 +300,29 @@ public class VisualBasicProject
     static string? TryRegistryLookup(Guid guid, int major, int minor, int lcid)
     {
         // HKCR\TypeLib\{GUID}\major.minor\lcid\win32 (or win64)
-        string guidKey  = $@"TypeLib\{{{guid}}}\{major}.{minor}";
-        string lcidStr  = lcid.ToString();
-
-        using var typeLibKey = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(guidKey);
-        if (typeLibKey == null) {
-            return null;
+        //
+        // WOW64 redirects Registry.ClassesRoot to different hives depending on process bitness:
+        //   32-bit process → HKLM\Software\WOW6432Node\Classes\TypeLib
+        //   64-bit process → HKLM\Software\Classes\TypeLib
+        // Some type libraries (e.g. MSVBVM60) are registered only in the 64-bit hive even though
+        // the DLL itself is 32-bit, so we must try both views explicitly.
+        foreach (var view in new[] { Microsoft.Win32.RegistryView.Registry64, Microsoft.Win32.RegistryView.Registry32 }) {
+            var result = TryRegistryLookupInView(guid, major, minor, lcid, view);
+            if (result != null) return result;
         }
+
+        return null;
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    static string? TryRegistryLookupInView(Guid guid, int major, int minor, int lcid, Microsoft.Win32.RegistryView view)
+    {
+        string guidKey = $@"Software\Classes\TypeLib\{{{guid}}}\{major}.{minor}";
+        string lcidStr = lcid.ToString();
+
+        using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, view);
+        using var typeLibKey = hklm.OpenSubKey(guidKey);
+        if (typeLibKey == null) return null;
 
         // Iterate all LCID subkeys, preferring the requested LCID then 0, then any other.
         // Non-numeric subkeys (FLAGS, HELPDIR) are skipped.

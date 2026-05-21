@@ -19,6 +19,14 @@ public static class Program
 
         [Option('o', "output", Required = true, HelpText = "Output directory for generated stub files.")]
         public string OutputDir { get; set; } = null!;
+
+        [Option("include-com-plumbing", Required = false, Default = false,
+            HelpText = "Include COM infrastructure members (IUnknown, IDispatch, AddRef, Release, etc.) in generated stubs. Excluded by default.")]
+        public bool IncludeComPlumbing { get; set; }
+
+        [Option("force", Required = false, Default = false,
+            HelpText = "Overwrite existing stub files and the global usings file. By default existing stubs are preserved so two runs (e.g. x86 then x64) can be combined.")]
+        public bool Force { get; set; }
     }
 
     public static async Task<int> Main(string[] args)
@@ -48,12 +56,12 @@ public static class Program
             return 0;
         }
 
-        bool anyFailed = await GenerateStubsWindows(vbProject, options.OutputDir);
+        bool anyFailed = await GenerateStubsWindows(vbProject, options.OutputDir, !options.IncludeComPlumbing, options.Force);
         return anyFailed ? 1 : 0;
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    static async Task<bool> GenerateStubsWindows(VisualBasicProject vbProject, string outputDir)
+    static async Task<bool> GenerateStubsWindows(VisualBasicProject vbProject, string outputDir, bool filterComPlumbing, bool force)
     {
         bool anyFailed = false;
 
@@ -134,7 +142,7 @@ public static class Program
                             }
 
                             // Generate the stubs
-                            var written = ReferenceStubGenerator.Generate(model, outputDir);
+                            var written = ReferenceStubGenerator.Generate(model, outputDir, filterComPlumbing, force);
                             Interlocked.Add(ref generated, written.Count);
 
                             reportLines.Add($"OK          {model.Name} - {model.Guid} - {reference.ResolvedPath}  ({written.Count} types)");
@@ -153,10 +161,12 @@ public static class Program
                     });
                 }
 
-                // Collect aliases from all libraries (direct + transitive) and pass them as a
-                // flat sequence so ReferenceUsingsGenerator can deduplicate by name.
-                var allAliases = models.Where(m => !m.IsTransitive).SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
-                var referenceUsingsPath = ReferenceUsingsGenerator.Generate(models, outputDir, allAliases);
+                // Only direct (non-transitive) libraries contribute to the global usings file.
+                // Transitive stubs are still generated so types resolve during compilation, but
+                // their namespaces and enum statics are not surfaced as global usings.
+                var directModels = models.Where(m => !m.IsTransitive).ToList();
+                var allAliases = directModels.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
+                var referenceUsingsPath = ReferenceUsingsGenerator.Generate(directModels, outputDir, allAliases, force);
 
                 // Write summary report
                 var reportPath = Path.Combine(outputDir, "_ReferenceStubs.txt");

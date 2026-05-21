@@ -51,7 +51,12 @@ public record LibraryMemberModel(
     string Name,
     LibraryMemberKind Kind,
     string ReturnCSharpType,
-    IReadOnlyList<LibraryParameterModel> Parameters);
+    IReadOnlyList<LibraryParameterModel> Parameters,
+    /// <summary>
+    /// True when this member is the COM default member (DISPID 0 / DISPID_VALUE).
+    /// A parameterized default PropertyGet should be emitted as a C# indexer (<c>this[]</c>).
+    /// </summary>
+    bool IsDefault = false);
 
 /// <summary>A named constant in an enum type.</summary>
 public record LibraryEnumValueModel(string Name, long Value);

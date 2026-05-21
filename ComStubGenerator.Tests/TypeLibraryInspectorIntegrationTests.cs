@@ -275,6 +275,10 @@ public class TypeLibraryInspectorIntegrationTests
     // path = MSVBVM60.DLL\3.
     static readonly Guid VbRuntimeSubLibGuid = new("EA544A21-C82D-11D1-A3E4-00A0C90AEA82");
 
+    // VBA library ("Visual Basic For Applications") — contains Collection, ErrObject, etc.
+    // path = MSVBVM60.DLL (or VBE7.DLL on newer machines).
+    static readonly Guid VbaLibGuid = new("000204EF-0000-0000-C000-000000000046");
+
     [TestMethod]
     public void IsTypeLibPath_ResourceIdSuffix_ReturnsTrueWhenBaseExists()
     {
@@ -586,8 +590,114 @@ public class TypeLibraryInspectorIntegrationTests
     }
 
     // ──────────────────────────────────────────────────────────────────────
+    // _NewEnum → IEnumerable promotion
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Inspect_VbaLib_Collection_ImplementsIEnumerable()
+    {
+        var path = VisualBasicProject.ResolveTypeLibPath(VbaLibGuid, 6, 0)
+                ?? VisualBasicProject.ResolveTypeLibPath(VbaLibGuid, 5, 0);
+        if (path == null) Assert.Inconclusive($"GUID {{{VbaLibGuid}}} not registered — skipping");
+
+        var reference = MakeReference(VbaLibGuid, 6, 0, "VBA", path!);
+        var model = TypeLibraryInspector.Inspect(reference, path!)!;
+
+        // The VB6 Collection class exposes _NewEnum at DISPID -4.
+        // The inspector must replace it with GetEnumerator and inject IEnumerable.
+        var collection = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "Collection", StringComparison.OrdinalIgnoreCase));
+        if (collection == null) Assert.Inconclusive($"Collection type not found in VBA library at {path} on this machine");
+
+        collection!.ImplementedInterfaces.Should().NotBeNull();
+        collection.ImplementedInterfaces!.Should().Contain(
+            "System.Collections.IEnumerable",
+            "Collection exposes _NewEnum (DISPID -4); the inspector must inject IEnumerable");
+
+        collection.Members.Should().Contain(m =>
+            string.Equals(m.Name, "GetEnumerator", StringComparison.OrdinalIgnoreCase)
+            && m.Kind == LibraryMemberKind.Method
+            && m.ReturnCSharpType == "System.Collections.IEnumerator",
+            "_NewEnum must be replaced with GetEnumerator returning IEnumerator");
+
+        collection.Members.Should().NotContain(m =>
+            string.Equals(m.Name, "_NewEnum", StringComparison.OrdinalIgnoreCase),
+            "_NewEnum must not appear in the member list — it was replaced by GetEnumerator");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
+
+    // ──────────────────────────────────────────────────────────────────────
+    // DAO  (Microsoft DAO Object Library — ships with Office/VB6)
+    // ──────────────────────────────────────────────────────────────────────
+
+    const string DaoPath = @"C:\Program Files (x86)\Common Files\Microsoft Shared\DAO\DAO2535.TLB";
+    static readonly Guid DaoGuid = new("00025E01-0000-0000-C000-000000000046");
+
+    [TestMethod]
+    public void DAO_Inspect_RecordsetMembersWithDefaultFlag()
+    {
+        if (!File.Exists(DaoPath)) Assert.Inconclusive("DAO2535.TLB not found — skipping");
+
+        var reference = MakeReference(DaoGuid, 3, 5, "Microsoft DAO 3.5 Object Library", DaoPath);
+        var model = TypeLibraryInspector.Inspect(reference, DaoPath)!;
+
+        // Dump all Recordset-related types and their default members for diagnostics
+        foreach (var type in model.Types.Where(t =>
+            t.Name.IndexOf("Recordset", StringComparison.OrdinalIgnoreCase) >= 0)) {
+            System.Diagnostics.Debug.WriteLine($"Type: {type.Name} ({type.Kind})");
+            foreach (var m in type.Members) {
+                System.Diagnostics.Debug.WriteLine(
+                    $"  {m.Kind} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.CSharpType} {p.Name}"))}) " +
+                    $"-> {m.ReturnCSharpType}  IsDefault={m.IsDefault}");
+            }
+        }
+
+        // DAO Recordset must exist
+        var recordset = model.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, "Recordset", StringComparison.OrdinalIgnoreCase));
+        recordset.Should().NotBeNull("DAO library must contain a Recordset type");
+
+        // Recordset's DISPID 0 is Fields (no params) — emitted as named property, not indexer
+        var fieldsDefault = recordset!.Members.FirstOrDefault(m => m.IsDefault);
+        fieldsDefault.Should().NotBeNull("Recordset must have a default member (DISPID 0)");
+        fieldsDefault!.Parameters.Should().BeEmpty(
+            "Recordset's DISPID 0 (Fields) has no parameters; forwarding indexer is emitted instead");
+    }
+
+    [TestMethod]
+    public void DAO_Generate_Recordset_HasForwardingIndexer()
+    {
+        if (!File.Exists(DaoPath)) Assert.Inconclusive("DAO2535.TLB not found — skipping");
+
+        var reference = MakeReference(DaoGuid, 3, 5, "Microsoft DAO 3.5 Object Library", DaoPath);
+        var model = TypeLibraryInspector.Inspect(reference, DaoPath)!;
+
+        var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        try {
+            ReferenceStubGenerator.Generate(model, outDir);
+
+            var recordsetFile = Directory.GetFiles(outDir, "Recordset.cs", SearchOption.AllDirectories)
+                .FirstOrDefault();
+            recordsetFile.Should().NotBeNull("a Recordset.cs stub should be generated");
+
+            var source = File.ReadAllText(recordsetFile!);
+            System.Diagnostics.Debug.WriteLine("=== Recordset.cs ===");
+            System.Diagnostics.Debug.WriteLine(source);
+
+            // Must expose this[] so that rs!MyField → rs["MyField"] compiles
+            source.Should().Contain("this[",
+                "Recordset stub needs a forwarding this[] indexer for rs!Field → rs[\"Field\"] support");
+            // The regular Fields property must also still be present
+            source.Should().Contain("Fields",
+                "Recordset stub must still expose the named Fields property");
+        }
+        finally {
+            if (Directory.Exists(outDir)) Directory.Delete(outDir, recursive: true);
+        }
+    }
 
     static VisualBasicProjectReference MakeReference(
         Guid guid, int major, int minor, string description, string path) =>

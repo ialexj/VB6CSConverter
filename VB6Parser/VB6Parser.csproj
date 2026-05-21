@@ -15,6 +15,7 @@
       <Package>VB6Parser</Package>
       <Listener>true</Listener>
       <Visitor>true</Visitor>
+      <Encoding>UTF-8</Encoding>
     </Antlr4>
   </ItemGroup>
 

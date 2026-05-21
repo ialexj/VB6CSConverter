@@ -18,6 +18,7 @@ public static class CompilationUnitConverter
         new CursorRewriter(),
         new KeysRewriter(),
         new MsgBoxRewriter(),
+        new KeywordEscapeRewriter(),
 
         UsingsRewriter.Default
     ];

@@ -25,7 +25,7 @@ namespace VB6Converter.Tests;
             x = Replace$(s, "a", "b")
             """,
             """
-            x = ((string)s).Replace("a", "b");
+            x = Strings.Replace((string)s, "a", "b");
             """
         );
 
@@ -37,7 +37,7 @@ namespace VB6Converter.Tests;
             End Function
             """,
             """
-            public static object SqlStr(string s) => "'" + ((string)s).Replace("'", "''") + "'";
+            public static object SqlStr(string s) => "'" + Strings.Replace((string)s, "'", "''") + "'";
             """);
 
         [TestMethod]

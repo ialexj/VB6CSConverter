@@ -241,6 +241,8 @@ public sealed class TypeLibraryInspector
                 var coclassInfo = InspectCoclassMembers(typeLib, typeInfo, typeAttr, discoveredDeps);
                 members = coclassInfo.Members;
                 implementedInterfaces = coclassInfo.ImplementedInterfaces;
+                if (coclassInfo.HasNewEnum)
+                    implementedInterfaces.Insert(0, "System.Collections.IEnumerable");
             }
             else if (kind == LibraryTypeKind.Struct) {
                 members = InspectStructFields(typeLib, typeInfo, typeAttr.cVars, discoveredDeps);
@@ -249,6 +251,8 @@ public sealed class TypeLibraryInspector
                 var interfaceInfo = InspectInterfaceMembers(typeLib, typeInfo, typeAttr, discoveredDeps);
                 members = interfaceInfo.Members;
                 implementedInterfaces = interfaceInfo.BaseInterfaces;
+                if (interfaceInfo.HasNewEnum)
+                    implementedInterfaces.Insert(0, "System.Collections.IEnumerable");
             }
 
             return new LibraryTypeModel(typeName, kind, members, enumValues, aliasedType, implementedInterfaces);
@@ -354,7 +358,7 @@ public sealed class TypeLibraryInspector
     const int IMPLTYPEFLAG_FSOURCE     = 0x2;
     const int IMPLTYPEFLAG_FRESTRICTED = 0x4;
 
-    static (List<LibraryMemberModel> Members, List<string> ImplementedInterfaces) InspectCoclassMembers(
+    static (List<LibraryMemberModel> Members, List<string> ImplementedInterfaces, bool HasNewEnum) InspectCoclassMembers(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo coclassTypeInfo,
         System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
@@ -365,6 +369,7 @@ public sealed class TypeLibraryInspector
         var implementedInterfaces = new List<string>();
         var implementedInterfaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visitedInterfaces = new HashSet<Guid>();
+        bool hasNewEnum = false;
 
         for (int i = 0; i < typeAttr.cImplTypes; i++) {
             try {
@@ -404,7 +409,8 @@ public sealed class TypeLibraryInspector
                         members,
                         memberSignatures,
                         includeBaseInterfaces: false,
-                        baseInterfaces: null);
+                        baseInterfaces: null,
+                        ref hasNewEnum);
                 }
                 finally {
                     implTypeInfo.ReleaseTypeAttr(pImplAttr);
@@ -414,10 +420,10 @@ public sealed class TypeLibraryInspector
             catch { /* try next interface */ }
         }
 
-        return (members, implementedInterfaces);
+        return (members, implementedInterfaces, hasNewEnum);
     }
 
-    static (List<LibraryMemberModel> Members, List<string> BaseInterfaces) InspectInterfaceMembers(
+    static (List<LibraryMemberModel> Members, List<string> BaseInterfaces, bool HasNewEnum) InspectInterfaceMembers(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
@@ -428,6 +434,7 @@ public sealed class TypeLibraryInspector
         var baseInterfaces = new List<string>();
         var baseInterfaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visitedInterfaces = new HashSet<Guid>();
+        bool hasNewEnum = false;
 
         CollectInterfaceMembersRecursive(
             typeLib,
@@ -438,9 +445,10 @@ public sealed class TypeLibraryInspector
             members,
             memberSignatures,
             includeBaseInterfaces: true,
-            baseInterfaces: (baseInterfaces, baseInterfaceNames));
+            baseInterfaces: (baseInterfaces, baseInterfaceNames),
+            ref hasNewEnum);
 
-        return (members, baseInterfaces);
+        return (members, baseInterfaces, hasNewEnum);
     }
 
     static void CollectInterfaceMembersRecursive(
@@ -452,13 +460,16 @@ public sealed class TypeLibraryInspector
         List<LibraryMemberModel> members,
         HashSet<string> memberSignatures,
         bool includeBaseInterfaces,
-        (List<string> Names, HashSet<string> Seen)? baseInterfaces)
+        (List<string> Names, HashSet<string> Seen)? baseInterfaces,
+        ref bool hasNewEnum)
     {
         if (!visitedInterfaces.Add(typeAttr.guid)) {
             return;
         }
 
-        foreach (var member in InspectFunctions(typeLib, typeInfo, typeAttr.cFuncs, typeAttr.typekind, discoveredDeps)) {
+        var (newMembers, newEnumFound) = InspectFunctions(typeLib, typeInfo, typeAttr.cFuncs, typeAttr.typekind, discoveredDeps);
+        if (newEnumFound) hasNewEnum = true;
+        foreach (var member in newMembers) {
             if (memberSignatures.Add(GetMemberSignature(member))) {
                 members.Add(member);
             }
@@ -516,7 +527,8 @@ public sealed class TypeLibraryInspector
                         members,
                         memberSignatures,
                         includeBaseInterfaces,
-                        baseInterfaces);
+                        baseInterfaces,
+                        ref hasNewEnum);
                 }
                 finally {
                     parentTypeInfo.ReleaseTypeAttr(pParentAttr);
@@ -585,8 +597,9 @@ public sealed class TypeLibraryInspector
     const short FUNCFLAG_FRESTRICTED = 0x1;
     const short FUNCFLAG_FHIDDEN     = 0x40;
     const short VARFLAG_FREADONLY    = 0x1;
+    const int   DISPID_NEWENUM       = -4;    // IEnumVARIANT enumerator factory
 
-    static List<LibraryMemberModel> InspectFunctions(
+    static (List<LibraryMemberModel> Members, bool HasNewEnum) InspectFunctions(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         short cFuncs,
@@ -594,6 +607,7 @@ public sealed class TypeLibraryInspector
         HashSet<DiscoveredDependency> discoveredDeps)
     {
         var members = new List<LibraryMemberModel>(cFuncs);
+        bool hasNewEnum = false;
 
         for (int i = 0; i < cFuncs; i++) {
             typeInfo.GetFuncDesc(i, out IntPtr pFuncDesc);
@@ -667,7 +681,18 @@ public sealed class TypeLibraryInspector
                     catch { /* skip parameter */ }
                 }
 
-                members.Add(new LibraryMemberModel(memberName, memberKind, returnType, parameters));
+                // DISPID_NEWENUM (-4): suppress _NewEnum and substitute GetEnumerator so that
+                // generated stubs can implement System.Collections.IEnumerable.
+                if (funcDesc.memid == DISPID_NEWENUM) {
+                    members.Add(new LibraryMemberModel("GetEnumerator", LibraryMemberKind.Method, "System.Collections.IEnumerator", []));
+                    hasNewEnum = true;
+                    continue;
+                }
+
+                bool isDefault = funcDesc.memid == 0
+                    && (memberKind == LibraryMemberKind.PropertyGet || memberKind == LibraryMemberKind.PropertySet);
+
+                members.Add(new LibraryMemberModel(memberName, memberKind, returnType, parameters, isDefault));
             }
             catch { /* skip this function */ }
             finally {
@@ -675,7 +700,7 @@ public sealed class TypeLibraryInspector
             }
         }
 
-        return members;
+        return (members, hasNewEnum);
     }
 
     // ──────────────────────────────────────────────────────────────────────

@@ -400,7 +400,9 @@ public class DotnetStubGeneratorTests
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
-            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            // Disable COM-plumbing filtering: this test class verifies mscorlib type
+            // normalization in isolation; plumbing filtering is tested separately.
+            var written = ReferenceStubGenerator.Generate(library, tempDir, filterComPlumbing: false);
             written.Should().ContainSingle();
             return File.ReadAllText(written[0]);
         }

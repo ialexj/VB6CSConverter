@@ -24,7 +24,7 @@ public static class ReferenceStubGenerator
     /// <see cref="CollectAliases"/> and pass all libraries' aliases to
     /// <see cref="ReferenceUsingsGenerator.Generate"/> for global deduplication.
     /// </summary>
-    public static IReadOnlyList<string> Generate(LibraryModel library, string referenceRoot)
+    public static IReadOnlyList<string> Generate(LibraryModel library, string referenceRoot, bool filterComPlumbing = true, bool force = false)
     {
         var written = new List<string>();
         var usedTypeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -50,10 +50,11 @@ public static class ReferenceStubGenerator
             if (type.Kind == LibraryTypeKind.Alias) continue;  // handled by CollectAliases / ReferenceUsingsGenerator
 
             string emittedTypeName = MakeUniqueName(MakeSafeIdentifier(type.Name), usedTypeNames);
-            string? source = GenerateType(library, type, emittedTypeName, cyclicFields);
+            string? source = GenerateType(library, type, emittedTypeName, cyclicFields, filterComPlumbing);
             if (source == null) continue;
 
             string filePath = Path.Combine(libDir, $"{emittedTypeName}.cs");
+            if (!force && File.Exists(filePath)) continue;
             File.WriteAllText(filePath, source);
             written.Add(filePath);
         }
@@ -86,12 +87,13 @@ public static class ReferenceStubGenerator
         LibraryModel library,
         LibraryTypeModel type,
         string emittedTypeName,
-        HashSet<(string TypeName, string FieldName)> cyclicFields)
+        HashSet<(string TypeName, string FieldName)> cyclicFields,
+        bool filterComPlumbing)
     {
         MemberDeclarationSyntax? decl = type.Kind switch {
             LibraryTypeKind.Enum                                              => GenerateEnum(type, emittedTypeName),
-            LibraryTypeKind.DispatchInterface or LibraryTypeKind.Interface     => GenerateInterface(type, emittedTypeName),
-            LibraryTypeKind.Class or LibraryTypeKind.Module                    => GenerateClass(type, emittedTypeName),
+            LibraryTypeKind.DispatchInterface or LibraryTypeKind.Interface     => GenerateInterface(library, type, emittedTypeName),
+            LibraryTypeKind.Class or LibraryTypeKind.Module                    => GenerateClass(library, type, emittedTypeName),
             LibraryTypeKind.Struct                                            => GenerateStruct(type, emittedTypeName, cyclicFields),
             _                                                                  => null,
         };
@@ -113,6 +115,19 @@ public static class ReferenceStubGenerator
         // equivalents, but only for libraries that actually depend on those type libraries.
         if (DotnetLibraryGuids.RequiresNormalization(library)) {
             cu = (CompilationUnitSyntax)new MscorlibTypeNormalizingRewriter().Visit(cu)!;
+            cu = cu.NormalizeWhitespace();
+        }
+
+        // Filter out COM infrastructure interfaces and methods (IUnknown/IDispatch plumbing)
+        // unless the caller has opted in to retaining them.
+        if (filterComPlumbing) {
+            cu = (CompilationUnitSyntax)new ComPlumbingFilterRewriter().Visit(cu)!;
+
+            // If the entire type was removed (e.g. IDispatch, IUnknown), skip writing the file.
+            bool hasTypeDeclaration = cu.DescendantNodes()
+                .Any(n => n is BaseTypeDeclarationSyntax);
+            if (!hasTypeDeclaration) return null;
+
             cu = cu.NormalizeWhitespace();
         }
 
@@ -157,7 +172,7 @@ public static class ReferenceStubGenerator
     // Interface / dispatch interface
     // ──────────────────────────────────────────────────────────────────────
 
-    static InterfaceDeclarationSyntax GenerateInterface(LibraryTypeModel type, string emittedTypeName)
+    static InterfaceDeclarationSyntax GenerateInterface(LibraryModel library, LibraryTypeModel type, string emittedTypeName)
     {
         var memberDecls = new List<MemberDeclarationSyntax>();
         // Seed with the interface name to prevent CS0542 (member name same as enclosing type)
@@ -171,7 +186,6 @@ public static class ReferenceStubGenerator
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
             var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
-            string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
 
             string propType = getter != null ? getter.ReturnCSharpType : "object";
             if (propType == "void") propType = "object";
@@ -188,10 +202,21 @@ public static class ReferenceStubGenerator
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
             }
 
-            var prop = PropertyDeclaration(ParseTypeName(propType), Identifier(propertyName))
-                .WithAccessorList(AccessorList(List(accessors)));
-
-            memberDecls.Add(prop);
+            // A default member (DISPID 0) with parameters becomes a C# indexer (this[...])
+            // so that bang-operator conversions like rs!MyField → rs["MyField"] compile correctly.
+            if (getter?.IsDefault == true && getter.Parameters.Count > 0) {
+                var indexerParams = BuildParameters(getter.Parameters).ToArray();
+                var indexer = IndexerDeclaration(ParseTypeName(propType))
+                    .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
+                    .WithAccessorList(AccessorList(List(accessors)));
+                memberDecls.Add(indexer);
+            }
+            else {
+                string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+                var prop = PropertyDeclaration(ParseTypeName(propType), Identifier(propertyName))
+                    .WithAccessorList(AccessorList(List(accessors)));
+                memberDecls.Add(prop);
+            }
         }
 
         foreach (var method in type.Members
@@ -208,6 +233,9 @@ public static class ReferenceStubGenerator
 
             memberDecls.Add(methodDecl);
         }
+
+        var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: true);
+        if (forwardingIndexer != null) memberDecls.Add(forwardingIndexer);
 
         var decl = InterfaceDeclaration(Identifier(emittedTypeName))
             .WithModifiers(Modifiers(isPublic: true))
@@ -233,7 +261,7 @@ public static class ReferenceStubGenerator
     // Class / module
     // ──────────────────────────────────────────────────────────────────────
 
-    static ClassDeclarationSyntax GenerateClass(LibraryTypeModel type, string emittedTypeName)
+    static ClassDeclarationSyntax GenerateClass(LibraryModel library, LibraryTypeModel type, string emittedTypeName)
     {
         bool isStatic = type.Kind == LibraryTypeKind.Module;
 
@@ -252,7 +280,6 @@ public static class ReferenceStubGenerator
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
             var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
-            string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
 
             string propType = getter != null ? getter.ReturnCSharpType : "object";
             if (propType == "void") propType = "object";
@@ -271,11 +298,24 @@ public static class ReferenceStubGenerator
                         .WithBody(ThrowNotImplementedBody()));
             }
 
-            var prop = PropertyDeclaration(ParseTypeName(propType), Identifier(propertyName))
-                .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
-                .WithAccessorList(AccessorList(List(accessors)));
+            // A default member (DISPID 0) with parameters becomes a C# indexer (this[...])
+            // so that bang-operator conversions like rs!MyField → rs["MyField"] compile correctly.
+            if (getter?.IsDefault == true && getter.Parameters.Count > 0) {
+                var indexerParams = BuildParameters(getter.Parameters).ToArray();
+                var indexer = IndexerDeclaration(ParseTypeName(propType))
+                    .WithModifiers(Modifiers(isPublic: true, isStatic: false))
+                    .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
+                    .WithAccessorList(AccessorList(List(accessors)));
+                memberDecls.Add(indexer);
+            }
+            else {
+                string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+                var prop = PropertyDeclaration(ParseTypeName(propType), Identifier(propertyName))
+                    .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
+                    .WithAccessorList(AccessorList(List(accessors)));
+                memberDecls.Add(prop);
+            }
 
-            memberDecls.Add(prop);
             handledPropertyNames.Add(group.Key);
         }
 
@@ -299,6 +339,11 @@ public static class ReferenceStubGenerator
             memberDecls.Add(methodDecl);
         }
 
+        if (!isStatic) {
+            var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: false);
+            if (forwardingIndexer != null) memberDecls.Add(forwardingIndexer);
+        }
+
         var decl = ClassDeclaration(Identifier(emittedTypeName))
             .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
             .WithGeneratedCodeAttribute()
@@ -319,6 +364,74 @@ public static class ReferenceStubGenerator
         }
 
         return decl;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Default-member forwarding indexer
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// When a type's DISPID 0 property has <em>no</em> parameters (e.g. <c>Recordset.Fields</c>
+    /// returns <c>DAO.Fields</c>), VB6's bang operator chains through two default-member
+    /// lookups: <c>rs!MyField</c> → <c>rs.Fields("MyField")</c>. The VB6Converter emits
+    /// this as <c>rs["MyField"]</c>, so the outer type must expose a <c>this[]</c> indexer.
+    /// <para>
+    /// This method detects that pattern and emits a forwarding <c>this[]</c> whose
+    /// parameter signature matches the inner collection's own parameterised DISPID 0
+    /// member, so the converted code compiles without requiring semantic rewrites.
+    /// </para>
+    /// </summary>
+    static MemberDeclarationSyntax? TryBuildDefaultForwardingIndexer(
+        LibraryModel library,
+        LibraryTypeModel type,
+        bool isForInterface)
+    {
+        // Find DISPID 0 PropertyGet with NO parameters (e.g. Fields on Recordset).
+        var noParamDefault = type.Members.FirstOrDefault(
+            m => m.Kind == LibraryMemberKind.PropertyGet && m.IsDefault && m.Parameters.Count == 0);
+        if (noParamDefault == null) return null;
+
+        // Resolve the return type to a type in the same library.
+        string returnTypeName = noParamDefault.ReturnCSharpType;
+        string simpleTypeName = returnTypeName.Contains('.')
+            ? returnTypeName[(returnTypeName.LastIndexOf('.') + 1)..]
+            : returnTypeName;
+
+        var innerType = library.Types.FirstOrDefault(t =>
+            string.Equals(t.Name, simpleTypeName, StringComparison.OrdinalIgnoreCase));
+        if (innerType == null) return null;
+
+        // Check whether the inner type itself has a parameterised default member
+        // (i.e. it is a collection with this[]).
+        var innerIndexer = innerType.Members.FirstOrDefault(
+            m => m.Kind == LibraryMemberKind.PropertyGet && m.IsDefault && m.Parameters.Count > 0);
+        if (innerIndexer == null) return null;
+
+        string propName  = MakeSafeIdentifier(noParamDefault.Name);
+        string returnCsType = innerIndexer.ReturnCSharpType;
+        var indexerParams   = BuildParameters(innerIndexer.Parameters).ToArray();
+
+        var accessors = new List<AccessorDeclarationSyntax>();
+        if (isForInterface) {
+            accessors.Add(
+                AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                    .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+        }
+        else {
+            accessors.Add(
+                AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                    .WithBody(ThrowNotImplementedReturnBody()));
+        }
+
+        var indexer = IndexerDeclaration(ParseTypeName(returnCsType))
+            .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
+            .WithAccessorList(AccessorList(List(accessors)));
+
+        if (!isForInterface) {
+            indexer = indexer.WithModifiers(Modifiers(isPublic: true, isStatic: false));
+        }
+
+        return indexer;
     }
 
     // ──────────────────────────────────────────────────────────────────────

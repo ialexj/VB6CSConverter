@@ -28,7 +28,13 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
                 isElementAccess = true;
             }
             else {
-                var diagnostics = model.GetDiagnostics(node.Expression.Span);
+                // Check only the name/identifier being invoked, not sub-expressions,
+                // to avoid picking up CS1955 from a nested invocation (e.g. the inner
+                // aFichaCliente(1) in (aFichaCliente(1)).ToString()).
+                var callableSpan = node.Expression is MemberAccessExpressionSyntax ma
+                    ? ma.Name.Span
+                    : node.Expression.Span;
+                var diagnostics = model.GetDiagnostics(callableSpan);
                 if (diagnostics.Any(d => d.Id == "CS1955")) { // non-invokable member
                     isElementAccess = true;
                 }

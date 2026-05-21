@@ -220,13 +220,190 @@ public class ReferenceStubGeneratorTests
 
             written.Should().ContainSingle();
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("public class Animation : IAnimation, IDispatch");
+            // IDispatch is stripped from the base list by ComPlumbingFilterRewriter (default behaviour).
+            source.Should().Contain("public class Animation : IAnimation");
+            source.Should().NotContain("IDispatch");
             source.Should().Contain("NotImplementedException");
         }
         finally {
             if (Directory.Exists(tempDir)) {
                 Directory.Delete(tempDir, recursive: true);
             }
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Default property (DISPID 0) → C# indexer
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_DefaultPropertyWithParams_DispatchInterface_EmitsIndexer()
+    {
+        // DAO.Recordset-style: rs!MyField → rs["MyField"] needs this[string name] on the interface.
+        var library = MakeLibrary("DAO",
+            new LibraryTypeModel("Recordset", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "object",
+                        [new("Name", "string", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                    new("EOF", LibraryMemberKind.PropertyGet, "bool", []),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            // Should emit an indexer, not a named property called "Fields"
+            source.Should().Contain("this[");
+            source.Should().NotContain("object Fields");
+            // Regular non-default property should still appear as-is
+            source.Should().Contain("bool EOF");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyWithParams_Class_EmitsIndexerWithThrowBody()
+    {
+        var library = MakeLibrary("DAO",
+            new LibraryTypeModel("Recordset", LibraryTypeKind.Class,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "object",
+                        [new("Name", "string", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                    new("Fields", LibraryMemberKind.PropertySet, "void",
+                        [new("Name", "string", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[");
+            source.Should().Contain("get");
+            source.Should().Contain("set");
+            source.Should().Contain("NotImplementedException");
+            source.Should().NotContain("object Fields");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyWithoutParams_EmitsRegularProperty()
+    {
+        // DISPID 0 with no parameters is a plain default value property — keep it as a named property.
+        // When the return type is a primitive (not in the library), no forwarding indexer is emitted.
+        var library = MakeLibrary("TestLib",
+            new LibraryTypeModel("Widget", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "string", [], IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("string Value");
+            source.Should().NotContain("this[");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyForwardsThroughCollection_EmitsForwardingIndexer()
+    {
+        // Models the DAO.Recordset / DAO.Fields pattern:
+        //   Recordset.Fields (DISPID 0, no params) → Fields
+        //   Fields.Item(object Index) (DISPID 0, with param) → Field
+        // The outer type (Recordset) must get a this[object] forwarding indexer
+        // so that rs["MyField"] compiles after the VB6 bang operator is lowered.
+        var library = MakeLibrary("DAO",
+            new LibraryTypeModel("Recordset", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "DAO.Fields", [], IsDefault: true),
+                ],
+                EnumValues: []),
+            new LibraryTypeModel("Fields", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "DAO.Field",
+                        [new("Index", "object", false, false)], IsDefault: true),
+                ],
+                EnumValues: []),
+            new LibraryTypeModel("Field", LibraryTypeKind.DispatchInterface,
+                Members: [],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var recordsetSource = written
+                .Select(File.ReadAllText)
+                .First(s => s.Contains("interface Recordset"));
+
+            // Must still expose the named Fields property
+            recordsetSource.Should().Contain("Fields",
+                "the named Fields property must still be emitted");
+            // Must also expose this[object] for rs["MyField"] to compile
+            recordsetSource.Should().Contain("this[",
+                "a forwarding indexer must be emitted for the two-hop DISPID 0 chain");
+            // The forwarding indexer's return type should match Fields.Item's return type
+            recordsetSource.Should().Contain("DAO.Field",
+                "forwarding indexer return type must match the inner collection's item type");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyForwardsThroughCollection_ClassType_EmitsForwardingIndexer()
+    {
+        // Same two-hop pattern but for a class (not interface) outer type.
+        var library = MakeLibrary("DAO",
+            new LibraryTypeModel("Recordset", LibraryTypeKind.Class,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "DAO.Fields", [], IsDefault: true),
+                ],
+                EnumValues: []),
+            new LibraryTypeModel("Fields", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "DAO.Field",
+                        [new("Index", "object", false, false)], IsDefault: true),
+                ],
+                EnumValues: []),
+            new LibraryTypeModel("Field", LibraryTypeKind.DispatchInterface,
+                Members: [],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var recordsetSource = written
+                .Select(File.ReadAllText)
+                .First(s => s.Contains("class Recordset"));
+
+            recordsetSource.Should().Contain("this[",
+                "a forwarding indexer must be emitted for a class type too");
+            recordsetSource.Should().Contain("DAO.Field",
+                "forwarding indexer return type must match the inner collection's item type");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
         }
     }
 
@@ -435,6 +612,35 @@ public class ReferenceStubGeneratorTests
         }
     }
 
+    [TestMethod]
+    public void GenerateReferenceUsings_TransitiveLibrariesAreExcluded()
+    {
+        // Simulate Program.cs filtering: transitive models are excluded before calling Generate().
+        var directLib = MakeLibrary("ADODB",
+            new LibraryTypeModel("CursorTypeEnum", LibraryTypeKind.Enum, [], [new("ForwardOnly", 0)]),
+            new LibraryTypeModel("Connection", LibraryTypeKind.DispatchInterface, [], []));
+
+        var transitiveLib = new LibraryModel("StdOle", "StdOle", Guid.NewGuid(), 2, 0,
+            [new LibraryTypeModel("OLE_COLOR", LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint")],
+            [],
+            IsTransitive: true);
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            // Caller (Program.cs) filters out transitive models before passing to Generate().
+            var directModels = new[] { directLib, transitiveLib }.Where(m => !m.IsTransitive).ToList();
+            var filePath = ReferenceUsingsGenerator.Generate(directModels, tempDir);
+
+            var source = File.ReadAllText(filePath);
+            source.Should().Contain("global using ADODB;");
+            source.Should().NotContain("StdOle");
+            source.Should().NotContain("OLE_COLOR");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
@@ -487,6 +693,71 @@ public class ReferenceStubGeneratorTests
             written.Should().ContainSingle();
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("struct POINT");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // IEnumerable (DISPID_NEWENUM / _NewEnum) stubs
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_DispatchInterfaceWithIEnumerable_EmitsBaseAndGetEnumerator()
+    {
+        // Simulates a COM dispatch interface whose _NewEnum was replaced by the inspector with
+        // GetEnumerator + IEnumerable in ImplementedInterfaces (e.g. VBA.Collection).
+        var library = MakeLibrary("VBA",
+            new LibraryTypeModel("Collection", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Count", LibraryMemberKind.PropertyGet, "int", []),
+                    new("GetEnumerator", LibraryMemberKind.Method, "System.Collections.IEnumerator", []),
+                ],
+                EnumValues: [],
+                ImplementedInterfaces: ["System.Collections.IEnumerable"]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            written.Should().ContainSingle();
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("System.Collections.IEnumerable",
+                "the interface must declare IEnumerable in its base list");
+            source.Should().Contain("GetEnumerator",
+                "the GetEnumerator method must be present to satisfy IEnumerable");
+            source.Should().Contain("System.Collections.IEnumerator",
+                "GetEnumerator must return IEnumerator");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ClassWithIEnumerable_EmitsBaseAndGetEnumerator()
+    {
+        // Simulates a COM coclass whose default interface has _NewEnum.
+        var library = MakeLibrary("DAO",
+            new LibraryTypeModel("Fields", LibraryTypeKind.Class,
+                Members: [
+                    new("Count", LibraryMemberKind.PropertyGet, "int", []),
+                    new("GetEnumerator", LibraryMemberKind.Method, "System.Collections.IEnumerator", []),
+                ],
+                EnumValues: [],
+                ImplementedInterfaces: ["System.Collections.IEnumerable"]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            written.Should().ContainSingle();
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("System.Collections.IEnumerable");
+            source.Should().Contain("GetEnumerator");
+            source.Should().Contain("NotImplementedException",
+                "GetEnumerator body must throw NotImplementedException");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);

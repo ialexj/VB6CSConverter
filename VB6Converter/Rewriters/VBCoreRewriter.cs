@@ -19,8 +19,9 @@ public class VBCoreRewriter : LoggedRewriter
             }
 
             return node.Identifier.Text switch {
-                "Now" => ParseExpression("System.DateTime.Now"),
+                "Now"  => ParseExpression("System.DateTime.Now"),
                 "Date" => ParseExpression("System.DateTime.Now.Date"),
+                "Time" => ParseExpression("System.DateTime.Now.TimeOfDay"),
                 _ => base.VisitIdentifierName(node),
             };
         });
@@ -58,7 +59,41 @@ public class VBCoreRewriter : LoggedRewriter
 
         ["Str"] = ConvertStr,
 
-        ["IsMissing"] = ConvertIsMissing
+        ["IsMissing"] = ConvertIsMissing,
+
+        // Math
+        ["Abs"]   = node => ConvertToMemberAccess(node, "Math.Abs"),
+        ["Sin"]   = node => ConvertToMemberAccess(node, "Math.Sin"),
+        ["Cos"]   = node => ConvertToMemberAccess(node, "Math.Cos"),
+        ["Tan"]   = node => ConvertToMemberAccess(node, "Math.Tan"),
+        ["Atn"]   = node => ConvertToMemberAccess(node, "Math.Atan"),
+        ["Sqr"]   = node => ConvertToMemberAccess(node, "Math.Sqrt"),
+        ["Log"]   = node => ConvertToMemberAccess(node, "Math.Log"),
+        ["Exp"]   = node => ConvertToMemberAccess(node, "Math.Exp"),
+        ["Sgn"]   = node => ConvertToMemberAccess(node, "Math.Sign"),
+        ["Int"]   = ConvertInt,
+        ["Fix"]   = ConvertFix,
+        ["Round"] = ConvertRound,
+
+        // Type conversions
+        ["CInt"]   = node => ConvertToMemberAccess(node, "Convert.ToInt32"),
+        ["CShort"] = node => ConvertToMemberAccess(node, "Convert.ToInt16"),
+        ["CSng"]   = node => ConvertToMemberAccess(node, "Convert.ToSingle"),
+        ["CBool"]  = node => ConvertToMemberAccess(node, "Convert.ToBoolean"),
+        ["CByte"]  = node => ConvertToMemberAccess(node, "Convert.ToByte"),
+        ["CDate"]  = node => ConvertToMemberAccess(node, "Convert.ToDateTime"),
+        ["CCur"]   = node => ConvertToMemberAccess(node, "Convert.ToDecimal"),
+
+        // Strings
+        ["Trim"]  = node => ConvertStringMethod(node, "Trim"),
+        ["LTrim"] = node => ConvertStringMethod(node, "LTrim"),
+        ["RTrim"] = node => ConvertStringMethod(node, "RTrim"),
+        ["LCase"] = node => ConvertStringMethod(node, "LCase"),
+        ["UCase"] = node => ConvertStringMethod(node, "UCase"),
+        ["Right"] = ConvertRight,
+        ["Mid"]   = ConvertMid,
+        ["Space"] = ConvertSpace,
+        ["InStr"] = ConvertInStr,
     };
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
@@ -192,26 +227,16 @@ public class VBCoreRewriter : LoggedRewriter
     static SyntaxNode ConvertLen(InvocationExpressionSyntax node)
     {
         var str = node.ArgumentList.Arguments[0];
-
-        return MemberAccessExpression(
-            SyntaxKind.SimpleMemberAccessExpression,
-            ParenthesizedExpression(CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression)),
-            IdentifierName("Length"));
+        return StringsCall("Len", CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression));
     }
 
     static SyntaxNode ConvertLeft(InvocationExpressionSyntax node)
     {
         var str = node.ArgumentList.Arguments[0];
         var len = node.ArgumentList.Arguments[1];
-
-        return InvocationExpression(
-            MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression,
-                ParenthesizedExpression(CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression)),
-                IdentifierName("Substring")),
-            ArgumentList(
-                Argument(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0))),
-                len));
+        return StringsCall("Left",
+            CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression),
+            len.Expression);
     }
 
     static SyntaxNode ConvertUBound(InvocationExpressionSyntax node)
@@ -229,14 +254,10 @@ public class VBCoreRewriter : LoggedRewriter
         var str      = node.ArgumentList.Arguments[0];
         var oldValue = node.ArgumentList.Arguments[1];
         var newValue = node.ArgumentList.Arguments[2];
-
-        return InvocationExpression(
-            MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression,
-                ParenthesizedExpression(CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression)),
-                IdentifierName("Replace")),
-            ArgumentList(oldValue, newValue)
-        );
+        return StringsCall("Replace",
+            CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression),
+            oldValue.Expression,
+            newValue.Expression);
     }
 
     static SyntaxNode ConvertIsNull(InvocationExpressionSyntax node)
@@ -261,4 +282,91 @@ public class VBCoreRewriter : LoggedRewriter
                 SyntaxKind.IsExpression,
                 node.ArgumentList.Arguments[0].Expression,
                 what));
+
+    // ── Math ─────────────────────────────────────────────────────────────────────
+
+    static SyntaxNode ConvertInt(InvocationExpressionSyntax node)
+    {
+        var n = node.ArgumentList.Arguments[0].Expression;
+        return CastExpression(
+            PredefinedType(Token(SyntaxKind.IntKeyword)),
+            InvocationExpression(
+                ParseExpression("Math.Floor"),
+                ArgumentList(CastExpression(PredefinedType(Token(SyntaxKind.DoubleKeyword)), n))));
+    }
+
+    static SyntaxNode ConvertFix(InvocationExpressionSyntax node)
+    {
+        var n = node.ArgumentList.Arguments[0].Expression;
+        return CastExpression(
+            PredefinedType(Token(SyntaxKind.IntKeyword)),
+            InvocationExpression(
+                ParseExpression("Math.Truncate"),
+                ArgumentList(CastExpression(PredefinedType(Token(SyntaxKind.DoubleKeyword)), n))));
+    }
+
+    static SyntaxNode ConvertRound(InvocationExpressionSyntax node)
+        => InvocationExpression(ParseExpression("Math.Round"), node.ArgumentList);
+
+    // ── Strings ──────────────────────────────────────────────────────────────────
+
+    static InvocationExpressionSyntax StringsCall(string methodName, params ExpressionSyntax[] args)
+        => InvocationExpression(
+            MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName("Strings").WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.VisualBasic")),
+                IdentifierName(methodName)),
+            ArgumentList(args));
+
+    static SyntaxNode ConvertStringMethod(InvocationExpressionSyntax node, string methodName)
+    {
+        var str = node.ArgumentList.Arguments[0];
+        return StringsCall(methodName, CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression));
+    }
+
+    static SyntaxNode ConvertRight(InvocationExpressionSyntax node)
+    {
+        var str = node.ArgumentList.Arguments[0];
+        var len = node.ArgumentList.Arguments[1];
+        return StringsCall("Right",
+            CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression),
+            len.Expression);
+    }
+
+    static SyntaxNode ConvertMid(InvocationExpressionSyntax node)
+    {
+        var args  = node.ArgumentList.Arguments;
+        var str   = args[0];
+        var start = args[1].Expression;
+        var castStr = CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str.Expression);
+        return args.Count == 2
+            ? StringsCall("Mid", castStr, start)
+            : StringsCall("Mid", castStr, start, args[2].Expression);
+    }
+
+    static SyntaxNode ConvertSpace(InvocationExpressionSyntax node)
+    {
+        var len = node.ArgumentList.Arguments[0].Expression;
+        return StringsCall("Space", len);
+    }
+
+    static SyntaxNode ConvertInStr(InvocationExpressionSyntax node)
+    {
+        var args = node.ArgumentList.Arguments;
+        if (args.Count >= 3) {
+            var start  = args[0].Expression;
+            var str    = args[1].Expression;
+            var search = args[2].Expression;
+            return StringsCall("InStr", start,
+                CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str),
+                search);
+        }
+        else {
+            var str    = args[0].Expression;
+            var search = args[1].Expression;
+            return StringsCall("InStr",
+                CastExpression(PredefinedType(Token(SyntaxKind.StringKeyword)), str),
+                search);
+        }
+    }
 }

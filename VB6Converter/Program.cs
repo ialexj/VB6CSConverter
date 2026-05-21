@@ -38,7 +38,7 @@ public static class Program
         [Option("show-output", Required = false, HelpText = "Print the converted file to the console.")]
         public bool Show { get; set; } = false;
 
-        [Option("skip-reference-stubs", Required = false, HelpText = "Skips pre-semantic COM reference stub generation (enabled by default).")]
+        [Option("skip-stubs", Required = false, HelpText = "Skips pre-semantic COM reference stub generation (enabled by default).")]
         public bool SkipReferenceStubs { get; set; }
 
         [Option("skip-transform", Required = false, HelpText = "Skips the transformation step and attempts to build with existing files.")]
@@ -114,27 +114,6 @@ public static class Program
 
         // At this point we should have the whole solution converted,
         // so we can build a semantic model and perform global rewrites.
-
-        async Task<Compilation> GetCompilation()
-        {
-            Compilation compilation = null;
-
-            await AnsiConsole.Status()
-                .StartAsync("Compiling...", async ctx => {
-                    var project = await ws.ReloadProject();
-                    compilation = await project.GetCompilationAsync();
-
-                    Log.Rewriting.Information("===== Compilation Statistics =====");
-                    var diagnostics = compilation.GetDiagnostics();
-                    foreach (var severity in diagnostics.GroupBy(d => d.Severity)) {
-                        Log.Rewriting.Information($"{severity.Key}: {severity.Count()}");
-                    }
-
-                });
-
-            return compilation;
-        }
-
         if (!options.SkipFixup) {
             AnsiConsole.MarkupLine("[yellow]Running fixups...[/]");
 
@@ -144,16 +123,10 @@ public static class Program
                 hasChanges = false;
                 Compilation compilation = null;
 
-                // Reload from disk to avoid stale in-memory project state caused by
-                // parallel SaveDocument writes during the conversion phase (each
-                // thread's doc.Project snapshot only carries its own file's update,
-                // so the last writer wins and all other documents appear empty).
-                await ws.ReloadProject();
-
                 async Task RunRewriter(bool compile, string title, Func<ConversionTarget, SemanticModel, LoggedRewriter> rewriter)
                 {
                     if (compile && compilation is null || hasChanges) {
-                        compilation = await GetCompilation();
+                        compilation = await CollectDiagnostics(ws, options.OutputDir);
                     }
 
                     hasChanges |= await RunOperations(title, ws.ActiveTargets,
@@ -174,21 +147,29 @@ public static class Program
                         }));
                 }
 
+                // Reload from disk to avoid stale in-memory project state caused by
+                // parallel SaveDocument writes during the conversion phase (each
+                // thread's doc.Project snapshot only carries its own file's update,
+                // so the last writer wins and all other documents appear empty).
+                await ws.ReloadProject();
+
                 Log.Rewriting.Information("====== Starting Fixups ======");
 
-                await RunRewriter(false, "Creating control singletons", (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
-                await RunRewriter(false, "Fixing Foreach Variable", (t, sm) => new ForEachVariableRewriter());
+                if (count == 0) {
+                    // These rewrites work first time
+                    await RunRewriter(false, "Creating control singletons", (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
+                    await RunRewriter(false, "Fixing Foreach Variable", (t, sm) => new ForEachVariableRewriter());
+                }
 
                 await RunRewriter(true, "Finding Types", (t, sm) => new TypeFinder(sm));
                 await RunRewriter(true, "Finding Members", (t, sm) => new MemberFinder(sm));
                 await RunRewriter(true, "Disambiguate Array Access", (t, sm) => new ArrayCallDisambiguator(sm));
-                //await RunRewriter(true, "Rewriting parameterized property setters", (t, sm) => new ParameterizedPropertyRewriter(sm));
-
+                await RunRewriter(true, "Rewriting parameterized property setters", (t, sm) => new ParameterizedPropertyRewriter(sm));
 
                 var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
 
                 if (compilation is null || hasChanges) {
-                    compilation = await GetCompilation();
+                    compilation = await GetCompilation(ws);
                 }
 
                 await RunOperations("Collecting Variables", ws.Targets,
@@ -199,10 +180,9 @@ public static class Program
                     }));
 
                 await RunRewriter(true, "Refining Types", (t, sm) => new TypeRefiner(varTypes));
-
                 await RunRewriter(true, "Coercing Literals", (t, sm) => new LiteralCoercionRewriter(sm));
-
                 await RunRewriter(true, "Adding Type Casts", (t, sm) => new TypeCastRewriter(sm));
+
                 //await RunRewriter(true, "Rewriting DAO", (t, sm) => new DAORewriter(sm));
 
                 if (hasChanges) {
@@ -215,21 +195,48 @@ public static class Program
 
         // Collect diagnostics
         if (!options.SkipDiagnostics) {
-            AnsiConsole.MarkupLine("[yellow]Collecting diagnostics...[/]");
-
-            var compilation = await GetCompilation();
-            AnsiConsole.Status()
-                .Start("Collecting Diagnostics...", ctx => {
-                    var diagnostics = compilation.GetDiagnostics();
-
-                    foreach (var severity in diagnostics.GroupBy(d => d.Severity)) {
-                        AnsiConsole.WriteLine($"{severity.Key}: {severity.Count()}");
-                    }
-
-                    using var writer = new StreamWriter(Path.Combine(options.OutputDir, "_Diagnostics.txt"), false);
-                    DiagnosticsReport.Write(writer, diagnostics);
-                });
+            await CollectDiagnostics(ws, options.OutputDir);
         }
+    }
+
+    static async Task<Compilation> GetCompilation(ConversionWorkspace ws)
+    {
+        Compilation compilation = null;
+
+        await AnsiConsole.Status()
+            .StartAsync("Compiling...", async ctx => {
+                var project = await ws.ReloadProject();
+                compilation = await project.GetCompilationAsync();
+
+                Log.Rewriting.Information("===== Compilation Statistics =====");
+                var diagnostics = compilation.GetDiagnostics();
+                foreach (var severity in diagnostics.GroupBy(d => d.Severity)) {
+                    Log.Rewriting.Information($"{severity.Key}: {severity.Count()}");
+                }
+            });
+
+        return compilation;
+    }
+
+    static async Task<Compilation> CollectDiagnostics(ConversionWorkspace ws, string outputDir)
+    {
+        AnsiConsole.MarkupLine("[yellow]Collecting diagnostics...[/]");
+
+        var compilation = await GetCompilation(ws);
+        AnsiConsole.Status()
+            .Start("Collecting Diagnostics...", ctx => {
+                var diagnostics = compilation.GetDiagnostics();
+
+                using var writer = new StreamWriter(Path.Combine(outputDir, "_Diagnostics.txt"), false);
+                DiagnosticsReport.Write(writer, diagnostics);
+
+                var errorCount = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
+                if (errorCount > 0) {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Errors: {errorCount}[/]");
+                }
+            });
+
+        return compilation;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -247,32 +254,36 @@ public static class Program
             return;
         }
 
-        string stubGenExe = FindComStubGeneratorExe();
-        if (stubGenExe == null) {
+        // Run x86 first then x64 in sequence.  Because ComStubGenerator skips stub files
+        // that already exist, the second run only adds what the first bitness missed
+        // (e.g. libraries registered only in the 64-bit registry hive).
+        var exes = FindComStubGeneratorExes();
+        if (exes.Count == 0) {
             AnsiConsole.MarkupLine("[red]ComStubGenerator.exe not found alongside converter. Skipping reference stub generation.[/]");
             Log.Default.Warning("ComStubGenerator.exe not found; reference stubs will not be generated");
             return;
         }
 
-        var psi = new ProcessStartInfo {
-            FileName = stubGenExe,
-            ArgumentList = { "-p", projectPath, "-o", outputDir },
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
+        foreach (var stubGenExe in exes) {
+            var psi = new ProcessStartInfo {
+                FileName = stubGenExe,
+                ArgumentList = { "-p", projectPath, "-o", outputDir },
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
 
-        using var process = Process.Start(psi)!;
+            using var process = Process.Start(psi)!;
 
-        // Relay output to console while the subprocess runs
-        var stdoutTask = RelayOutputAsync(process.StandardOutput);
-        var stderrTask = RelayOutputAsync(process.StandardError);
+            var stdoutTask = RelayOutputAsync(process.StandardOutput);
+            var stderrTask = RelayOutputAsync(process.StandardError);
 
-        await process.WaitForExitAsync();
-        await Task.WhenAll(stdoutTask, stderrTask);
+            await process.WaitForExitAsync();
+            await Task.WhenAll(stdoutTask, stderrTask);
 
-        if (process.ExitCode != 0) {
-            AnsiConsole.MarkupLineInterpolated($"[yellow]ComStubGenerator exited with code {process.ExitCode}; some reference stubs may be missing.[/]");
+            if (process.ExitCode != 0) {
+                AnsiConsole.MarkupLineInterpolated($"[yellow]ComStubGenerator exited with code {process.ExitCode}; some reference stubs may be missing.[/]");
+            }
         }
 
         static async Task RelayOutputAsync(System.IO.TextReader reader)
@@ -284,20 +295,15 @@ public static class Program
         }
     }
 
-    static string FindComStubGeneratorExe()
+    static IReadOnlyList<string> FindComStubGeneratorExes()
     {
         string baseDir = AppContext.BaseDirectory;
         string exeName = "ComStubGenerator.exe";
 
-        // Prefer the x86 build (matches the current converter platform target).
-        string x86Path = Path.Combine(baseDir, "stubs", "x86", exeName);
-        if (File.Exists(x86Path)) return x86Path;
-
-        // Fall back to x64 if only that build is present.
-        string x64Path = Path.Combine(baseDir, "stubs", "x64", exeName);
-        if (File.Exists(x64Path)) return x64Path;
-
-        return null;
+        return new[] { "x64", "x86" }
+            .Select(arch => Path.Combine(baseDir, "stubs", arch, exeName))
+            .Where(File.Exists)
+            .ToList();
     }
 }
 
