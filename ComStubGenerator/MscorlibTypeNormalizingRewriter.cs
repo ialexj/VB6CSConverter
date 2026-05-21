@@ -24,8 +24,8 @@ internal static class DotnetLibraryGuids
     /// Returns <see langword="true"/> when any of the library's discovered dependencies
     /// is a .NET runtime type library (mscorlib or a System.* assembly).
     /// </summary>
-    public static bool RequiresNormalization(LibraryModel library)
-        => library.DiscoveredDependencies.Any(d => _guids.Contains(d.Guid));
+    public static bool RequiresNormalization(ComQueryLibrary library)
+        => library.DiscoveredDependencies?.Any(d => _guids.Contains(d.Guid)) == true;
 
     /// <summary>Returns <see langword="true"/> when <paramref name="guid"/> identifies a .NET runtime type library.</summary>
     public static bool Contains(Guid guid) => _guids.Contains(guid);

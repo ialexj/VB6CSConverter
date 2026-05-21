@@ -41,9 +41,6 @@ public static class Program
         [Option("skip-stubs", Required = false, HelpText = "Skips pre-semantic COM reference stub generation (enabled by default).")]
         public bool SkipReferenceStubs { get; set; }
 
-        [Option("stub-architectures", Required = false, HelpText = "Specify the architectures for which to generate COM reference stubs.", Default = new[] { "x64", "x86" })]
-        public IEnumerable<string> StubArchitectures { get; set; }
-
         [Option("skip-transform", Required = false, HelpText = "Skips the transformation step and attempts to build with existing files.")]
         public bool SkipTransform { get; set; }
 
@@ -77,7 +74,7 @@ public static class Program
         // ── Pre-conversion: generate COM reference stubs ────────────────────
         if (!options.SkipReferenceStubs && vbProject.References.Count > 0) {
             var referenceDir = Path.Join(options.OutputDir, "_References");
-            await GenerateReferenceStubs(options.Project, referenceDir, options.StubArchitectures);
+            await GenerateReferenceStubs(options.Project, referenceDir);
         }
         // ────────────────────────────────────────────────────────────────────
 
@@ -246,7 +243,7 @@ public static class Program
     // Reference stub generation — delegates to the ComStubGenerator executable
     // ─────────────────────────────────────────────────────────────────────
 
-    static async Task GenerateReferenceStubs(string projectPath, string outputDir, IEnumerable<string> architectures)
+    static async Task GenerateReferenceStubs(string projectPath, string outputDir)
     {
         AnsiConsole.MarkupLine("[yellow]Generating COM reference stubs...[/]");
 
@@ -255,40 +252,31 @@ public static class Program
             return;
         }
 
-        // ComStubGenerator skips stub files that already exist,
-        // subsequent runs only add what the first bitness missed
-        // (e.g. libraries registered only in the 64-bit registry hive).
+        var stubGenExe = FindComStubGeneratorExe();
+        if (!File.Exists(stubGenExe)) {
+            AnsiConsole.MarkupLineInterpolated($"[red]ComStubGenerator.exe not found at {stubGenExe}. Skipping reference stubs.[/]");
+            Log.Default.Warning("ComStubGenerator.exe not found; reference stubs will not be generated");
+            return;
+        }
 
-        foreach (var arch in architectures) {
-            var stubGenExe = FindComStubGeneratorExe(arch);
-            if (!File.Exists(stubGenExe)) {
-                AnsiConsole.MarkupLineInterpolated($"[red]ComStubGenerator.exe for {arch} not found. Skipping {arch} reference stubs.[/]");
-                Log.Default.Warning($"ComStubGenerator.exe for {arch} not found; {arch} reference stubs will not be generated");
-                continue;
-            }
+        var psi = new ProcessStartInfo {
+            FileName = stubGenExe,
+            ArgumentList = { "-p", projectPath, "-o", outputDir },
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
 
-            AnsiConsole.MarkupLineInterpolated($"[yellow]Generating stubs ({arch})...[/]");
+        using var process = Process.Start(psi)!;
 
+        var stdoutTask = RelayOutputAsync(process.StandardOutput);
+        var stderrTask = RelayOutputAsync(process.StandardError);
 
-            var psi = new ProcessStartInfo {
-                FileName = stubGenExe,
-                ArgumentList = { "-p", projectPath, "-o", outputDir },
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
+        await process.WaitForExitAsync();
+        await Task.WhenAll(stdoutTask, stderrTask);
 
-            using var process = Process.Start(psi)!;
-
-            var stdoutTask = RelayOutputAsync(process.StandardOutput);
-            var stderrTask = RelayOutputAsync(process.StandardError);
-
-            await process.WaitForExitAsync();
-            await Task.WhenAll(stdoutTask, stderrTask);
-
-            if (process.ExitCode != 0) {
-                AnsiConsole.MarkupLineInterpolated($"[yellow]ComStubGenerator exited with code {process.ExitCode}; some reference stubs may be missing.[/]");
-            }
+        if (process.ExitCode != 0) {
+            AnsiConsole.MarkupLineInterpolated($"[yellow]ComStubGenerator exited with code {process.ExitCode}; some reference stubs may be missing.[/]");
         }
 
         static async Task RelayOutputAsync(System.IO.TextReader reader)
@@ -300,11 +288,10 @@ public static class Program
         }
     }
 
-    static string FindComStubGeneratorExe(string arch)
+    static string FindComStubGeneratorExe()
     {
         string baseDir = AppContext.BaseDirectory;
-        string exeName = "ComStubGenerator.exe";
-        return Path.Combine(baseDir, "stubs", arch, exeName);
+        return Path.Combine(baseDir, "stubs", "ComStubGenerator.exe");
     }
 }
 

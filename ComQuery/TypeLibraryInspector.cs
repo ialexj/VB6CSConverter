@@ -8,11 +8,11 @@ using System.Runtime.Versioning;
 using Microsoft.Win32;
 using VB6Parser;
 
-namespace ComStubGenerator;
+namespace ComQuery;
 
 /// <summary>
 /// Inspects COM type libraries using the Windows OLE Automation API and builds
-/// <see cref="LibraryModel"/> instances that can be turned into C# stubs.
+/// <see cref="ComQueryLibrary"/> instances describing types, members, and dependencies.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class TypeLibraryInspector
@@ -38,33 +38,60 @@ public sealed class TypeLibraryInspector
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Public entry point
+    // Public entry points
     // ──────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Loads the type library at <paramref name="path"/> and returns a
-    /// <see cref="LibraryModel"/>, or <see langword="null"/> if the file
+    /// <see cref="ComQueryLibrary"/>, or <see langword="null"/> if the file
     /// cannot be loaded or parsed.
     /// </summary>
-    public static LibraryModel? Inspect(VisualBasicProjectReference reference, string path)
+    public static ComQueryLibrary? Inspect(VisualBasicProjectReference reference, string path)
     {
-        if (!TryLoadTypeLibWithFallback(reference, path, out var typeLib, out string loadedFromPath, out int hr)) {
-            Log.Default.Warning("TypeLibraryInspector: unable to load type library for {path}; last HRESULT 0x{hr:X8} ({reason})",
-                path,
-                hr,
-                DescribeLoadTypeLibFailure(hr));
+        if (!TryLoadTypeLibWithFallback(reference.Guid, reference.MajorVersion, reference.MinorVersion, reference.Lcid, path,
+                                        out var typeLib, out string loadedFromPath, out int hr)) {
+            Log.Warning($"TypeLibraryInspector: unable to load type library for {path}; last HRESULT 0x{hr:X8} ({DescribeLoadTypeLibFailure(hr)})");
             return null;
         }
 
         if (!string.Equals(path, loadedFromPath, StringComparison.OrdinalIgnoreCase)) {
-            Log.Default.Information("TypeLibraryInspector: using fallback type library path {loadedPath} for {path}", loadedFromPath, path);
+            Log.Information($"TypeLibraryInspector: using fallback type library path {loadedFromPath} for {path}");
         }
 
         try {
-            return InspectTypeLib(typeLib, reference);
+            return InspectTypeLib(typeLib, reference.Guid, reference.MajorVersion, reference.MinorVersion, reference.IsTransitive, loadedFromPath, reference.Description);
         }
         catch (Exception ex) {
-            LogInspectionFailure(reference, loadedFromPath, "InspectTypeLib", ex);
+            Log.Warning($"TypeLibraryInspector: InspectTypeLib failed for {loadedFromPath}", ex);
+            return null;
+        }
+        finally {
+            Marshal.ReleaseComObject(typeLib);
+        }
+    }
+
+    /// <summary>
+    /// Loads the type library identified by <paramref name="guid"/>, version, and
+    /// <paramref name="path"/>, and returns a <see cref="ComQueryLibrary"/>, or
+    /// <see langword="null"/> if the file cannot be loaded or parsed.
+    /// </summary>
+    public static ComQueryLibrary? Inspect(Guid guid, int major, int minor, string name, string path, bool isTransitive = false)
+    {
+        if (!TryLoadTypeLibWithFallback(guid, major, minor, 0, path,
+                                        out var typeLib, out string loadedFromPath, out int hr)) {
+            Log.Warning($"TypeLibraryInspector: unable to load type library for {path}; last HRESULT 0x{hr:X8} ({DescribeLoadTypeLibFailure(hr)})");
+            return null;
+        }
+
+        if (!string.Equals(path, loadedFromPath, StringComparison.OrdinalIgnoreCase)) {
+            Log.Information($"TypeLibraryInspector: using fallback type library path {loadedFromPath} for {path}");
+        }
+
+        try {
+            return InspectTypeLib(typeLib, guid, major, minor, isTransitive, loadedFromPath, name);
+        }
+        catch (Exception ex) {
+            Log.Warning($"TypeLibraryInspector: InspectTypeLib failed for {loadedFromPath}", ex);
             return null;
         }
         finally {
@@ -76,30 +103,29 @@ public sealed class TypeLibraryInspector
     // Type-library level
     // ──────────────────────────────────────────────────────────────────────
 
-    static LibraryModel InspectTypeLib(System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
-                                       VisualBasicProjectReference reference)
+    static ComQueryLibrary InspectTypeLib(
+        System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
+        Guid guid, int major, int minor, bool isTransitive,
+        string loadedFromPath, string fallbackName)
     {
-        typeLib.GetDocumentation(-1, out string libName, out _, out _, out _);
-        libName = string.IsNullOrWhiteSpace(libName) ? reference.Description : libName;
+        typeLib.GetDocumentation(-1, out string libName, out string libDoc, out _, out _);
+        libName = string.IsNullOrWhiteSpace(libName) ? fallbackName : libName;
+        string? libDescription = string.IsNullOrWhiteSpace(libDoc) ? null : libDoc;
 
         string safeName = ReferenceNaming.MakeSafeName(libName);
 
         int typeCount = typeLib.GetTypeInfoCount();
-        var types     = new List<LibraryTypeModel>(typeCount);
-        var discoveredDeps = new HashSet<DiscoveredDependency>();
+        var types     = new List<ComQueryType>(typeCount);
+        var discoveredDeps = new HashSet<ComQueryDiscoveredDep>();
 
         for (int i = 0; i < typeCount; i++) {
-            LibraryTypeModel? typeModel;
+            ComQueryType? typeModel;
             try {
                 typeModel = InspectTypeInfo(typeLib, i, discoveredDeps);
             }
             catch (Exception ex) {
                 string typeName = TryGetTypeName(typeLib, i);
-                Log.Default.Warning(ex,
-                    "TypeLibraryInspector: skipping type index {index} ({typeName}) in library {libraryName} after inspection failure",
-                    i,
-                    typeName,
-                    libName);
+                Log.Warning($"TypeLibraryInspector: skipping type index {i} ({typeName}) in library {libName} after inspection failure", ex);
                 continue;
             }
 
@@ -120,82 +146,40 @@ public sealed class TypeLibraryInspector
         for (int i = 0; i < types.Count; i++) {
             var t = types[i];
             if (t.Kind != LibraryTypeKind.DispatchInterface) continue;
-            if (t.Members.Count > 0) continue;
+            if (t.Members != null && t.Members.Count > 0) continue;
 
             string candidate = "I" + t.Name;
             if (!vtableInterfaceNames.Contains(candidate)) continue;
 
-            var existing = t.ImplementedInterfaces ?? [];
+            var existing = t.ImplementedInterfaces ?? (IReadOnlyList<string>)[];
             if (existing.Any(n => string.Equals(n, candidate, StringComparison.OrdinalIgnoreCase))) continue;
 
             types[i] = t with { ImplementedInterfaces = [.. existing, candidate] };
         }
 
-        // Post-process: inject VB6 runtime-intrinsic members that are not present in any
-        // COM type library because they are provided by the VB6 container at runtime.
-        // These are keyed by (libraryGuid, typeName).
-        InjectSyntheticMembers(reference.Guid, types);
+        IReadOnlyList<ComQueryDiscoveredDep>? deps = discoveredDeps.Count > 0 ? [.. discoveredDeps] : null;
 
-        return new LibraryModel(libName, safeName, reference.Guid, reference.MajorVersion, reference.MinorVersion, types, [.. discoveredDeps], reference.IsTransitive);
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // Synthetic / runtime-intrinsic member injection
-    // ──────────────────────────────────────────────────────────────────────
-
-    // Some VB6 object-model properties are not in any COM type library — the VB6 runtime
-    // or container injects them at run-time.  We add them here so the generated C# stubs
-    // compile and the converter can resolve member access expressions.
-    //
-    // Key:   (library GUID, type name, case-insensitive)
-    // Value: members to add (only added if not already present with the same name+kind)
-    static readonly Guid Vb6OlbGuid = new("FCFB3D2E-A0FA-1068-A738-08002B3371B5");
-
-    static readonly Dictionary<(Guid LibGuid, string TypeName), IReadOnlyList<LibraryMemberModel>> SyntheticMembers
-        = new()
-        {
-            // VB6.OLB — UserControl client-area properties
-            // These describe the drawable area inside the control borders.
-            // The VB6 runtime supplies them; they appear nowhere in VB6.OLB itself.
-            [(Vb6OlbGuid, "UserControl")] =
-            [
-                new("ClientLeft",   LibraryMemberKind.PropertyGet, "float", []),
-                new("ClientTop",    LibraryMemberKind.PropertyGet, "float", []),
-                new("ClientWidth",  LibraryMemberKind.PropertyGet, "float", []),
-                new("ClientHeight", LibraryMemberKind.PropertyGet, "float", []),
-            ],
-            [(Vb6OlbGuid, "Form")] =
-            [
-                new("ClientLeft",   LibraryMemberKind.PropertyGet, "float", []),
-                new("ClientTop",    LibraryMemberKind.PropertyGet, "float", []),
-                new("ClientWidth",  LibraryMemberKind.PropertyGet, "float", []),
-                new("ClientHeight", LibraryMemberKind.PropertyGet, "float", []),
-            ],
-        };
-
-    static void InjectSyntheticMembers(Guid libraryGuid, List<LibraryTypeModel> types)
-    {
-        for (int i = 0; i < types.Count; i++) {
-            var t = types[i];
-            if (!SyntheticMembers.TryGetValue((libraryGuid, t.Name), out var synthetic)) continue;
-
-            var toAdd = synthetic
-                .Where(sm => !t.Members.Any(m =>
-                    string.Equals(m.Name, sm.Name, StringComparison.OrdinalIgnoreCase)
-                    && m.Kind == sm.Kind))
-                .ToList();
-
-            if (toAdd.Count == 0) continue;
-
-            types[i] = t with { Members = [.. t.Members, .. toAdd] };
-        }
+        return new ComQueryLibrary(
+            Name: libName,
+            SafeName: safeName,
+            Guid: guid,
+            Major: major,
+            Minor: minor,
+            Path: loadedFromPath,
+            IsTransitive: isTransitive,
+            Types: types.Count > 0 ? types : null,
+            DiscoveredDependencies: deps,
+            Description: libDescription);
     }
 
     // ──────────────────────────────────────────────────────────────────────
     // Type-info level
     // ──────────────────────────────────────────────────────────────────────
 
-    static LibraryTypeModel? InspectTypeInfo(System.Runtime.InteropServices.ComTypes.ITypeLib typeLib, int index, HashSet<DiscoveredDependency> discoveredDeps)
+    static ComQueryType? InspectTypeInfo(
+        System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
+        int index,
+        HashSet<ComQueryDiscoveredDep> discoveredDeps)
     {
         typeLib.GetTypeInfo(index, out var typeInfo);
         if (typeInfo == null) return null;
@@ -204,8 +188,9 @@ public sealed class TypeLibraryInspector
         IntPtr pTypeAttr = IntPtr.Zero;
 
         try {
-            typeInfo.GetDocumentation(-1, out typeName, out _, out _, out _);
+            typeInfo.GetDocumentation(-1, out typeName, out string typeDoc, out _, out _);
             if (string.IsNullOrWhiteSpace(typeName)) return null;
+            string? typeDescription = string.IsNullOrWhiteSpace(typeDoc) ? null : typeDoc;
 
             typeInfo.GetTypeAttr(out pTypeAttr);
             if (pTypeAttr == IntPtr.Zero) return null;
@@ -226,8 +211,8 @@ public sealed class TypeLibraryInspector
 
             if ((int)kind == -1) return null;
 
-            List<LibraryMemberModel>    members    = [];
-            List<LibraryEnumValueModel> enumValues = [];
+            List<ComQueryMember>    members    = [];
+            List<ComQueryEnumVal>   enumValues = [];
             string? aliasedType = null;
             List<string> implementedInterfaces = [];
 
@@ -255,7 +240,14 @@ public sealed class TypeLibraryInspector
                     implementedInterfaces.Insert(0, "System.Collections.IEnumerable");
             }
 
-            return new LibraryTypeModel(typeName, kind, members, enumValues, aliasedType, implementedInterfaces);
+            return new ComQueryType(
+                Name: typeName,
+                Kind: kind,
+                Members: members.Count > 0 ? members : null,
+                EnumValues: enumValues.Count > 0 ? enumValues : null,
+                AliasedType: aliasedType,
+                ImplementedInterfaces: implementedInterfaces.Count > 0 ? implementedInterfaces : null,
+                Description: typeDescription);
         }
         catch (Exception ex) {
             throw new InvalidOperationException(
@@ -275,10 +267,10 @@ public sealed class TypeLibraryInspector
     // Enum values
     // ──────────────────────────────────────────────────────────────────────
 
-    static List<LibraryEnumValueModel> InspectEnumValues(
+    static List<ComQueryEnumVal> InspectEnumValues(
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo, short cVars)
     {
-        var values = new List<LibraryEnumValueModel>(cVars);
+        var values = new List<ComQueryEnumVal>(cVars);
 
         for (int i = 0; i < cVars; i++) {
             typeInfo.GetVarDesc(i, out IntPtr pVarDesc);
@@ -302,7 +294,7 @@ public sealed class TypeLibraryInspector
                     catch { /* skip value extraction */ }
                 }
 
-                values.Add(new LibraryEnumValueModel(memberName, value));
+                values.Add(new ComQueryEnumVal(memberName, value));
             }
             catch { /* skip this entry */ }
             finally {
@@ -317,13 +309,13 @@ public sealed class TypeLibraryInspector
     // Struct / union fields (TKIND_RECORD / TKIND_UNION)
     // ──────────────────────────────────────────────────────────────────────
 
-    static List<LibraryMemberModel> InspectStructFields(
+    static List<ComQueryMember> InspectStructFields(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         short cVars,
-        HashSet<DiscoveredDependency> discoveredDeps)
+        HashSet<ComQueryDiscoveredDep> discoveredDeps)
     {
-        var fields = new List<LibraryMemberModel>(cVars);
+        var fields = new List<ComQueryMember>(cVars);
 
         for (int i = 0; i < cVars; i++) {
             typeInfo.GetVarDesc(i, out IntPtr pVarDesc);
@@ -334,13 +326,14 @@ public sealed class TypeLibraryInspector
                 if (varDesc.varkind != System.Runtime.InteropServices.ComTypes.VARKIND.VAR_PERINSTANCE)
                     continue;
 
-                typeInfo.GetDocumentation(varDesc.memid, out string fieldName, out _, out _, out _);
+                typeInfo.GetDocumentation(varDesc.memid, out string fieldName, out string fieldDoc, out _, out _);
                 if (string.IsNullOrWhiteSpace(fieldName)) continue;
 
                 string fieldType = ResolveType(typeLib, typeInfo, varDesc.elemdescVar.tdesc, discoveredDeps);
                 if (fieldType == "void") continue;
 
-                fields.Add(new LibraryMemberModel(fieldName, LibraryMemberKind.Field, fieldType, []));
+                string? fieldDescription = string.IsNullOrWhiteSpace(fieldDoc) ? null : fieldDoc;
+                fields.Add(new ComQueryMember(fieldName, LibraryMemberKind.Field, fieldType, [], DispId: varDesc.memid, Description: fieldDescription));
             }
             catch { /* skip this field */ }
             finally {
@@ -358,13 +351,13 @@ public sealed class TypeLibraryInspector
     const int IMPLTYPEFLAG_FSOURCE     = 0x2;
     const int IMPLTYPEFLAG_FRESTRICTED = 0x4;
 
-    static (List<LibraryMemberModel> Members, List<string> ImplementedInterfaces, bool HasNewEnum) InspectCoclassMembers(
+    static (List<ComQueryMember> Members, List<string> ImplementedInterfaces, bool HasNewEnum) InspectCoclassMembers(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo coclassTypeInfo,
         System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
-        HashSet<DiscoveredDependency> discoveredDeps)
+        HashSet<ComQueryDiscoveredDep> discoveredDeps)
     {
-        var members = new List<LibraryMemberModel>();
+        var members = new List<ComQueryMember>();
         var memberSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var implementedInterfaces = new List<string>();
         var implementedInterfaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -423,13 +416,13 @@ public sealed class TypeLibraryInspector
         return (members, implementedInterfaces, hasNewEnum);
     }
 
-    static (List<LibraryMemberModel> Members, List<string> BaseInterfaces, bool HasNewEnum) InspectInterfaceMembers(
+    static (List<ComQueryMember> Members, List<string> BaseInterfaces, bool HasNewEnum) InspectInterfaceMembers(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
-        HashSet<DiscoveredDependency> discoveredDeps)
+        HashSet<ComQueryDiscoveredDep> discoveredDeps)
     {
-        var members = new List<LibraryMemberModel>();
+        var members = new List<ComQueryMember>();
         var memberSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var baseInterfaces = new List<string>();
         var baseInterfaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -455,9 +448,9 @@ public sealed class TypeLibraryInspector
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
-        HashSet<DiscoveredDependency> discoveredDeps,
+        HashSet<ComQueryDiscoveredDep> discoveredDeps,
         HashSet<Guid> visitedInterfaces,
-        List<LibraryMemberModel> members,
+        List<ComQueryMember> members,
         HashSet<string> memberSignatures,
         bool includeBaseInterfaces,
         (List<string> Names, HashSet<string> Seen)? baseInterfaces,
@@ -541,23 +534,25 @@ public sealed class TypeLibraryInspector
         }
     }
 
-    static string GetMemberSignature(LibraryMemberModel member)
+    static string GetMemberSignature(ComQueryMember member)
     {
-        string parameterTypes = string.Join(",", member.Parameters.Select(p => p.CSharpType));
-        return $"{member.Kind}:{member.Name}({parameterTypes})=>{member.ReturnCSharpType}";
+        string parameterTypes = string.Join(",", member.Parameters.Select(p => p.Type));
+        return $"{member.Kind}:{member.Name}({parameterTypes})=>{member.ReturnType}";
     }
 
     // ──────────────────────────────────────────────────────────────────────
     // Dispatch interface VAR_DISPATCH properties
     // ──────────────────────────────────────────────────────────────────────
 
-    static List<LibraryMemberModel> InspectDispatchVarProperties(
+    const short VARFLAG_FREADONLY = 0x1;
+
+    static List<ComQueryMember> InspectDispatchVarProperties(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         short cVars,
-        HashSet<DiscoveredDependency> discoveredDeps)
+        HashSet<ComQueryDiscoveredDep> discoveredDeps)
     {
-        var members = new List<LibraryMemberModel>(cVars * 2);
+        var members = new List<ComQueryMember>(cVars * 2);
 
         for (int i = 0; i < cVars; i++) {
             typeInfo.GetVarDesc(i, out IntPtr pVarDesc);
@@ -567,18 +562,20 @@ public sealed class TypeLibraryInspector
                 var varDesc = Marshal.PtrToStructure<System.Runtime.InteropServices.ComTypes.VARDESC>(pVarDesc);
                 if (varDesc.varkind != System.Runtime.InteropServices.ComTypes.VARKIND.VAR_DISPATCH) continue;
 
-                typeInfo.GetDocumentation(varDesc.memid, out string memberName, out _, out _, out _);
+                typeInfo.GetDocumentation(varDesc.memid, out string memberName, out string memberDoc, out _, out _);
                 if (string.IsNullOrWhiteSpace(memberName)) continue;
 
                 string propType = ResolveType(typeLib, typeInfo, varDesc.elemdescVar.tdesc, discoveredDeps);
                 if (propType == "void") propType = "object";
 
-                members.Add(new LibraryMemberModel(memberName, LibraryMemberKind.PropertyGet, propType, []));
+                string? memberDescription = string.IsNullOrWhiteSpace(memberDoc) ? null : memberDoc;
+
+                members.Add(new ComQueryMember(memberName, LibraryMemberKind.PropertyGet, propType, [], DispId: varDesc.memid, Description: memberDescription));
 
                 bool isReadOnly = (varDesc.wVarFlags & VARFLAG_FREADONLY) != 0;
                 if (!isReadOnly) {
-                    members.Add(new LibraryMemberModel(memberName, LibraryMemberKind.PropertySet, "void",
-                        [new LibraryParameterModel("value", propType, false, false)]));
+                    members.Add(new ComQueryMember(memberName, LibraryMemberKind.PropertySet, "void",
+                        [new ComQueryParam("value", propType, false, false)], DispId: varDesc.memid, Description: memberDescription));
                 }
             }
             catch { /* skip this property */ }
@@ -596,17 +593,16 @@ public sealed class TypeLibraryInspector
 
     const short FUNCFLAG_FRESTRICTED = 0x1;
     const short FUNCFLAG_FHIDDEN     = 0x40;
-    const short VARFLAG_FREADONLY    = 0x1;
     const int   DISPID_NEWENUM       = -4;    // IEnumVARIANT enumerator factory
 
-    static (List<LibraryMemberModel> Members, bool HasNewEnum) InspectFunctions(
+    static (List<ComQueryMember> Members, bool HasNewEnum) InspectFunctions(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         short cFuncs,
         System.Runtime.InteropServices.ComTypes.TYPEKIND typekind,
-        HashSet<DiscoveredDependency> discoveredDeps)
+        HashSet<ComQueryDiscoveredDep> discoveredDeps)
     {
-        var members = new List<LibraryMemberModel>(cFuncs);
+        var members = new List<ComQueryMember>(cFuncs);
         bool hasNewEnum = false;
 
         for (int i = 0; i < cFuncs; i++) {
@@ -623,7 +619,7 @@ public sealed class TypeLibraryInspector
                 if (typekind == System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_INTERFACE
                     && (funcDesc.wFuncFlags & FUNCFLAG_FRESTRICTED) != 0) continue;
 
-                typeInfo.GetDocumentation(funcDesc.memid, out string memberName, out _, out _, out _);
+                typeInfo.GetDocumentation(funcDesc.memid, out string memberName, out string memberDoc, out _, out _);
                 if (string.IsNullOrWhiteSpace(memberName)) continue;
 
                 var memberKind = funcDesc.invkind switch {
@@ -640,7 +636,7 @@ public sealed class TypeLibraryInspector
                 string[] names = new string[nameCount];
                 typeInfo.GetNames(funcDesc.memid, names, nameCount, out int actualNames);
 
-                var parameters = new List<LibraryParameterModel>(funcDesc.cParams);
+                var parameters = new List<ComQueryParam>(funcDesc.cParams);
                 int elemDescSize = Marshal.SizeOf<System.Runtime.InteropServices.ComTypes.ELEMDESC>();
 
                 for (int p = 0; p < funcDesc.cParams; p++) {
@@ -676,7 +672,7 @@ public sealed class TypeLibraryInspector
                             && (flags
                             & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FIN) == 0;
 
-                        parameters.Add(new LibraryParameterModel(paramName, paramType, isOptional, isOut));
+                        parameters.Add(new ComQueryParam(paramName, paramType, isOptional, isOut));
                     }
                     catch { /* skip parameter */ }
                 }
@@ -684,7 +680,7 @@ public sealed class TypeLibraryInspector
                 // DISPID_NEWENUM (-4): suppress _NewEnum and substitute GetEnumerator so that
                 // generated stubs can implement System.Collections.IEnumerable.
                 if (funcDesc.memid == DISPID_NEWENUM) {
-                    members.Add(new LibraryMemberModel("GetEnumerator", LibraryMemberKind.Method, "System.Collections.IEnumerator", []));
+                    members.Add(new ComQueryMember("GetEnumerator", LibraryMemberKind.Method, "System.Collections.IEnumerator", [], DispId: DISPID_NEWENUM));
                     hasNewEnum = true;
                     continue;
                 }
@@ -692,7 +688,9 @@ public sealed class TypeLibraryInspector
                 bool isDefault = funcDesc.memid == 0
                     && (memberKind == LibraryMemberKind.PropertyGet || memberKind == LibraryMemberKind.PropertySet);
 
-                members.Add(new LibraryMemberModel(memberName, memberKind, returnType, parameters, isDefault));
+                string? memberDescription = string.IsNullOrWhiteSpace(memberDoc) ? null : memberDoc;
+
+                members.Add(new ComQueryMember(memberName, memberKind, returnType, parameters, isDefault, DispId: funcDesc.memid, Description: memberDescription));
             }
             catch { /* skip this function */ }
             finally {
@@ -711,7 +709,7 @@ public sealed class TypeLibraryInspector
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
         System.Runtime.InteropServices.ComTypes.TYPEDESC typeDesc,
-        HashSet<DiscoveredDependency> discoveredDeps)
+        HashSet<ComQueryDiscoveredDep> discoveredDeps)
     {
         var vt = (System.Runtime.InteropServices.VarEnum)typeDesc.vt;
 
@@ -761,7 +759,7 @@ public sealed class TypeLibraryInspector
     static string ResolveUserDefinedType(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo, int hRefType,
-        HashSet<DiscoveredDependency> discoveredDeps)
+        HashSet<ComQueryDiscoveredDep> discoveredDeps)
     {
         try {
             typeInfo.GetRefTypeInfo(hRefType, out var refTypeInfo);
@@ -779,7 +777,7 @@ public sealed class TypeLibraryInspector
                             if (pLibAttr != IntPtr.Zero) {
                                 try {
                                     var libAttr = Marshal.PtrToStructure<TLIBATTR>(pLibAttr);
-                                    discoveredDeps.Add(new DiscoveredDependency(libAttr.guid, libAttr.wMajorVerNum, libAttr.wMinorVerNum));
+                                    discoveredDeps.Add(new ComQueryDiscoveredDep(libAttr.guid, libAttr.wMajorVerNum, libAttr.wMinorVerNum));
                                 }
                                 finally {
                                     containingLib.ReleaseTLibAttr(pLibAttr);
@@ -817,8 +815,8 @@ public sealed class TypeLibraryInspector
                 // Preserve the canonical casing returned by GetDocumentation before calling
                 // FindName — COM's ITypeLib::FindName receives the name as a mutable WCHAR buffer
                 // and writes back the matched casing in place, which mutates the interned .NET
-                // string object. Create a fresh independent string to prevent this corruption.
-                string canonicalName = new string(name.AsSpan());
+                // string object. Allocate a truly independent copy to prevent this corruption.
+                string canonicalName = string.Create(name.Length, name, (span, str) => str.AsSpan().CopyTo(span));
 
                 // Many VB6 controls re-declare shared types (e.g. MousePointerConstants) locally in
                 // their own TLB even though GetContainingTypeLib() returns the original owner library
@@ -862,9 +860,6 @@ public sealed class TypeLibraryInspector
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
 
-    // MakeSafeName is exposed via ReferenceNaming.MakeSafeName (no platform dependency).
-    public static string MakeSafeName(string raw) => ReferenceNaming.MakeSafeName(raw);
-
     static string TryGetTypeName(System.Runtime.InteropServices.ComTypes.ITypeLib typeLib, int index)
     {
         try {
@@ -874,34 +869,6 @@ public sealed class TypeLibraryInspector
         catch {
             return "<unknown>";
         }
-    }
-
-    static void LogInspectionFailure(VisualBasicProjectReference reference, string path, string stage, Exception ex)
-    {
-        var comEx = ex as COMException ?? ex.InnerException as COMException;
-        if (comEx != null) {
-            Log.Default.Warning(ex,
-                "TypeLibraryInspector: {stage} failed for {path} ({description}, {guid}, v{major}.{minor}, lcid {lcid}) with COM HRESULT 0x{hresult:X8}",
-                stage,
-                path,
-                reference.Description,
-                reference.Guid,
-                reference.MajorVersion,
-                reference.MinorVersion,
-                reference.Lcid,
-                comEx.HResult);
-            return;
-        }
-
-        Log.Default.Warning(ex,
-            "TypeLibraryInspector: {stage} failed for {path} ({description}, {guid}, v{major}.{minor}, lcid {lcid})",
-            stage,
-            path,
-            reference.Description,
-            reference.Guid,
-            reference.MajorVersion,
-            reference.MinorVersion,
-            reference.Lcid);
     }
 
     static string DescribeLoadTypeLibFailure(int hr) => hr switch {
@@ -914,7 +881,7 @@ public sealed class TypeLibraryInspector
     };
 
     static bool TryLoadTypeLibWithFallback(
-        VisualBasicProjectReference reference,
+        Guid guid, int major, int minor, int lcid,
         string primaryPath,
         out System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         out string loadedPath,
@@ -924,7 +891,7 @@ public sealed class TypeLibraryInspector
         loadedPath = primaryPath;
         lastHr = unchecked((int)0x80004005);
 
-        foreach (var candidate in GetTypeLibLoadCandidates(reference, primaryPath)) {
+        foreach (var candidate in GetTypeLibLoadCandidates(guid, major, minor, lcid, primaryPath)) {
             int hr = LoadTypeLib(candidate, out var candidateTypeLib);
             if (hr == 0 && candidateTypeLib != null) {
                 typeLib = candidateTypeLib;
@@ -934,31 +901,28 @@ public sealed class TypeLibraryInspector
             }
 
             lastHr = hr;
-            Log.Default.Warning("TypeLibraryInspector: LoadTypeLib({path}) returned HRESULT 0x{hr:X8} ({reason})",
-                candidate,
-                hr,
-                DescribeLoadTypeLibFailure(hr));
+            Log.Warning($"TypeLibraryInspector: LoadTypeLib({candidate}) returned HRESULT 0x{hr:X8} ({DescribeLoadTypeLibFailure(hr)})");
         }
 
         return false;
     }
 
-    static IEnumerable<string> GetTypeLibLoadCandidates(VisualBasicProjectReference reference, string primaryPath)
+    static IEnumerable<string> GetTypeLibLoadCandidates(Guid guid, int major, int minor, int lcid, string primaryPath)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var yieldReturnList = new List<string>();
+        var candidates = new List<string>();
 
         void AddCandidate(string? path)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
             if (!VisualBasicProject.IsTypeLibPath(path)) return;
             if (!seen.Add(path)) return;
-            yieldReturnList.Add(path);
+            candidates.Add(path);
         }
 
         AddCandidate(primaryPath);
 
-        foreach (var path in EnumerateRegisteredTypeLibPaths(reference.Guid, reference.MajorVersion, reference.MinorVersion, reference.Lcid)) {
+        foreach (var path in EnumerateRegisteredTypeLibPaths(guid, major, minor, lcid)) {
             AddCandidate(path);
         }
 
@@ -970,7 +934,7 @@ public sealed class TypeLibraryInspector
             AddCandidate(path);
         }
 
-        return yieldReturnList;
+        return candidates;
     }
 
     static IEnumerable<string> EnumerateRegisteredTypeLibPaths(Guid guid, int major, int minor, int lcid)

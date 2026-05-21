@@ -20,7 +20,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_ObjectInBaseList_IsOmitted()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("Widget", LibraryTypeKind.Class,
+            new ComQueryType("Widget", LibraryTypeKind.Class,
                 Members: [new("Name", LibraryMemberKind.PropertyGet, "string", [])],
                 EnumValues: [],
                 ImplementedInterfaces: ["_Object", "IWidget"]));
@@ -35,7 +35,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_QualifiedMscorlibObjectInBaseList_IsOmitted()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("Widget", LibraryTypeKind.Class,
+            new ComQueryType("Widget", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["mscorlib._Object"]));
@@ -50,7 +50,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_OnlyObjectInBaseList_ProducesNoBaseList()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("Widget", LibraryTypeKind.Class,
+            new ComQueryType("Widget", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["_Object"]));
@@ -69,7 +69,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_IEnumerableInBaseList_IsQualified()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("MyList", LibraryTypeKind.Class,
+            new ComQueryType("MyList", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["IEnumerable"]));
@@ -84,7 +84,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_ICollectionInBaseList_IsQualified()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("MyList", LibraryTypeKind.Class,
+            new ComQueryType("MyList", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["ICollection"]));
@@ -98,7 +98,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_IListInBaseList_IsQualified()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("MyList", LibraryTypeKind.Class,
+            new ComQueryType("MyList", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["IList"]));
@@ -112,7 +112,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Interface_QualifiedMscorlibIEnumerableInBaseList_IsQualified()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("IMyCollection", LibraryTypeKind.Interface,
+            new ComQueryType("IMyCollection", LibraryTypeKind.Interface,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["mscorlib.IEnumerable"]));
@@ -131,7 +131,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_ISerializableInBaseList_IsQualified()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("MyObject", LibraryTypeKind.Class,
+            new ComQueryType("MyObject", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["ISerializable"]));
@@ -146,7 +146,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_QualifiedMscorlibISerializableInBaseList_IsQualified()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("MyObject", LibraryTypeKind.Class,
+            new ComQueryType("MyObject", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["mscorlib.ISerializable"]));
@@ -165,7 +165,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_MscorlibTypeReturnType_MapsToType()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("TypeHelper", LibraryTypeKind.Class,
+            new ComQueryType("TypeHelper", LibraryTypeKind.Class,
                 Members: [new("GetTypeInfo", LibraryMemberKind.Method, "mscorlib._Type", [])],
                 EnumValues: []));
 
@@ -179,7 +179,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_MscorlibArrayReturnType_MapsToArray()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("ArrayHelper", LibraryTypeKind.Class,
+            new ComQueryType("ArrayHelper", LibraryTypeKind.Class,
                 Members: [new("GetItems", LibraryMemberKind.Method, "mscorlib._Array", [])],
                 EnumValues: []));
 
@@ -193,7 +193,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Interface_MscorlibTypeReturnType_MapsToType()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("ITypeProvider", LibraryTypeKind.Interface,
+            new ComQueryType("ITypeProvider", LibraryTypeKind.Interface,
                 Members: [new("GetType", LibraryMemberKind.Method, "mscorlib._Type", [])],
                 EnumValues: []));
 
@@ -207,7 +207,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_MscorlibTypePropertyType_MapsToType()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("TypeHolder", LibraryTypeKind.Class,
+            new ComQueryType("TypeHolder", LibraryTypeKind.Class,
                 Members: [new("TypeInfo", LibraryMemberKind.PropertyGet, "mscorlib._Type", [])],
                 EnumValues: []));
 
@@ -221,7 +221,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_MscorlibIEnumerableParamType_IsQualified()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("Sorter", LibraryTypeKind.Class,
+            new ComQueryType("Sorter", LibraryTypeKind.Class,
                 Members: [new("Sort", LibraryMemberKind.Method, "void", [
                     new("items", "mscorlib.IEnumerable", IsOptional: false, IsOut: false),
                 ])],
@@ -237,7 +237,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Struct_MscorlibTypeFieldType_MapsToType()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("TypeDesc", LibraryTypeKind.Struct,
+            new ComQueryType("TypeDesc", LibraryTypeKind.Struct,
                 Members: [new("TypeRef", LibraryMemberKind.Field, "mscorlib._Type", [])],
                 EnumValues: []));
 
@@ -255,7 +255,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_MscorlibExceptionInBaseList_MapsToSystemException()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("MyError", LibraryTypeKind.Class,
+            new ComQueryType("MyError", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["_Exception"]));
@@ -272,7 +272,7 @@ public class DotnetStubGeneratorTests
         // COM type libraries can list _Exception after other interfaces;
         // the rewriter must promote it to position 0 (C# requires base class first).
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("MyError", LibraryTypeKind.Class,
+            new ComQueryType("MyError", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["ISerializable", "_Exception", "IDisposable"]));
@@ -292,7 +292,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_QualifiedMscorlibExceptionReturnType_MapsToSystemException()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("ErrorFactory", LibraryTypeKind.Class,
+            new ComQueryType("ErrorFactory", LibraryTypeKind.Class,
                 Members: [new("Create", LibraryMemberKind.Method, "mscorlib._Exception", [])],
                 EnumValues: []));
 
@@ -306,7 +306,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_MscorlibEventHandlerInBaseList_MapsToSystemEventHandler()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("MyDelegate", LibraryTypeKind.Class,
+            new ComQueryType("MyDelegate", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["_EventHandler"]));
@@ -321,7 +321,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_QualifiedMscorlibEventHandlerParamType_MapsToSystemEventHandler()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("EventSource", LibraryTypeKind.Class,
+            new ComQueryType("EventSource", LibraryTypeKind.Class,
                 Members: [new("Subscribe", LibraryMemberKind.Method, "void", [
                     new("handler", "mscorlib._EventHandler", IsOptional: false, IsOut: false),
                 ])],
@@ -337,7 +337,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_MscorlibSerializationInfoParamType_IsQualified()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("Serializable", LibraryTypeKind.Class,
+            new ComQueryType("Serializable", LibraryTypeKind.Class,
                 Members: [new("GetObjectData", LibraryMemberKind.Method, "void", [
                     new("info",    "mscorlib._SerializationInfo",  IsOptional: false, IsOut: false),
                     new("context", "mscorlib._StreamingContext",   IsOptional: false, IsOut: false),
@@ -360,7 +360,7 @@ public class DotnetStubGeneratorTests
     public void Generate_Class_UnrelatedInterfaces_PassThrough()
     {
         var library = MakeLibrary("SomeLib",
-            new LibraryTypeModel("Widget", LibraryTypeKind.Class,
+            new ComQueryType("Widget", LibraryTypeKind.Class,
                 Members: [],
                 EnumValues: [],
                 ImplementedInterfaces: ["IWidget", "IDispatch"]));
@@ -381,7 +381,7 @@ public class DotnetStubGeneratorTests
         // A library with no .NET runtime in its DiscoveredDependencies should NOT
         // have mscorlib type references rewritten.
         var library = MakeLibraryNoDotnetDeps("SomeLib",
-            new LibraryTypeModel("Widget", LibraryTypeKind.Interface,
+            new ComQueryType("Widget", LibraryTypeKind.Interface,
                 Members: [new("GetEnum", LibraryMemberKind.Method, "mscorlib.IEnumerable", [])],
                 EnumValues: [],
                 ImplementedInterfaces: ["mscorlib.IEnumerable"]));
@@ -396,7 +396,7 @@ public class DotnetStubGeneratorTests
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
 
-    static string GenerateSingle(LibraryModel library)
+    static string GenerateSingle(ComQueryLibrary library)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
@@ -417,11 +417,12 @@ public class DotnetStubGeneratorTests
     static readonly Guid MscorlibGuid = new("BED7F4EA-1A96-11d2-8F08-00A0C9A6186D");
 
     /// <summary>Library that depends on mscorlib — normalization rewriter is applied.</summary>
-    static LibraryModel MakeLibrary(string safeName, params LibraryTypeModel[] types)
-        => new(safeName, safeName, TestGuid, 1, 0, types,
-               [new DiscoveredDependency(MscorlibGuid, 2, 0)]);
+    static ComQueryLibrary MakeLibrary(string safeName, params ComQueryType[] types)
+        => new(safeName, safeName, TestGuid, 1, 0,
+            Types: types,
+            DiscoveredDependencies: [new ComQueryDiscoveredDep(MscorlibGuid, 2, 0)]);
 
     /// <summary>Library with no .NET runtime dependency — normalization rewriter is NOT applied.</summary>
-    static LibraryModel MakeLibraryNoDotnetDeps(string safeName, params LibraryTypeModel[] types)
-        => new(safeName, safeName, TestGuid, 1, 0, types, []);
+    static ComQueryLibrary MakeLibraryNoDotnetDeps(string safeName, params ComQueryType[] types)
+        => new(safeName, safeName, TestGuid, 1, 0, Types: types);
 }

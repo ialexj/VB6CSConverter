@@ -27,15 +27,24 @@
     <ProjectReference Include="..\VB6Parser\VB6Parser.csproj" />
   </ItemGroup>
 
-  <Target Name="BuildComStubGeneratorX86" AfterTargets="Build">
+  <!-- Build ComStubGenerator (AnyCPU) into stubs\ alongside this exe -->
+  <Target Name="BuildComStubGenerator" AfterTargets="Build">
     <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComStubGenerator\ComStubGenerator.csproj"
-             Properties="Configuration=$(Configuration);PlatformTarget=x86;OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\stubs\x86\"
+             Properties="Configuration=$(Configuration);OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\stubs\"
              Targets="Build" />
   </Target>
 
-  <Target Name="BuildComStubGeneratorX64" AfterTargets="BuildComStubGeneratorX86">
-    <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComStubGenerator\ComStubGenerator.csproj"
-             Properties="Configuration=$(Configuration);PlatformTarget=x64;OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\stubs\x64\"
+  <!-- Build ComQuery x86 into stubs\comquery\x86\ (used by ComStubGenerator at runtime) -->
+  <Target Name="BuildComQueryX86" AfterTargets="BuildComStubGenerator">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComQuery\ComQuery.csproj"
+             Properties="Configuration=$(Configuration);PlatformTarget=x86;OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\stubs\comquery\x86\"
+             Targets="Build" />
+  </Target>
+
+  <!-- Build ComQuery x64 into stubs\comquery\x64\ (used by ComStubGenerator at runtime) -->
+  <Target Name="BuildComQueryX64" AfterTargets="BuildComQueryX86">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComQuery\ComQuery.csproj"
+             Properties="Configuration=$(Configuration);PlatformTarget=x64;OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\stubs\comquery\x64\"
              Targets="Build" />
   </Target>
 
