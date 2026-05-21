@@ -16,6 +16,11 @@ namespace ComStubGenerator;
 ///     <c>AddRef</c>, <c>Release</c>, <c>QueryInterface</c>, <c>GetIDsOfNames</c>,
 ///     <c>GetTypeInfo</c>, <c>GetTypeInfoCount</c>, and <c>Invoke</c> (8-parameter IDispatch overload only).
 ///   </item>
+///   <item>
+///     Members that collide with <see cref="object"/> methods and would shadow them with
+///     incompatible signatures: <c>Equals</c>, <c>GetHashCode</c>, <c>GetType</c>,
+///     and <c>ToString</c> (which some COM type libraries expose as a property).
+///   </item>
 /// </list>
 /// Applied after <see cref="MscorlibTypeNormalizingRewriter"/> when COM-plumbing filtering is enabled.
 /// </summary>
@@ -28,15 +33,28 @@ internal sealed class ComPlumbingFilterRewriter : CSharpSyntaxRewriter
         "IUnknown",
     };
 
-    // Method names that are unambiguously COM infrastructure — safe to filter by name alone.
+    // Method names that are unambiguously COM infrastructure or System.Object collisions —
+    // safe to filter by name alone.
     static readonly HashSet<string> BlockedByName = new(System.StringComparer.Ordinal)
     {
+        // IUnknown / IDispatch plumbing
         "AddRef",
         "Release",
         "QueryInterface",
         "GetIDsOfNames",
         "GetTypeInfo",
         "GetTypeInfoCount",
+        // System.Object member collisions
+        "Equals",
+        "GetHashCode",
+        "GetType",
+        "ToString",
+    };
+
+    // Property names to suppress — some COM type libraries expose Object members as properties.
+    static readonly HashSet<string> BlockedPropertyNames = new(System.StringComparer.Ordinal)
+    {
+        "ToString",
     };
 
     // IDispatch.Invoke has exactly 8 parameters:
@@ -86,5 +104,13 @@ internal sealed class ComPlumbingFilterRewriter : CSharpSyntaxRewriter
             return null;
 
         return base.VisitMethodDeclaration(node);
+    }
+
+    public override Microsoft.CodeAnalysis.SyntaxNode? VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+    {
+        if (BlockedPropertyNames.Contains(node.Identifier.Text))
+            return null;
+
+        return base.VisitPropertyDeclaration(node);
     }
 }

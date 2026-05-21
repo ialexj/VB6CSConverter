@@ -41,6 +41,9 @@ public static class Program
         [Option("skip-stubs", Required = false, HelpText = "Skips pre-semantic COM reference stub generation (enabled by default).")]
         public bool SkipReferenceStubs { get; set; }
 
+        [Option("stub-architectures", Required = false, HelpText = "Specify the architectures for which to generate COM reference stubs.", Default = new[] { "x64", "x86" })]
+        public IEnumerable<string> StubArchitectures { get; set; }
+
         [Option("skip-transform", Required = false, HelpText = "Skips the transformation step and attempts to build with existing files.")]
         public bool SkipTransform { get; set; }
 
@@ -74,7 +77,7 @@ public static class Program
         // ── Pre-conversion: generate COM reference stubs ────────────────────
         if (!options.SkipReferenceStubs && vbProject.References.Count > 0) {
             var referenceDir = Path.Join(options.OutputDir, "_References");
-            await GenerateReferenceStubs(options.Project, referenceDir);
+            await GenerateReferenceStubs(options.Project, referenceDir, options.StubArchitectures);
         }
         // ────────────────────────────────────────────────────────────────────
 
@@ -243,9 +246,7 @@ public static class Program
     // Reference stub generation — delegates to the ComStubGenerator executable
     // ─────────────────────────────────────────────────────────────────────
 
-    static async Task GenerateReferenceStubs(
-        string projectPath,
-        string outputDir)
+    static async Task GenerateReferenceStubs(string projectPath, string outputDir, IEnumerable<string> architectures)
     {
         AnsiConsole.MarkupLine("[yellow]Generating COM reference stubs...[/]");
 
@@ -254,17 +255,21 @@ public static class Program
             return;
         }
 
-        // Run x86 first then x64 in sequence.  Because ComStubGenerator skips stub files
-        // that already exist, the second run only adds what the first bitness missed
+        // ComStubGenerator skips stub files that already exist,
+        // subsequent runs only add what the first bitness missed
         // (e.g. libraries registered only in the 64-bit registry hive).
-        var exes = FindComStubGeneratorExes();
-        if (exes.Count == 0) {
-            AnsiConsole.MarkupLine("[red]ComStubGenerator.exe not found alongside converter. Skipping reference stub generation.[/]");
-            Log.Default.Warning("ComStubGenerator.exe not found; reference stubs will not be generated");
-            return;
-        }
 
-        foreach (var stubGenExe in exes) {
+        foreach (var arch in architectures) {
+            var stubGenExe = FindComStubGeneratorExe(arch);
+            if (!File.Exists(stubGenExe)) {
+                AnsiConsole.MarkupLineInterpolated($"[red]ComStubGenerator.exe for {arch} not found. Skipping {arch} reference stubs.[/]");
+                Log.Default.Warning($"ComStubGenerator.exe for {arch} not found; {arch} reference stubs will not be generated");
+                continue;
+            }
+
+            AnsiConsole.MarkupLineInterpolated($"[yellow]Generating stubs ({arch})...[/]");
+
+
             var psi = new ProcessStartInfo {
                 FileName = stubGenExe,
                 ArgumentList = { "-p", projectPath, "-o", outputDir },
@@ -295,15 +300,11 @@ public static class Program
         }
     }
 
-    static IReadOnlyList<string> FindComStubGeneratorExes()
+    static string FindComStubGeneratorExe(string arch)
     {
         string baseDir = AppContext.BaseDirectory;
         string exeName = "ComStubGenerator.exe";
-
-        return new[] { "x64", "x86" }
-            .Select(arch => Path.Combine(baseDir, "stubs", arch, exeName))
-            .Where(File.Exists)
-            .ToList();
+        return Path.Combine(baseDir, "stubs", arch, exeName);
     }
 }
 

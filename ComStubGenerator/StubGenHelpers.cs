@@ -42,6 +42,20 @@ internal static class StubGenHelpers
     public static InterfaceDeclarationSyntax WithGeneratedCodeAttribute(this InterfaceDeclarationSyntax interfaceSyntax)
         => interfaceSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
 
+    /// <summary>
+    /// Builds <c>[System.Reflection.DefaultMember("<paramref name="memberName"/>")]</c>.
+    /// Apply this to a type when its VB6 DISPID 0 member is a named property rather than
+    /// an indexer (indexers already receive the attribute implicitly from the C# compiler).
+    /// </summary>
+    public static AttributeListSyntax DefaultMemberAttributeList(string memberName)
+        => AttributeList(SingletonSeparatedList(
+            Attribute(
+                ParseName("System.Reflection.DefaultMember"),
+                AttributeArgumentList(SingletonSeparatedList(
+                    AttributeArgument(LiteralExpression(
+                        SyntaxKind.StringLiteralExpression, Literal(memberName))))))
+            .WithLeadingTrivia(TriviaList(Whitespace(Environment.NewLine)))));
+
     public static SyntaxTokenList Modifiers(
         bool isPublic = false, bool isInternal = false, bool isProtected = false,
         bool isStatic = false,

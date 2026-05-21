@@ -636,6 +636,10 @@ public class TypeLibraryInspectorIntegrationTests
     const string DaoPath = @"C:\Program Files (x86)\Common Files\Microsoft Shared\DAO\DAO2535.TLB";
     static readonly Guid DaoGuid = new("00025E01-0000-0000-C000-000000000046");
 
+    // ACEDAO — newer Office/Access DAO (ACE engine).
+    const string AceDaoPath = @"C:\Program Files\Microsoft Office\root\VFS\ProgramFilesCommonX64\Microsoft Shared\Office16\ACEDAO.DLL";
+    static readonly Guid AceDaoGuid = new("4ac9e1da-5bad-4ac7-86e3-24f4cdceca28");
+
     [TestMethod]
     public void DAO_Inspect_RecordsetMembersWithDefaultFlag()
     {
@@ -693,6 +697,129 @@ public class TypeLibraryInspectorIntegrationTests
             // The regular Fields property must also still be present
             source.Should().Contain("Fields",
                 "Recordset stub must still expose the named Fields property");
+        }
+        finally {
+            if (Directory.Exists(outDir)) Directory.Delete(outDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void AceDAO_Inspect_DumpRecordsetAndFieldsTypes()
+    {
+        // Diagnostic test: dumps every member of every Recordset/Fields-related type
+        // in ACEDAO.DLL so we can see what kinds and DISPID 0 assignments exist.
+        if (!File.Exists(AceDaoPath)) Assert.Inconclusive("ACEDAO.DLL not found — skipping");
+
+        var reference = MakeReference(AceDaoGuid, 12, 0, "Microsoft Office 16.0 Access Database Engine Object Library", AceDaoPath);
+        var model = TypeLibraryInspector.Inspect(reference, AceDaoPath)!;
+
+        model.Should().NotBeNull("ACEDAO.DLL must be loadable");
+
+        var dumpPath = Path.Combine(Path.GetTempPath(), "AceDAO_Recordset_Dump.txt");
+        using (var sw = new System.IO.StreamWriter(dumpPath, append: false)) {
+            foreach (var type in model.Types.Where(t =>
+                t.Name.IndexOf("Recordset", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                t.Name.IndexOf("Fields",    StringComparison.OrdinalIgnoreCase) >= 0 ||
+                t.Name.IndexOf("Field",     StringComparison.OrdinalIgnoreCase) >= 0)) {
+                sw.WriteLine($"Type: {type.Name} ({type.Kind})");
+                foreach (var m in type.Members) {
+                    sw.WriteLine(
+                        $"  {m.Kind,-15} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.CSharpType} {p.Name}"))}) " +
+                        $"-> {m.ReturnCSharpType}  IsDefault={m.IsDefault}");
+                }
+            }
+        }
+        System.Diagnostics.Debug.WriteLine($"Dump written to: {dumpPath}");
+
+        // This test always passes — read the dump file for diagnostics.
+        model.Types.Should().NotBeEmpty();
+    }
+
+    [TestMethod]
+    public void AceDAO_Generate_Recordset_HasForwardingIndexer()
+    {
+        if (!File.Exists(AceDaoPath)) Assert.Inconclusive("ACEDAO.DLL not found — skipping");
+
+        var reference = MakeReference(AceDaoGuid, 12, 0, "Microsoft Office 16.0 Access Database Engine Object Library", AceDaoPath);
+        var model = TypeLibraryInspector.Inspect(reference, AceDaoPath)!;
+
+        var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        try {
+            ReferenceStubGenerator.Generate(model, outDir);
+
+            var recordsetFile = Directory.GetFiles(outDir, "Recordset.cs", SearchOption.AllDirectories)
+                .FirstOrDefault();
+            recordsetFile.Should().NotBeNull("a Recordset.cs stub should be generated");
+
+            var source = File.ReadAllText(recordsetFile!);
+            // Write to a known path for manual inspection
+            File.WriteAllText(Path.Combine(Path.GetTempPath(), "AceDAO_Recordset.cs"), source);
+
+            source.Should().Contain("this[",
+                "Recordset stub needs a this[] indexer for rs!Field → rs[\"Field\"] support");
+        }
+        finally {
+            if (Directory.Exists(outDir)) Directory.Delete(outDir, recursive: true);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // ComctlLib  (Microsoft Windows Common Controls — comctl32.ocx)
+    // ──────────────────────────────────────────────────────────────────────
+
+    const string ComctlPath = @"C:\WINDOWS\SysWow64\comctl32.Ocx";
+    static readonly Guid ComctlGuid = new("6b7e6392-850a-101b-afc0-4210102a8da7");
+
+    [TestMethod]
+    public void ComctlLib_Inspect_DumpCollectionTypes()
+    {
+        // Diagnostic: writes every member of collection types to %TEMP%\ComctlLib_Dump.txt
+        // so we can see which members produce duplicate Item/this[] combinations.
+        if (!File.Exists(ComctlPath)) Assert.Inconclusive("comctl32.Ocx not found — skipping");
+
+        var reference = MakeReference(ComctlGuid, 1, 0, "Microsoft Windows Common Controls", ComctlPath);
+        var model = TypeLibraryInspector.Inspect(reference, ComctlPath)!;
+
+        model.Should().NotBeNull("comctl32.Ocx must be loadable");
+
+        var dumpPath = Path.Combine(Path.GetTempPath(), "ComctlLib_Dump.txt");
+        using (var sw = new StreamWriter(dumpPath, append: false)) {
+            foreach (var type in model.Types.OrderBy(t => t.Name)) {
+                sw.WriteLine($"Type: {type.Name} ({type.Kind})");
+                foreach (var m in type.Members) {
+                    sw.WriteLine(
+                        $"  {m.Kind,-15} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.CSharpType} {p.Name}"))}) " +
+                        $"-> {m.ReturnCSharpType}  IsDefault={m.IsDefault}");
+                }
+            }
+        }
+
+        System.Diagnostics.Debug.WriteLine($"ComctlLib dump written to: {dumpPath}");
+        model.Types.Should().NotBeEmpty();
+    }
+
+    [TestMethod]
+    public void ComctlLib_Generate_ColumnHeaders_NoItemPropertyWhenIndexerPresent()
+    {
+        if (!File.Exists(ComctlPath)) Assert.Inconclusive("comctl32.Ocx not found — skipping");
+
+        var reference = MakeReference(ComctlGuid, 1, 0, "Microsoft Windows Common Controls", ComctlPath);
+        var model = TypeLibraryInspector.Inspect(reference, ComctlPath)!;
+
+        var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        try {
+            ReferenceStubGenerator.Generate(model, outDir);
+
+            var file = Directory.GetFiles(outDir, "ColumnHeaders.cs", SearchOption.AllDirectories)
+                .FirstOrDefault();
+            file.Should().NotBeNull("ColumnHeaders.cs should be generated");
+
+            var source = File.ReadAllText(file!);
+            File.WriteAllText(Path.Combine(Path.GetTempPath(), "ComctlLib_ColumnHeaders.cs"), source);
+
+            source.Should().Contain("this[", "ColumnHeaders must have an indexer");
+            source.Should().NotContain("ColumnHeader Item",
+                "a named Item property must not appear alongside this[]");
         }
         finally {
             if (Directory.Exists(outDir)) Directory.Delete(outDir, recursive: true);

@@ -111,12 +111,18 @@ public static class ReferenceStubGenerator
                         .WithMembers(SingletonList(decl))))
             .NormalizeWhitespace();
 
-        // Post-process: rewrite mscorlib/System.* type references to their canonical .NET
-        // equivalents, but only for libraries that actually depend on those type libraries.
         if (DotnetLibraryGuids.RequiresNormalization(library)) {
+            // Post-process: rewrite mscorlib/System.* type references to their canonical .NET
+            // equivalents, but only for libraries that actually depend on those type libraries.
             cu = (CompilationUnitSyntax)new MscorlibTypeNormalizingRewriter().Visit(cu)!;
+
+            // Collapse add_X / remove_X method pairs (emitted by .NET components registered in COM)
+            // into proper event declarations so interface contracts such as IComponent are satisfied.
+            cu = (CompilationUnitSyntax)new AddRemoveEventCollapsingRewriter().Visit(cu)!;
+
             cu = cu.NormalizeWhitespace();
         }
+
 
         // Filter out COM infrastructure interfaces and methods (IUnknown/IDispatch plumbing)
         // unless the caller has opted in to retaining them.
@@ -219,10 +225,12 @@ public static class ReferenceStubGenerator
             }
         }
 
+        var usedMethodSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var method in type.Members
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
-            string methodName = MakeUniqueName(MakeSafeIdentifier(method.Name), usedMemberNames);
+            string paramSig = string.Join(",", method.Parameters.Select(p => p.CSharpType));
+            string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
             var parameters = BuildParameters(method.Parameters).ToArray();
 
             var methodDecl = MethodDeclaration(
@@ -289,13 +297,15 @@ public static class ReferenceStubGenerator
             if (getter != null) {
                 accessors.Add(
                     AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
-                        .WithBody(ThrowNotImplementedBody()));
+                        .WithExpressionBody(ThrowNotImplementedExprBody())
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
             }
 
             if (setter != null) {
                 accessors.Add(
                     AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
-                        .WithBody(ThrowNotImplementedBody()));
+                        .WithExpressionBody(ThrowNotImplementedExprBody())
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
             }
 
             // A default member (DISPID 0) with parameters becomes a C# indexer (this[...])
@@ -320,10 +330,12 @@ public static class ReferenceStubGenerator
         }
 
         // Methods (skip anything already emitted as property)
+        var usedMethodSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var method in type.Members
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
-            string methodName = MakeUniqueName(MakeSafeIdentifier(method.Name), usedMemberNames);
+            string paramSig = string.Join(",", method.Parameters.Select(p => p.CSharpType));
+            string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
 
             var parameters = BuildParameters(method.Parameters).ToArray();
 
@@ -332,9 +344,8 @@ public static class ReferenceStubGenerator
                     Identifier(methodName))
                 .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                 .WithParameterList(ParameterList(SeparatedList(parameters)))
-                .WithBody(method.ReturnCSharpType == "void"
-                    ? ThrowNotImplementedBody()
-                    : ThrowNotImplementedReturnBody());
+                .WithExpressionBody(ThrowNotImplementedExprBody())
+                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
 
             memberDecls.Add(methodDecl);
         }
@@ -420,7 +431,8 @@ public static class ReferenceStubGenerator
         else {
             accessors.Add(
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
-                    .WithBody(ThrowNotImplementedReturnBody()));
+                    .WithExpressionBody(ThrowNotImplementedExprBody())
+                    .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
         }
 
         var indexer = IndexerDeclaration(ParseTypeName(returnCsType))
@@ -582,17 +594,12 @@ public static class ReferenceStubGenerator
         return syntax;
     }
 
-    static BlockSyntax ThrowNotImplementedBody() => Block(
-        ThrowStatement(
-            ObjectCreationExpression(
-                QualifiedName(IdentifierName("System"), IdentifierName("NotImplementedException")))
-                .WithArgumentList(ArgumentList())));
-
-    static BlockSyntax ThrowNotImplementedReturnBody() => Block(
-        ThrowStatement(
-            ObjectCreationExpression(
-                QualifiedName(IdentifierName("System"), IdentifierName("NotImplementedException")))
-                .WithArgumentList(ArgumentList())));
+    static ArrowExpressionClauseSyntax ThrowNotImplementedExprBody() =>
+        ArrowExpressionClause(
+            ThrowExpression(
+                ObjectCreationExpression(
+                    QualifiedName(IdentifierName("System"), IdentifierName("NotImplementedException")))
+                    .WithArgumentList(ArgumentList())));
 
     static readonly HashSet<string> _csKeywords = new(System.StringComparer.Ordinal)
     {
@@ -635,6 +642,36 @@ public static class ReferenceStubGenerator
         while (true) {
             string candidate = $"{baseName}_{suffix}";
             if (usedNames.Add(candidate)) {
+                return candidate;
+            }
+            suffix++;
+        }
+    }
+
+    /// <summary>
+    /// Resolves a unique method name that allows overloading: two methods with the same
+    /// <paramref name="baseName"/> but different <paramref name="paramSignature"/> strings
+    /// are treated as C# overloads and both return <paramref name="baseName"/> unchanged.
+    /// Only a true duplicate (same name AND same parameter types) triggers the _2 suffix.
+    /// </summary>
+    static string MakeUniqueMethodName(
+        string baseName,
+        string paramSignature,
+        HashSet<string> usedSignatures,
+        HashSet<string> forbiddenNames)
+    {
+        if (string.IsNullOrWhiteSpace(baseName)) baseName = "_";
+
+        string sig = $"{baseName}({paramSignature})";
+        if (!forbiddenNames.Contains(baseName) && usedSignatures.Add(sig)) {
+            return baseName;
+        }
+
+        int suffix = 2;
+        while (true) {
+            string candidate = $"{baseName}_{suffix}";
+            string candidateSig = $"{candidate}({paramSignature})";
+            if (!forbiddenNames.Contains(candidate) && usedSignatures.Add(candidateSig)) {
                 return candidate;
             }
             suffix++;

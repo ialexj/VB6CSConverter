@@ -765,9 +765,206 @@ public class ReferenceStubGeneratorTests
     }
 
     // ──────────────────────────────────────────────────────────────────────
+    // Event collapsing (add_X / remove_X → event T X)
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_AddRemovePair_Interface_CollapsedToEvent()
+    {
+        var library = MakeDotnetLibrary("TestLib",
+            new LibraryTypeModel("IWidget", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("add_Disposed",    LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
+                    new("remove_Disposed", LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("event System.EventHandler Disposed",
+                "add_/remove_ pair must be collapsed into an event declaration");
+            source.Should().NotContain("add_Disposed",
+                "add_ method must be removed after collapsing");
+            source.Should().NotContain("remove_Disposed",
+                "remove_ method must be removed after collapsing");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_AddRemovePair_Class_CollapsedToPublicEvent()
+    {
+        var library = MakeDotnetLibrary("TestLib",
+            new LibraryTypeModel("Widget", LibraryTypeKind.Class,
+                Members: [
+                    new("add_Disposed",    LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
+                    new("remove_Disposed", LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("public event System.EventHandler Disposed",
+                "collapsed event on a class must carry the public modifier");
+            source.Should().NotContain("add_Disposed");
+            source.Should().NotContain("remove_Disposed");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_UnpairedAddMethod_LeftAsMethod()
+    {
+        // add_Foo with no remove_Foo counterpart must not be touched.
+        var library = MakeLibrary("TestLib",
+            new LibraryTypeModel("IWidget", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("add_Foo", LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("add_Foo",
+                "unpaired add_ method must remain as a regular method");
+            source.Should().NotContain("event",
+                "no event declaration must be emitted for an unpaired add_");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_AddRemovePairWithMismatchedTypes_LeftAsMethods()
+    {
+        // add_Foo(EventHandler) + remove_Foo(Action) — parameter types differ → not collapsed.
+        var library = MakeLibrary("TestLib",
+            new LibraryTypeModel("IWidget", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("add_Foo",    LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
+                    new("remove_Foo", LibraryMemberKind.Method, "void", [new("value", "System.Action",       false, false)]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("add_Foo",    "mismatched-type pair must leave add_ as a method");
+            source.Should().Contain("remove_Foo", "mismatched-type pair must leave remove_ as a method");
+            source.Should().NotContain("event",   "no event declaration must be emitted");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Method overloading
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_Class_OverloadedMethodsEmittedWithSameName()
+    {
+        // CListWalker-style scenario: two interfaces contribute More() and More(object)
+        var library = MakeLibrary("TestLib",
+            new LibraryTypeModel("CListWalker", LibraryTypeKind.Class,
+                Members: [
+                    new("More", LibraryMemberKind.Method, "bool", []),
+                    new("More", LibraryMemberKind.Method, "bool", [new("v", "object", false, false)]),
+                ],
+                EnumValues: [],
+                ImplementedInterfaces: ["_CListWalker", "IVariantWalker"]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().NotContain("More_2", "different signatures must be kept as overloads, not renamed");
+            var moreCount = System.Text.RegularExpressions.Regex.Matches(source, @"\bMore\b").Count;
+            moreCount.Should().Be(2, "both overloads of More must be emitted");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_Interface_OverloadedMethodsEmittedWithSameName()
+    {
+        var library = MakeLibrary("TestLib",
+            new LibraryTypeModel("IWalker", LibraryTypeKind.Interface,
+                Members: [
+                    new("More", LibraryMemberKind.Method, "bool", []),
+                    new("More", LibraryMemberKind.Method, "bool", [new("v", "object", false, false)]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().NotContain("More_2", "different signatures must be kept as overloads, not renamed");
+            var moreCount = System.Text.RegularExpressions.Regex.Matches(source, @"\bMore\b").Count;
+            moreCount.Should().Be(2, "both overloads of More must be emitted");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_Class_TrueDuplicateMethodGetsRenamedSuffix()
+    {
+        // Identical signatures from two interfaces → second must be renamed
+        var library = MakeLibrary("TestLib",
+            new LibraryTypeModel("MyClass", LibraryTypeKind.Class,
+                Members: [
+                    new("More", LibraryMemberKind.Method, "bool", []),
+                    new("More", LibraryMemberKind.Method, "bool", []),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("More_2", "a true duplicate (same signature) must still be renamed");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
 
     static LibraryModel MakeLibrary(string safeName, params LibraryTypeModel[] types)
         => new(safeName, safeName, TestGuid, 1, 0, types, []);
+
+    // A library whose DiscoveredDependencies include mscorlib, triggering the
+    // normalization + event-collapsing pipeline (DotnetLibraryGuids.RequiresNormalization).
+    static readonly Guid MscorlibGuid = new("BED7F4EA-1A96-11d2-8F08-00A0C9A6186D");
+    static LibraryModel MakeDotnetLibrary(string safeName, params LibraryTypeModel[] types)
+        => new(safeName, safeName, TestGuid, 1, 0, types,
+            [new DiscoveredDependency(MscorlibGuid, 2, 4)]);
 }

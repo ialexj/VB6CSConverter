@@ -11,5 +11,4 @@
     <Project Path="VB6Parser.Tests/VB6Parser.Tests.csproj" />
     <Project Path="ComStubGenerator.Tests/ComStubGenerator.Tests.csproj" />
   </Folder>
-  <Project Path="../../../AppData/Local/Temp/tlbinspect123/tlbinspect.csproj" />
 </Solution>
