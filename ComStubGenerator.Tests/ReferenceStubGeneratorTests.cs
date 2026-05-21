@@ -58,7 +58,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_EnumType_EmitsEnumDeclaration()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("MyEnum", LibraryTypeKind.Enum,
+            new ComQueryType("MyEnum", LibraryTypeKind.Enum,
                 Members: [],
                 EnumValues: [
                     new("ValueA", 0),
@@ -96,7 +96,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_DispatchInterface_EmitsInterfaceWithMembers()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("Recordset", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Recordset", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("MoveNext", LibraryMemberKind.Method, "void", []),
                     new("Open",     LibraryMemberKind.Method, "void", [
@@ -130,7 +130,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_Interface_EmitsInterfaceDeclaration()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("IAnimation", LibraryTypeKind.Interface,
+            new ComQueryType("IAnimation", LibraryTypeKind.Interface,
                 Members: [
                     new("Play", LibraryMemberKind.Method, "void", []),
                     new("Visible", LibraryMemberKind.PropertyGet, "bool", []),
@@ -159,7 +159,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_PropertyGetAndSet_EmittedAsSingleProperty()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("Widget", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Widget", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("Caption", LibraryMemberKind.PropertyGet, "string", []),
                     new("Caption", LibraryMemberKind.PropertySet, "void",   [new("Value", "string", false, false)]),
@@ -186,7 +186,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_Module_EmitsStaticClass()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("MathUtils", LibraryTypeKind.Module,
+            new ComQueryType("MathUtils", LibraryTypeKind.Module,
                 Members: [new("Add", LibraryMemberKind.Method, "int", [
                     new("a", "int", false, false),
                     new("b", "int", false, false),
@@ -209,7 +209,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_Class_ImplementsConfiguredInterfaces()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("Animation", LibraryTypeKind.Class,
+            new ComQueryType("Animation", LibraryTypeKind.Class,
                 Members: [new("Play", LibraryMemberKind.Method, "void", [])],
                 EnumValues: [],
                 ImplementedInterfaces: ["IAnimation", "IDispatch"]));
@@ -241,7 +241,7 @@ public class ReferenceStubGeneratorTests
     {
         // DAO.Recordset-style: rs!MyField → rs["MyField"] needs this[string name] on the interface.
         var library = MakeLibrary("DAO",
-            new LibraryTypeModel("Recordset", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Recordset", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("Fields", LibraryMemberKind.PropertyGet, "object",
                         [new("Name", "string", IsOptional: false, IsOut: false)],
@@ -270,7 +270,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_DefaultPropertyWithParams_Class_EmitsIndexerWithThrowBody()
     {
         var library = MakeLibrary("DAO",
-            new LibraryTypeModel("Recordset", LibraryTypeKind.Class,
+            new ComQueryType("Recordset", LibraryTypeKind.Class,
                 Members: [
                     new("Fields", LibraryMemberKind.PropertyGet, "object",
                         [new("Name", "string", IsOptional: false, IsOut: false)],
@@ -303,7 +303,7 @@ public class ReferenceStubGeneratorTests
         // DISPID 0 with no parameters is a plain default value property — keep it as a named property.
         // When the return type is a primitive (not in the library), no forwarding indexer is emitted.
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("Widget", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Widget", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("Value", LibraryMemberKind.PropertyGet, "string", [], IsDefault: true),
                 ],
@@ -331,18 +331,18 @@ public class ReferenceStubGeneratorTests
         // The outer type (Recordset) must get a this[object] forwarding indexer
         // so that rs["MyField"] compiles after the VB6 bang operator is lowered.
         var library = MakeLibrary("DAO",
-            new LibraryTypeModel("Recordset", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Recordset", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("Fields", LibraryMemberKind.PropertyGet, "DAO.Fields", [], IsDefault: true),
                 ],
                 EnumValues: []),
-            new LibraryTypeModel("Fields", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Fields", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("Item", LibraryMemberKind.PropertyGet, "DAO.Field",
                         [new("Index", "object", false, false)], IsDefault: true),
                 ],
                 EnumValues: []),
-            new LibraryTypeModel("Field", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Field", LibraryTypeKind.DispatchInterface,
                 Members: [],
                 EnumValues: []));
 
@@ -374,18 +374,18 @@ public class ReferenceStubGeneratorTests
     {
         // Same two-hop pattern but for a class (not interface) outer type.
         var library = MakeLibrary("DAO",
-            new LibraryTypeModel("Recordset", LibraryTypeKind.Class,
+            new ComQueryType("Recordset", LibraryTypeKind.Class,
                 Members: [
                     new("Fields", LibraryMemberKind.PropertyGet, "DAO.Fields", [], IsDefault: true),
                 ],
                 EnumValues: []),
-            new LibraryTypeModel("Fields", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Fields", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("Item", LibraryMemberKind.PropertyGet, "DAO.Field",
                         [new("Index", "object", false, false)], IsDefault: true),
                 ],
                 EnumValues: []),
-            new LibraryTypeModel("Field", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Field", LibraryTypeKind.DispatchInterface,
                 Members: [],
                 EnumValues: []));
 
@@ -417,8 +417,8 @@ public class ReferenceStubGeneratorTests
         // Alias types are no longer written per-library (they are globalised by
         // ReferenceUsingsGenerator to avoid CS0105 duplicate-alias errors).
         var library = MakeLibrary("stdole2Tlb",
-            new LibraryTypeModel("OLE_HANDLE", LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint"),
-            new LibraryTypeModel("OLE_COLOR",  LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint"));
+            new ComQueryType("OLE_HANDLE", LibraryTypeKind.Alias, [], [], AliasedType: "uint"),
+            new ComQueryType("OLE_COLOR",  LibraryTypeKind.Alias, [], [], AliasedType: "uint"));
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
@@ -434,9 +434,9 @@ public class ReferenceStubGeneratorTests
     public void CollectAliases_ReturnsAllAliasesForLibrary()
     {
         var library = MakeLibrary("stdole2Tlb",
-            new LibraryTypeModel("OLE_HANDLE", LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint"),
-            new LibraryTypeModel("OLE_COLOR",  LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint"),
-            new LibraryTypeModel("MyDispatch", LibraryTypeKind.DispatchInterface, [], []));
+            new ComQueryType("OLE_HANDLE", LibraryTypeKind.Alias, [], [], AliasedType: "uint"),
+            new ComQueryType("OLE_COLOR",  LibraryTypeKind.Alias, [], [], AliasedType: "uint"),
+            new ComQueryType("MyDispatch", LibraryTypeKind.DispatchInterface, [], []));
 
         var aliases = ReferenceStubGenerator.CollectAliases(library);
 
@@ -449,8 +449,8 @@ public class ReferenceStubGeneratorTests
     public void CollectAliases_IgnoresTypesWithoutAliasedCSharpType()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("EmptyAlias", LibraryTypeKind.Alias, [], [], AliasedCSharpType: null),
-            new LibraryTypeModel("ValidAlias", LibraryTypeKind.Alias, [], [], AliasedCSharpType: "int"));
+            new ComQueryType("EmptyAlias", LibraryTypeKind.Alias, [], [], AliasedType: null),
+            new ComQueryType("ValidAlias", LibraryTypeKind.Alias, [], [], AliasedType: "int"));
 
         var aliases = ReferenceStubGenerator.CollectAliases(library);
 
@@ -463,8 +463,8 @@ public class ReferenceStubGeneratorTests
     {
         // Aliases are no longer written by Generate(); only real types produce files.
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("OLE_HANDLE",  LibraryTypeKind.Alias,             [], [], AliasedCSharpType: "uint"),
-            new LibraryTypeModel("MyDispatch",  LibraryTypeKind.DispatchInterface,  [], []));
+            new ComQueryType("OLE_HANDLE",  LibraryTypeKind.Alias,             [], [], AliasedType: "uint"),
+            new ComQueryType("MyDispatch",  LibraryTypeKind.DispatchInterface,  [], []));
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
@@ -486,7 +486,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_OutputPath_IsUnderLibNameSubfolder()
     {
         var library = MakeLibrary("ADODB",
-            new LibraryTypeModel("Connection", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Connection", LibraryTypeKind.DispatchInterface,
                 Members: [new("Open", LibraryMemberKind.Method, "void", [])],
                 EnumValues: []));
 
@@ -506,9 +506,9 @@ public class ReferenceStubGeneratorTests
     public void Generate_MultipleTypes_StableAlphabeticOrder()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("Zebra", LibraryTypeKind.DispatchInterface, [], []),
-            new LibraryTypeModel("Alpha", LibraryTypeKind.DispatchInterface, [], []),
-            new LibraryTypeModel("Mango", LibraryTypeKind.DispatchInterface, [], []));
+            new ComQueryType("Zebra", LibraryTypeKind.DispatchInterface, [], []),
+            new ComQueryType("Alpha", LibraryTypeKind.DispatchInterface, [], []),
+            new ComQueryType("Mango", LibraryTypeKind.DispatchInterface, [], []));
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
@@ -526,16 +526,16 @@ public class ReferenceStubGeneratorTests
     public void GenerateReferenceUsings_WritesNamespaceAndEnumUsings()
     {
         var libA = MakeLibrary("ADODB",
-            new LibraryTypeModel("CursorTypeEnum", LibraryTypeKind.Enum, [], [
+            new ComQueryType("CursorTypeEnum", LibraryTypeKind.Enum, [], [
                 new("ForwardOnly", 0),
             ]),
-            new LibraryTypeModel("Connection", LibraryTypeKind.DispatchInterface, [], []));
+            new ComQueryType("Connection", LibraryTypeKind.DispatchInterface, [], []));
 
         var libB = MakeLibrary("MSComctlLib",
-            new LibraryTypeModel("ListViewConstants", LibraryTypeKind.Enum, [], [
+            new ComQueryType("ListViewConstants", LibraryTypeKind.Enum, [], [
                 new("lvwIcon", 0),
             ]),
-            new LibraryTypeModel("ListView", LibraryTypeKind.DispatchInterface, [], []));
+            new ComQueryType("ListView", LibraryTypeKind.DispatchInterface, [], []));
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
@@ -558,7 +558,7 @@ public class ReferenceStubGeneratorTests
     [TestMethod]
     public void GenerateReferenceUsings_DeduplicatesAndSortsEntries()
     {
-        var enumType = new LibraryTypeModel("Constants", LibraryTypeKind.Enum, [], [
+        var enumType = new ComQueryType("Constants", LibraryTypeKind.Enum, [], [
             new("ValueA", 0),
         ]);
 
@@ -589,10 +589,10 @@ public class ReferenceStubGeneratorTests
     {
         // Simulates stdole and oleaut32 both declaring OLE_COLOR — only one global using should appear.
         var libA = MakeLibrary("StdOle",
-            new LibraryTypeModel("OLE_COLOR",  LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint"),
-            new LibraryTypeModel("OLE_HANDLE", LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint"));
+            new ComQueryType("OLE_COLOR",  LibraryTypeKind.Alias, [], [], AliasedType: "uint"),
+            new ComQueryType("OLE_HANDLE", LibraryTypeKind.Alias, [], [], AliasedType: "uint"));
         var libB = MakeLibrary("OleAut32",
-            new LibraryTypeModel("OLE_COLOR",  LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint"));
+            new ComQueryType("OLE_COLOR",  LibraryTypeKind.Alias, [], [], AliasedType: "uint"));
 
         var aliases = new[] { libA, libB }
             .SelectMany(l => ReferenceStubGenerator.CollectAliases(l));
@@ -617,13 +617,12 @@ public class ReferenceStubGeneratorTests
     {
         // Simulate Program.cs filtering: transitive models are excluded before calling Generate().
         var directLib = MakeLibrary("ADODB",
-            new LibraryTypeModel("CursorTypeEnum", LibraryTypeKind.Enum, [], [new("ForwardOnly", 0)]),
-            new LibraryTypeModel("Connection", LibraryTypeKind.DispatchInterface, [], []));
+            new ComQueryType("CursorTypeEnum", LibraryTypeKind.Enum, [], [new("ForwardOnly", 0)]),
+            new ComQueryType("Connection", LibraryTypeKind.DispatchInterface, [], []));
 
-        var transitiveLib = new LibraryModel("StdOle", "StdOle", Guid.NewGuid(), 2, 0,
-            [new LibraryTypeModel("OLE_COLOR", LibraryTypeKind.Alias, [], [], AliasedCSharpType: "uint")],
-            [],
-            IsTransitive: true);
+        var transitiveLib = new ComQueryLibrary("StdOle", "StdOle", Guid.NewGuid(), 2, 0,
+            IsTransitive: true,
+            Types: [new ComQueryType("OLE_COLOR", LibraryTypeKind.Alias, AliasedType: "uint")]);
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
@@ -653,7 +652,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_StructType_EmitsStructDeclaration()
     {
         var library = MakeLibrary("Win",
-            new LibraryTypeModel("LOGPALETTE256", LibraryTypeKind.Struct,
+            new ComQueryType("LOGPALETTE256", LibraryTypeKind.Struct,
                 Members: [
                     new("palVersion",    LibraryMemberKind.Field, "short",   []),
                     new("palNumEntries", LibraryMemberKind.Field, "short",   []),
@@ -684,7 +683,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_StructType_NoFields_EmitsEmptyStruct()
     {
         var library = MakeLibrary("Win",
-            new LibraryTypeModel("POINT", LibraryTypeKind.Struct, [], []));
+            new ComQueryType("POINT", LibraryTypeKind.Struct, [], []));
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
@@ -709,7 +708,7 @@ public class ReferenceStubGeneratorTests
         // Simulates a COM dispatch interface whose _NewEnum was replaced by the inspector with
         // GetEnumerator + IEnumerable in ImplementedInterfaces (e.g. VBA.Collection).
         var library = MakeLibrary("VBA",
-            new LibraryTypeModel("Collection", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("Collection", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("Count", LibraryMemberKind.PropertyGet, "int", []),
                     new("GetEnumerator", LibraryMemberKind.Method, "System.Collections.IEnumerator", []),
@@ -740,7 +739,7 @@ public class ReferenceStubGeneratorTests
     {
         // Simulates a COM coclass whose default interface has _NewEnum.
         var library = MakeLibrary("DAO",
-            new LibraryTypeModel("Fields", LibraryTypeKind.Class,
+            new ComQueryType("Fields", LibraryTypeKind.Class,
                 Members: [
                     new("Count", LibraryMemberKind.PropertyGet, "int", []),
                     new("GetEnumerator", LibraryMemberKind.Method, "System.Collections.IEnumerator", []),
@@ -772,7 +771,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_AddRemovePair_Interface_CollapsedToEvent()
     {
         var library = MakeDotnetLibrary("TestLib",
-            new LibraryTypeModel("IWidget", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("IWidget", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("add_Disposed",    LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
                     new("remove_Disposed", LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
@@ -800,7 +799,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_AddRemovePair_Class_CollapsedToPublicEvent()
     {
         var library = MakeDotnetLibrary("TestLib",
-            new LibraryTypeModel("Widget", LibraryTypeKind.Class,
+            new ComQueryType("Widget", LibraryTypeKind.Class,
                 Members: [
                     new("add_Disposed",    LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
                     new("remove_Disposed", LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
@@ -827,7 +826,7 @@ public class ReferenceStubGeneratorTests
     {
         // add_Foo with no remove_Foo counterpart must not be touched.
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("IWidget", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("IWidget", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("add_Foo", LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
                 ],
@@ -853,7 +852,7 @@ public class ReferenceStubGeneratorTests
     {
         // add_Foo(EventHandler) + remove_Foo(Action) — parameter types differ → not collapsed.
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("IWidget", LibraryTypeKind.DispatchInterface,
+            new ComQueryType("IWidget", LibraryTypeKind.DispatchInterface,
                 Members: [
                     new("add_Foo",    LibraryMemberKind.Method, "void", [new("value", "System.EventHandler", false, false)]),
                     new("remove_Foo", LibraryMemberKind.Method, "void", [new("value", "System.Action",       false, false)]),
@@ -883,7 +882,7 @@ public class ReferenceStubGeneratorTests
     {
         // CListWalker-style scenario: two interfaces contribute More() and More(object)
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("CListWalker", LibraryTypeKind.Class,
+            new ComQueryType("CListWalker", LibraryTypeKind.Class,
                 Members: [
                     new("More", LibraryMemberKind.Method, "bool", []),
                     new("More", LibraryMemberKind.Method, "bool", [new("v", "object", false, false)]),
@@ -909,7 +908,7 @@ public class ReferenceStubGeneratorTests
     public void Generate_Interface_OverloadedMethodsEmittedWithSameName()
     {
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("IWalker", LibraryTypeKind.Interface,
+            new ComQueryType("IWalker", LibraryTypeKind.Interface,
                 Members: [
                     new("More", LibraryMemberKind.Method, "bool", []),
                     new("More", LibraryMemberKind.Method, "bool", [new("v", "object", false, false)]),
@@ -935,7 +934,7 @@ public class ReferenceStubGeneratorTests
     {
         // Identical signatures from two interfaces → second must be renamed
         var library = MakeLibrary("TestLib",
-            new LibraryTypeModel("MyClass", LibraryTypeKind.Class,
+            new ComQueryType("MyClass", LibraryTypeKind.Class,
                 Members: [
                     new("More", LibraryMemberKind.Method, "bool", []),
                     new("More", LibraryMemberKind.Method, "bool", []),
@@ -958,13 +957,14 @@ public class ReferenceStubGeneratorTests
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
 
-    static LibraryModel MakeLibrary(string safeName, params LibraryTypeModel[] types)
-        => new(safeName, safeName, TestGuid, 1, 0, types, []);
+    static ComQueryLibrary MakeLibrary(string safeName, params ComQueryType[] types)
+        => new(safeName, safeName, TestGuid, 1, 0, Types: types);
 
     // A library whose DiscoveredDependencies include mscorlib, triggering the
     // normalization + event-collapsing pipeline (DotnetLibraryGuids.RequiresNormalization).
     static readonly Guid MscorlibGuid = new("BED7F4EA-1A96-11d2-8F08-00A0C9A6186D");
-    static LibraryModel MakeDotnetLibrary(string safeName, params LibraryTypeModel[] types)
-        => new(safeName, safeName, TestGuid, 1, 0, types,
-            [new DiscoveredDependency(MscorlibGuid, 2, 4)]);
+    static ComQueryLibrary MakeDotnetLibrary(string safeName, params ComQueryType[] types)
+        => new(safeName, safeName, TestGuid, 1, 0,
+            Types: types,
+            DiscoveredDependencies: [new ComQueryDiscoveredDep(MscorlibGuid, 2, 4)]);
 }

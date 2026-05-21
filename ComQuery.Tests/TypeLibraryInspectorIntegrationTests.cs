@@ -1,10 +1,15 @@
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AwesomeAssertions;
-using ComStubGenerator;
+using ComQuery;
 using VB6Parser;
+using LibraryMemberKind = ComQuery.LibraryMemberKind;
+using LibraryTypeKind = ComQuery.LibraryTypeKind;
 
-namespace ComStubGenerator.Tests;
+namespace ComQuery.Tests;
 
 /// <summary>
 /// Live integration tests that exercise <see cref="TypeLibraryInspector"/> against
@@ -68,7 +73,7 @@ public class TypeLibraryInspectorIntegrationTests
 
         var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         try {
-            var files = ReferenceStubGenerator.Generate(model, outDir);
+            var files = ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             files.Should().NotBeEmpty("stub generator should produce at least one file");
             files.All(File.Exists).Should().BeTrue("every returned path should exist on disk");
@@ -96,7 +101,7 @@ public class TypeLibraryInspectorIntegrationTests
         var oleHandle = model.Types.FirstOrDefault(t => t.Name == "OLE_HANDLE");
         oleHandle.Should().NotBeNull("stdole2 defines OLE_HANDLE as a TKIND_ALIAS");
         oleHandle!.Kind.Should().Be(LibraryTypeKind.Alias);
-        oleHandle.AliasedCSharpType.Should().Be("int",
+        oleHandle.AliasedType.Should().Be("int",
             "OLE_HANDLE resolves to int in the stdole2 type library");
     }
 
@@ -110,10 +115,10 @@ public class TypeLibraryInspectorIntegrationTests
 
         var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         try {
-            ReferenceStubGenerator.Generate(model, outDir);
+            ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             // Aliases are no longer written per-library; collect them via CollectAliases instead.
-            var aliases = ReferenceStubGenerator.CollectAliases(model);
+            var aliases = ComStubGenerator.ReferenceStubGenerator.CollectAliases(ToStubModel(model));
             aliases.Should().Contain(a => a.Name == "OLE_HANDLE" && a.CSharpType == "int",
                 "OLE_HANDLE resolves to int in the stdole2 type library");
         }
@@ -178,7 +183,7 @@ public class TypeLibraryInspectorIntegrationTests
 
         var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         try {
-            var files = ReferenceStubGenerator.Generate(model, outDir);
+            var files = ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             files.Should().NotBeEmpty();
 
@@ -216,7 +221,7 @@ public class TypeLibraryInspectorIntegrationTests
 
         var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         try {
-            var files = ReferenceStubGenerator.Generate(model, outDir);
+            var files = ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             // All files should live under outDir/<SafeName>/
             var expectedSubdir = Path.Combine(outDir, model.SafeName);
@@ -519,7 +524,7 @@ public class TypeLibraryInspectorIntegrationTests
 
         var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         try {
-            var files = ReferenceStubGenerator.Generate(model, outDir);
+            var files = ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             files.Should().NotBeEmpty(
                 "the VB runtime sub-library stub generator must produce at least one file");
@@ -617,7 +622,7 @@ public class TypeLibraryInspectorIntegrationTests
         collection.Members.Should().Contain(m =>
             string.Equals(m.Name, "GetEnumerator", StringComparison.OrdinalIgnoreCase)
             && m.Kind == LibraryMemberKind.Method
-            && m.ReturnCSharpType == "System.Collections.IEnumerator",
+            && m.ReturnType == "System.Collections.IEnumerator",
             "_NewEnum must be replaced with GetEnumerator returning IEnumerator");
 
         collection.Members.Should().NotContain(m =>
@@ -654,8 +659,8 @@ public class TypeLibraryInspectorIntegrationTests
             System.Diagnostics.Debug.WriteLine($"Type: {type.Name} ({type.Kind})");
             foreach (var m in type.Members) {
                 System.Diagnostics.Debug.WriteLine(
-                    $"  {m.Kind} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.CSharpType} {p.Name}"))}) " +
-                    $"-> {m.ReturnCSharpType}  IsDefault={m.IsDefault}");
+                    $"  {m.Kind} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.Type} {p.Name}"))}) " +
+                    $"-> {m.ReturnType}  IsDefault={m.IsDefault}");
             }
         }
 
@@ -681,7 +686,7 @@ public class TypeLibraryInspectorIntegrationTests
 
         var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         try {
-            ReferenceStubGenerator.Generate(model, outDir);
+            ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             var recordsetFile = Directory.GetFiles(outDir, "Recordset.cs", SearchOption.AllDirectories)
                 .FirstOrDefault();
@@ -724,8 +729,8 @@ public class TypeLibraryInspectorIntegrationTests
                 sw.WriteLine($"Type: {type.Name} ({type.Kind})");
                 foreach (var m in type.Members) {
                     sw.WriteLine(
-                        $"  {m.Kind,-15} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.CSharpType} {p.Name}"))}) " +
-                        $"-> {m.ReturnCSharpType}  IsDefault={m.IsDefault}");
+                        $"  {m.Kind,-15} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.Type} {p.Name}"))}) " +
+                        $"-> {m.ReturnType}  IsDefault={m.IsDefault}");
                 }
             }
         }
@@ -745,7 +750,7 @@ public class TypeLibraryInspectorIntegrationTests
 
         var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         try {
-            ReferenceStubGenerator.Generate(model, outDir);
+            ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             var recordsetFile = Directory.GetFiles(outDir, "Recordset.cs", SearchOption.AllDirectories)
                 .FirstOrDefault();
@@ -788,8 +793,8 @@ public class TypeLibraryInspectorIntegrationTests
                 sw.WriteLine($"Type: {type.Name} ({type.Kind})");
                 foreach (var m in type.Members) {
                     sw.WriteLine(
-                        $"  {m.Kind,-15} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.CSharpType} {p.Name}"))}) " +
-                        $"-> {m.ReturnCSharpType}  IsDefault={m.IsDefault}");
+                        $"  {m.Kind,-15} {m.Name}({string.Join(", ", m.Parameters.Select(p => $"{p.Type} {p.Name}"))}) " +
+                        $"-> {m.ReturnType}  IsDefault={m.IsDefault}");
                 }
             }
         }
@@ -808,7 +813,7 @@ public class TypeLibraryInspectorIntegrationTests
 
         var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         try {
-            ReferenceStubGenerator.Generate(model, outDir);
+            ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             var file = Directory.GetFiles(outDir, "ColumnHeaders.cs", SearchOption.AllDirectories)
                 .FirstOrDefault();
@@ -830,4 +835,16 @@ public class TypeLibraryInspectorIntegrationTests
         Guid guid, int major, int minor, string description, string path) =>
         new(ProjectReferenceKind.ActiveX, guid, major, minor, 0, description,
             DeclaredPath: path, ResolvedPath: path);
+
+    static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter() },
+        PropertyNameCaseInsensitive = true,
+    };
+
+    static ComStubGenerator.ComQueryLibrary ToStubModel(ComQueryLibrary library)
+    {
+        var json = JsonSerializer.Serialize(library, JsonOptions);
+        return JsonSerializer.Deserialize<ComStubGenerator.ComQueryLibrary>(json, JsonOptions)!;
+    }
 }
