@@ -1,16 +1,12 @@
-﻿<Project Sdk="MSTest.Sdk/4.2.3">
+<Project Sdk="MSTest.Sdk/4.2.3">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
     <UseVSTest>true</UseVSTest>
   </PropertyGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\VB6Converter\VB6Converter.csproj" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="AwesomeAssertions" Version="9.4.0" />
@@ -27,7 +23,13 @@
     <PackageReference Update="MSTest.TestFramework" Version="4.2.3" />
     <PackageReference Update="MSTest.Analyzers" Version="4.2.3">
       <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ComQuery\ComQuery.csproj" />
+    <ProjectReference Include="..\..\src\ComStubGenerator\ComStubGenerator.csproj" />
+    <ProjectReference Include="..\..\src\VB6Parser\VB6Parser.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -1,14 +1,14 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="VB6Converter/VB6Converter.csproj" />
-    <Project Path="VB6Parser/VB6Parser.csproj" />
-    <Project Path="ComStubGenerator/ComStubGenerator.csproj" />
-    <Project Path="ComQuery/ComQuery.csproj" />
+    <Project Path="src/ComQuery/ComQuery.csproj" />
+    <Project Path="src/ComStubGenerator/ComStubGenerator.csproj" />
+    <Project Path="src/VB6Parser/VB6Parser.csproj" />
+    <Project Path="src/VB6Converter/VB6Converter.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="VB6Converter.Tests/VB6Converter.Tests.csproj" />
-    <Project Path="VB6Parser.Tests/VB6Parser.Tests.csproj" />
-    <Project Path="ComStubGenerator.Tests/ComStubGenerator.Tests.csproj" />
-    <Project Path="ComQuery.Tests/ComQuery.Tests.csproj" />
+  <Folder Name="/test/">
+		<Project Path="test/ComQuery.Tests/ComQuery.Tests.csproj" />
+    <Project Path="test/ComStubGenerator.Tests/ComStubGenerator.Tests.csproj" />
+    <Project Path="test/VB6Converter.Tests/VB6Converter.Tests.csproj" />
+    <Project Path="test/VB6Parser.Tests/VB6Parser.Tests.csproj" />
   </Folder>
 </Solution>
