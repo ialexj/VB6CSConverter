@@ -18,6 +18,7 @@ public static class CompilationUnitConverter
         new CursorRewriter(),
         new KeysRewriter(),
         new MsgBoxRewriter(),
+        new CheckStateRewriter(),
         new KeywordEscapeRewriter(),
 
         UsingsRewriter.Default
@@ -30,7 +31,7 @@ public static class CompilationUnitConverter
         var namespaceName = ParseName(nsName ?? className);
 
         var @class = ClassConverter.GetClass(module, new ClassContext(className, isStatic));
-        
+
         var @namespace = FileScopedNamespaceDeclaration(namespaceName)
             .WithMembers(SingletonList<MemberDeclarationSyntax>(@class));
 
