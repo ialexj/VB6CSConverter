@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -27,19 +28,27 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
             if (lhsType is null)
                 return base.VisitAssignmentExpression(node);
 
-            var newRight = lhsType.SpecialType switch
+            ExpressionSyntax newRight;
+            if (lhsType.TypeKind == TypeKind.Enum && lhsType is INamedTypeSymbol enumType)
             {
-                SpecialType.System_Boolean => CoerceToBool(node.Right),
-                SpecialType.System_Decimal => CoerceNumericLiteral(node.Right,
-                    v => v is double or int,
-                    text => Literal(decimal.Parse(text))),
-                SpecialType.System_Single  => CoerceNumericLiteral(node.Right,
-                    v => v is double or int,
-                    text => Literal(float.Parse(text))),
-                SpecialType.System_Int32   => CoerceUIntToInt(node.Right),
-                SpecialType.System_UInt32  => CoerceIntToUInt(node.Right),
-                _ => node.Right
-            };
+                newRight = CoerceToEnumMember(node.Right, enumType);
+            }
+            else
+            {
+                newRight = lhsType.SpecialType switch
+                {
+                    SpecialType.System_Boolean => CoerceToBool(node.Right),
+                    SpecialType.System_Decimal => CoerceNumericLiteral(node.Right,
+                        v => v is double or int,
+                        text => Literal(decimal.Parse(text))),
+                    SpecialType.System_Single  => CoerceNumericLiteral(node.Right,
+                        v => v is double or int,
+                        text => Literal(float.Parse(text))),
+                    SpecialType.System_Int32   => CoerceUIntToInt(node.Right),
+                    SpecialType.System_UInt32  => CoerceIntToUInt(node.Right),
+                    _ => node.Right
+                };
+            }
 
             if (!ReferenceEquals(newRight, node.Right))
                 return node.WithRight(newRight);
@@ -170,5 +179,92 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
         }
 
         return expr;
+    }
+
+    /// <summary>
+    /// Attempts to extract a numeric integer value from a literal expression (positive or negative).
+    /// Returns <see langword="false"/> for non-numeric or non-literal shapes.
+    /// </summary>
+    private static bool TryGetNumericValue(
+        ExpressionSyntax expr,
+        out long value,
+        out SyntaxTriviaList leadingTrivia,
+        out SyntaxTriviaList trailingTrivia)
+    {
+        if (expr is LiteralExpressionSyntax lit
+            && lit.IsKind(SyntaxKind.NumericLiteralExpression))
+        {
+            leadingTrivia  = lit.Token.LeadingTrivia;
+            trailingTrivia = lit.Token.TrailingTrivia;
+            value = lit.Token.Value switch
+            {
+                int    i => i,
+                uint   u => (long)u,
+                long   l => l,
+                ulong  ul => (long)ul,
+                _        => 0
+            };
+            return lit.Token.Value is int or uint or long or ulong;
+        }
+
+        if (expr is PrefixUnaryExpressionSyntax unary
+            && unary.IsKind(SyntaxKind.UnaryMinusExpression)
+            && unary.Operand is LiteralExpressionSyntax innerLit
+            && innerLit.IsKind(SyntaxKind.NumericLiteralExpression))
+        {
+            leadingTrivia  = unary.OperatorToken.LeadingTrivia;
+            trailingTrivia = innerLit.Token.TrailingTrivia;
+            var raw = innerLit.Token.Value switch
+            {
+                int    i => (long)i,
+                uint   u => (long)u,
+                long   l => l,
+                ulong  ul => (long)ul,
+                _        => 0L
+            };
+            value = -raw;
+            return innerLit.Token.Value is int or uint or long or ulong;
+        }
+
+        value          = 0;
+        leadingTrivia  = TriviaList();
+        trailingTrivia = TriviaList();
+        return false;
+    }
+
+    /// <summary>
+    /// Rewrites a numeric literal assigned to an enum-typed LHS.
+    /// If a member of <paramref name="enumType"/> has the same value as the literal, emits
+    /// <c>EnumType.MemberName</c>. Otherwise emits a cast <c>(EnumType)value</c>.
+    /// Returns <paramref name="expr"/> unchanged when the expression is not a numeric literal.
+    /// </summary>
+    private static ExpressionSyntax CoerceToEnumMember(ExpressionSyntax expr, INamedTypeSymbol enumType)
+    {
+        if (!TryGetNumericValue(expr, out var value, out var leading, out var trailing))
+            return expr;
+
+        var match = enumType.GetMembers()
+            .OfType<IFieldSymbol>()
+            .Where(f => f.ConstantValue is not null)
+            .FirstOrDefault(f => Convert.ToInt64(f.ConstantValue) == value);
+
+        if (match is not null)
+        {
+            // EnumType.MemberName  — preserve original leading/trailing trivia
+            return MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName(Identifier(leading, enumType.Name, TriviaList())),
+                IdentifierName(Identifier(TriviaList(), match.Name, trailing)));
+        }
+
+        // No matching member — emit (EnumType)value
+        // Put the original leading trivia on the cast's open-paren token.
+        var castType  = IdentifierName(enumType.Name);
+        var innerExpr = expr.WithoutLeadingTrivia();
+        return CastExpression(
+            Token(leading, SyntaxKind.OpenParenToken, TriviaList()),
+            castType,
+            Token(SyntaxKind.CloseParenToken),
+            innerExpr.WithTrailingTrivia(trailing));
     }
 }

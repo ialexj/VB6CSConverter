@@ -138,6 +138,49 @@ public class LiteralCoercionTests
         => CheckCoercion(
             "class T { uint Flags { get; set; } void M() { this.Flags = 42; } }");
 
+    // ── enum ─────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesIntToEnumMember()
+        => CheckCoercion(
+            "enum E { Off = 0, On = 1 } class T { E Mode { get; set; } void M() { this.Mode = 1; } }",
+            "enum E { Off = 0, On = 1 } class T { E Mode { get; set; } void M() { this.Mode = E.On; } }");
+
+    [TestMethod]
+    public void CoercesZeroToEnumMember()
+        => CheckCoercion(
+            "enum E { Off = 0, On = 1 } class T { E Mode { get; set; } void M() { this.Mode = 0; } }",
+            "enum E { Off = 0, On = 1 } class T { E Mode { get; set; } void M() { this.Mode = E.Off; } }");
+
+    [TestMethod]
+    public void CoercesHexLiteralToEnumMember()
+        => CheckCoercion(
+            "enum F { None = 0, Bold = 1, Italic = 2 } class T { F Style { get; set; } void M() { this.Style = 0x0002; } }",
+            "enum F { None = 0, Bold = 1, Italic = 2 } class T { F Style { get; set; } void M() { this.Style = F.Italic; } }");
+
+    [TestMethod]
+    public void CastsUnmatchedLiteralToEnumType()
+        => CheckCoercion(
+            "enum E { Off = 0, On = 1 } class T { E Mode { get; set; } void M() { this.Mode = 99; } }",
+            "enum E { Off = 0, On = 1 } class T { E Mode { get; set; } void M() { this.Mode = (E)99; } }");
+
+    [TestMethod]
+    public void CoercesNegativeEnumMember()
+        => CheckCoercion(
+            "enum E { None = 0, Error = -1 } class T { E Status { get; set; } void M() { this.Status = -1; } }",
+            "enum E { None = 0, Error = -1 } class T { E Status { get; set; } void M() { this.Status = E.Error; } }");
+
+    [TestMethod]
+    public void LeavesAlreadyEnumMemberUnchanged()
+        => CheckCoercion(
+            "enum E { Off = 0, On = 1 } class T { E Mode { get; set; } void M() { this.Mode = E.On; } }");
+
+    [TestMethod]
+    public void UsesDuplicateMemberFirstInDeclarationOrder()
+        => CheckCoercion(
+            "enum E { A = 0, B = 0, C = 1 } class T { E X { get; set; } void M() { this.X = 0; } }",
+            "enum E { A = 0, B = 0, C = 1 } class T { E X { get; set; } void M() { this.X = E.A; } }");
+
     // ── untyped / other types unchanged ──────────────────────────────────────
 
     [TestMethod]
