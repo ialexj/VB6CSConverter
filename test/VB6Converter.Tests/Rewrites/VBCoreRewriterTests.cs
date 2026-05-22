@@ -187,4 +187,51 @@ public class VBCoreRewriterTests
     public void TimeIdentifier() => ValidateBodyMatches(
         "y = Time",
         "y = System.DateTime.Now.TimeOfDay;");
+
+    // ── IsMissing ─────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void IsMissing_Positive() => ValidateMemberMatches(
+        """
+        Public Sub Test(Optional x As Long)
+            If IsMissing(x) Then DoSomething
+        End Sub
+        """,
+        """
+        public static void Test(int x = default)
+        {
+            if (x == default)
+                DoSomething();
+        }
+        """);
+
+    [TestMethod]
+    public void IsMissing_Negated() => ValidateMemberMatches(
+        """
+        Public Sub Test(Optional x As Long)
+            If Not IsMissing(x) Then DoSomething
+        End Sub
+        """,
+        """
+        public static void Test(int x = default)
+        {
+            if (x != default)
+                DoSomething();
+        }
+        """);
+
+    [TestMethod]
+    public void IsMissing_Object_Negated() => ValidateMemberMatches(
+        """
+        Public Sub Test(Optional x As Variant)
+            If Not IsMissing(x) Then DoSomething
+        End Sub
+        """,
+        """
+        public static void Test(object x = default)
+        {
+            if (x != default)
+                DoSomething();
+        }
+        """);
 }

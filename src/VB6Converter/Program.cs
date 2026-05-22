@@ -181,6 +181,8 @@ public static class Program
                     compilation = await GetCompilation(ws);
                 }
 
+                await RunRewriter(true, "Rewriting bitwise Or/And", (t, sm) => new BitwiseOrRewriter(sm));
+
                 await RunOperations("Collecting Variables", ws.Targets,
                     (t, ctx, cancel) => ws.WithCompilationUnit(t, cancel, async cu => {
                         var sm = compilation.GetSemanticModel(cu.SyntaxTree, false);

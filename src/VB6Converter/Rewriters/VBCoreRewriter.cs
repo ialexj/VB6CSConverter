@@ -135,6 +135,26 @@ public class VBCoreRewriter : LoggedRewriter
         return BinaryExpression(SyntaxKind.EqualsExpression, arg, LiteralExpression(SyntaxKind.DefaultLiteralExpression));
     }
 
+    public override SyntaxNode VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
+    {
+        var result = base.VisitPrefixUnaryExpression(node);
+        // When a rewriter (e.g. IsMissing → x == default) replaces an invocation with a bare
+        // BinaryExpression, the ! operator would render as !x == default (wrong precedence).
+        // Only invert when the operand is a *direct* (non-parenthesized) BinaryExpression,
+        // so that explicit parens like Not (a = b) → !(a == b) are left unchanged.
+        if (result is PrefixUnaryExpressionSyntax unary
+            && unary.IsKind(SyntaxKind.LogicalNotExpression)
+            && unary.Operand is BinaryExpressionSyntax bin) {
+            if (bin.IsKind(SyntaxKind.EqualsExpression)) {
+                return BinaryExpression(SyntaxKind.NotEqualsExpression, bin.Left, bin.Right);
+            }
+            if (bin.IsKind(SyntaxKind.NotEqualsExpression)) {
+                return BinaryExpression(SyntaxKind.EqualsExpression, bin.Left, bin.Right);
+            }
+        }
+        return result;
+    }
+
     static SyntaxNode ConvertChr(InvocationExpressionSyntax node)
     {
         var arg = node.ArgumentList.Arguments[0].Expression;
