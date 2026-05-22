@@ -190,6 +190,7 @@ public static class ReferenceStubGenerator
             .GroupBy(m => m.Name)
             .ToList();
 
+        bool hasIndexer = false;
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
             var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
@@ -217,6 +218,7 @@ public static class ReferenceStubGenerator
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
+                hasIndexer = true;
             }
             else {
                 string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
@@ -226,10 +228,22 @@ public static class ReferenceStubGenerator
             }
         }
 
+        // If the interface inherits IEnumerable, skip re-declaring GetEnumerator — it is already
+        // provided by the base interface, and re-declaring it causes CS0108 (shadows inherited member).
+        bool inheritsIEnumerable = (type.ImplementedInterfaces ?? []).Any(i =>
+            string.Equals(i, "IEnumerable", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(i, "System.Collections.IEnumerable", StringComparison.OrdinalIgnoreCase));
+
         var usedMethodSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var method in (type.Members ?? [])
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
+            // In C#, "Item" is reserved as the indexer accessor name; skip any duplicate Method
+            // named Item when an indexer has already been emitted to avoid CS0102.
+            if (hasIndexer && string.Equals(method.Name, "Item", StringComparison.OrdinalIgnoreCase)) continue;
+            // GetEnumerator is already declared by IEnumerable; re-declaring it in the derived
+            // interface shadows the inherited member and produces CS0108.
+            if (inheritsIEnumerable && string.Equals(method.Name, "GetEnumerator", StringComparison.OrdinalIgnoreCase)) continue;
             string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
             string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
             var parameters = BuildParameters(method.Parameters).ToArray();
@@ -301,6 +315,7 @@ public static class ReferenceStubGenerator
             .ToList();
 
         var handledPropertyNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        bool hasIndexer = false;
 
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
             if (exceptionDerived && ExceptionInheritedMembers.Contains(group.Key)) continue;
@@ -335,6 +350,7 @@ public static class ReferenceStubGenerator
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
+                hasIndexer = true;
             }
             else {
                 string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
@@ -353,6 +369,9 @@ public static class ReferenceStubGenerator
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
             if (exceptionDerived && ExceptionInheritedMembers.Contains(method.Name)) continue;
+            // In C#, "Item" is reserved as the indexer accessor name; skip any duplicate Method
+            // named Item when an indexer has already been emitted to avoid CS0102.
+            if (hasIndexer && string.Equals(method.Name, "Item", StringComparison.OrdinalIgnoreCase)) continue;
             string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
             string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
 
@@ -441,17 +460,33 @@ public static class ReferenceStubGenerator
         string returnCsType = innerIndexer.ReturnType;
         var indexerParams   = BuildParameters(innerIndexer.Parameters).ToArray();
 
+        // Check whether the inner type also exposes a PropertySet for the same default member,
+        // which would make the forwarding indexer read/write (e.g. rs["MyField"] = value).
+        var innerSetter = (innerType.Members ?? []).FirstOrDefault(
+            m => m.Kind == LibraryMemberKind.PropertySet && m.IsDefault && m.Parameters.Count > 0);
+
         var accessors = new List<AccessorDeclarationSyntax>();
         if (isForInterface) {
             accessors.Add(
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            if (innerSetter != null) {
+                accessors.Add(
+                    AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
         }
         else {
             accessors.Add(
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                     .WithExpressionBody(ThrowNotImplementedExprBody())
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            if (innerSetter != null) {
+                accessors.Add(
+                    AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                        .WithExpressionBody(ThrowNotImplementedExprBody())
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
         }
 
         var indexer = IndexerDeclaration(ParseTypeName(returnCsType))
