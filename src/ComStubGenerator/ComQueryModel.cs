@@ -61,7 +61,9 @@ public record ComQueryType(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<string>? ImplementedInterfaces = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? Description = null);
+    string? Description = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool IsControl = false);
 
 public record ComQueryDiscoveredDep(Guid Guid, int Major, int Minor);
 

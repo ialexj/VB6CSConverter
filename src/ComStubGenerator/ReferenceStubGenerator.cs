@@ -289,6 +289,21 @@ public static class ReferenceStubGenerator
     };
 
     // COM exposes System.Exception via the dual interface _Exception.
+    static readonly (string Name, string CsType)[] VB6ControlExtenderProperties =
+    [
+        ("Left",            "int"),    ("Top",             "int"),
+        ("Width",           "int"),    ("Height",          "int"),
+        ("TabIndex",        "short"),  ("TabStop",         "bool"),
+        ("Visible",         "bool"),   ("Enabled",         "bool"),
+        ("Name",            "string"), ("Tag",             "string"),
+        ("_ExtentX",        "int"),    ("_ExtentY",        "int"),
+        ("_StockProps",     "int"),
+        ("ToolTipText",     "string"),
+        ("HelpContextID",   "int"),
+        ("WhatsThisHelpID", "int"),
+        ("DragMode",        "int"),
+    ];
+
     static bool InheritsException(ComQueryType type) =>
         (type.ImplementedInterfaces ?? []).Any(i =>
             string.Equals(i, "_Exception", StringComparison.OrdinalIgnoreCase) ||
@@ -391,6 +406,25 @@ public static class ReferenceStubGenerator
         if (!isStatic) {
             var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: false);
             if (forwardingIndexer != null) memberDecls.Add(forwardingIndexer);
+        }
+
+        if (type.IsControl && !isStatic) {
+            foreach (var (extName, extCsType) in VB6ControlExtenderProperties) {
+                if (handledPropertyNames.Contains(extName)) continue;
+                string safeExtName = MakeSafeIdentifier(extName);
+                usedMemberNames.Add(safeExtName);
+                var extProp = PropertyDeclaration(ParseTypeName(extCsType), Identifier(safeExtName))
+                    .WithModifiers(Modifiers(isPublic: true, isStatic: false))
+                    .WithAccessorList(AccessorList(List(new[] {
+                        AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                            .WithExpressionBody(ThrowNotImplementedExprBody())
+                            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)),
+                        AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                            .WithExpressionBody(ThrowNotImplementedExprBody())
+                            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)),
+                    })));
+                memberDecls.Add(extProp);
+            }
         }
 
         var decl = ClassDeclaration(Identifier(emittedTypeName))

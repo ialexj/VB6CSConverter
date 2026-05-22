@@ -236,6 +236,9 @@ public sealed class TypeLibraryInspector
                     implementedInterfaces.Insert(0, "System.Collections.IEnumerable");
             }
 
+            bool isControl = kind == LibraryTypeKind.Class
+                && (typeAttr.wTypeFlags & System.Runtime.InteropServices.ComTypes.TYPEFLAGS.TYPEFLAG_FCONTROL) != 0;
+
             return new ComQueryType(
                 Name: typeName,
                 Kind: kind,
@@ -243,7 +246,8 @@ public sealed class TypeLibraryInspector
                 EnumValues: enumValues.Count > 0 ? enumValues : null,
                 AliasedType: aliasedType,
                 ImplementedInterfaces: implementedInterfaces.Count > 0 ? implementedInterfaces : null,
-                Description: typeDescription);
+                Description: typeDescription,
+                IsControl: isControl);
         }
         catch (Exception ex) {
             throw new InvalidOperationException(
