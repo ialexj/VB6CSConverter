@@ -55,8 +55,9 @@ public class AmbiguousTypeQualifier(SemanticModel sem, IEnumerable<string> prefe
 
         var chosen = PickType(typeSymbols);
         var fqn = chosen.ToString();
+        var original = node.ToString();
 
-        if (string.IsNullOrEmpty(fqn) || fqn == node.ToString()) {
+        if (string.IsNullOrEmpty(fqn) || fqn == original) {
             return null;
         }
 
