@@ -138,9 +138,8 @@ public static class Program
             AnsiConsole.WriteLine($"  {library.Name}: {written.Count} stubs");
         }
 
-        var directModels = merged.Where(m => !m.IsTransitive).ToList();
-        var allAliases = directModels.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
-        var referenceUsingsPath = ReferenceUsingsGenerator.Generate(directModels, outputDir, allAliases);
+        var allAliases = merged.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
+        var referenceUsingsPath = ReferenceUsingsGenerator.Generate(merged, outputDir, allAliases);
 
         var reportPath = Path.Combine(outputDir, "_ReferenceStubs.txt");
         await File.WriteAllLinesAsync(reportPath, new[] {

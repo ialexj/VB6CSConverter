@@ -762,27 +762,31 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
-    public void GenerateReferenceUsings_TransitiveLibrariesAreExcluded()
+    public void GenerateReferenceUsings_TransitiveLibrariesAreIncluded()
     {
-        // Simulate Program.cs filtering: transitive models are excluded before calling Generate().
+        // Program.cs now passes ALL merged libraries (direct + transitive) to Generate() so that
+        // transitive libraries such as CTHYPERLINKLibCtl and FontLibCtl get their namespace
+        // usings emitted and remain reachable in the converted project.
         var directLib = MakeLibrary("ADODB",
             new ComQueryType("CursorTypeEnum", LibraryTypeKind.Enum, [], [new("ForwardOnly", 0)]),
             new ComQueryType("Connection", LibraryTypeKind.DispatchInterface, [], []));
 
-        var transitiveLib = new ComQueryLibrary("StdOle", Guid.NewGuid(), 2, 0,
+        var transitiveLib = new ComQueryLibrary("CTHYPERLINKLibCtl", Guid.NewGuid(), 1, 0,
             IsTransitive: true,
-            Types: [new ComQueryType("OLE_COLOR", LibraryTypeKind.Alias, AliasedType: "uint")]);
+            Types: [new ComQueryType("CTHyperlink", LibraryTypeKind.DispatchInterface,
+                Members: [new("Url", LibraryMemberKind.PropertyGet, "string", [])],
+                EnumValues: [])]);
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
         try {
-            // Caller (Program.cs) filters out transitive models before passing to Generate().
-            var directModels = new[] { directLib, transitiveLib }.Where(m => !m.IsTransitive).ToList();
-            var filePath = ReferenceUsingsGenerator.Generate(directModels, tempDir);
+            // Program.cs passes all merged libraries — transitive ones must not be silently dropped.
+            var allLibraries = new[] { directLib, transitiveLib };
+            var filePath = ReferenceUsingsGenerator.Generate(allLibraries, tempDir);
 
             var source = File.ReadAllText(filePath);
             source.Should().Contain("global using ADODB;");
-            source.Should().NotContain("StdOle");
-            source.Should().NotContain("OLE_COLOR");
+            source.Should().Contain("global using CTHYPERLINKLibCtl;",
+                "transitive libraries must get a namespace using so their types are reachable");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
