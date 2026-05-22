@@ -13,6 +13,23 @@ See [README.md](README.md) for the motivation and high-level "How" overview.
 | `VB6Converter` | Console App | Conversion orchestrator; Roslyn AST generation + rewriting |
 | `VB6Converter.Tests` | MSTest | Conversion integration and unit tests |
 | `VB6Parser.Tests` | MSTest | Parser-level unit tests |
+| `ComQuery` | Console App | Inspects COM/type-library registrations in the Windows registry |
+
+### ComQuery tools (COM inspection)
+
+Published self-contained executables are available at:
+
+- `publish/ComQuery32/ComQuery.exe` — 32-bit build; reads the 32-bit COM registry hive (`HKCR\Wow6432Node`)
+- `publish/ComQuery64/ComQuery.exe` — 64-bit build; reads the 64-bit COM registry hive
+
+Use these when you need to inspect registered COM type libraries, ProgIDs, CLSIDs, or interface definitions on the local machine — for example, to determine what members a VB6 COM reference exposes before writing a conversion stub.
+
+To rebuild the published executables:
+
+```pwsh
+dotnet publish src/ComQuery/ComQuery.csproj /p:PublishProfile=ComQuery32
+dotnet publish src/ComQuery/ComQuery.csproj /p:PublishProfile=ComQuery64
+```
 
 **Target Framework**: .NET 10.0, C# latest  
 **Key Dependencies**: `Antlr4.Runtime.Standard`, `Microsoft.CodeAnalysis` (Roslyn), `CommandLineParser`, `Serilog`, `Spectre.Console`, `FluentAssertions` (tests)

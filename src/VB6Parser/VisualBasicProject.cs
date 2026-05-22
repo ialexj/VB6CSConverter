@@ -17,7 +17,7 @@ public class VisualBasicProject
     const string ImplicitStdOleDescription = "OLE Automation";
     const string ImplicitStdOleDeclaredPath = "stdole2.tlb";
 
-    public string Name { get; set; }
+    public required string Name { get; init; }
 
     public List<VisualBasicProjectFile> Files { get; set; } = [];
 
@@ -47,7 +47,7 @@ public class VisualBasicProject
             Name = Path.GetFileNameWithoutExtension(path)
         };
 
-        string line;
+        string? line;
         while ((line = reader.ReadLine()) != null) {
             var bits = line.Split('=', 2);
             if (bits.Length != 2) {
@@ -123,14 +123,6 @@ public class VisualBasicProject
             return;
         }
 
-        string? resolvedPath = ResolveReferencePath(
-            ImplicitVb6RuntimeDeclaredPath,
-            basePath,
-            ImplicitVb6RuntimeGuid,
-            ImplicitVb6RuntimeMajor,
-            ImplicitVb6RuntimeMinor,
-            ImplicitVb6RuntimeLcid);
-
         project.References.Add(new VisualBasicProjectReference(
             ProjectReferenceKind.TypeLibrary,
             ImplicitVb6RuntimeGuid,
@@ -138,8 +130,7 @@ public class VisualBasicProject
             ImplicitVb6RuntimeMinor,
             ImplicitVb6RuntimeLcid,
             ImplicitVb6RuntimeDescription,
-            ImplicitVb6RuntimeDeclaredPath,
-            resolvedPath));
+            ImplicitVb6RuntimeDeclaredPath));
     }
 
     static void AddImplicitStdOleReference(VisualBasicProject project, string basePath)
@@ -153,14 +144,6 @@ public class VisualBasicProject
             return;
         }
 
-        string? resolvedPath = ResolveReferencePath(
-            ImplicitStdOleDeclaredPath,
-            basePath,
-            ImplicitStdOleGuid,
-            ImplicitStdOleMajor,
-            ImplicitStdOleMinor,
-            ImplicitStdOleLcid);
-
         project.References.Add(new VisualBasicProjectReference(
             ProjectReferenceKind.TypeLibrary,
             ImplicitStdOleGuid,
@@ -168,8 +151,7 @@ public class VisualBasicProject
             ImplicitStdOleMinor,
             ImplicitStdOleLcid,
             ImplicitStdOleDescription,
-            ImplicitStdOleDeclaredPath,
-            resolvedPath));
+            ImplicitStdOleDeclaredPath));
     }
 
     /// <summary>
@@ -198,9 +180,8 @@ public class VisualBasicProject
 
             string declaredPath  = parts.Length > 3 ? parts[3].Trim() : string.Empty;
             string description   = parts.Length > 4 ? parts[4].Trim() : string.Empty;
-            string? resolvedPath = ResolveReferencePath(declaredPath, basePath, guid, major, minor, lcid);
 
-            return new VisualBasicProjectReference(kind, guid, major, minor, lcid, description, declaredPath, resolvedPath);
+            return new VisualBasicProjectReference(kind, guid, major, minor, lcid, description, declaredPath);
         }
         catch {
             return null;
@@ -233,13 +214,10 @@ public class VisualBasicProject
                 int.TryParse(parts[2].Trim(), out lcid);
             }
 
-            string? resolvedPath = ResolveReferencePath(filePart, basePath, guid, major, minor, lcid);
-
             return new VisualBasicProjectReference(
                 ProjectReferenceKind.ActiveX, guid, major, minor, lcid,
                 Description: filePart,
-                DeclaredPath: filePart,
-                ResolvedPath: resolvedPath);
+                DeclaredPath: filePart);
         }
         catch {
             return null;
@@ -261,114 +239,6 @@ public class VisualBasicProject
             ok &= int.TryParse(vp[1], out minor);
         }
         return ok;
-    }
-
-    /// <summary>
-    /// Tries to find the physical file for a reference.
-    /// First tries the declared path (absolute or relative), then falls back to a
-    /// Windows registry lookup for the COM type-library registration.
-    /// </summary>
-    static string? ResolveReferencePath(string declaredPath, string basePath, Guid guid, int major, int minor, int lcid)
-    {
-        if (!string.IsNullOrEmpty(declaredPath)) {
-            string candidate = Path.IsPathRooted(declaredPath)
-                ? declaredPath
-                : Path.GetFullPath(Path.Combine(basePath, declaredPath));
-
-            if (File.Exists(candidate)) {
-                return candidate;
-            }
-        }
-
-        // Registry fallback — Windows only
-        if (OperatingSystem.IsWindows()) {
-            return TryRegistryLookup(guid, major, minor, lcid);
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Resolves a type library GUID + version to its file path via the Windows registry.
-    /// Returns <see langword="null"/> when the library is not registered.
-    /// </summary>
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    public static string? ResolveTypeLibPath(Guid guid, int major, int minor)
-        => TryRegistryLookup(guid, major, minor, 0);
-
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    static string? TryRegistryLookup(Guid guid, int major, int minor, int lcid)
-    {
-        // HKCR\TypeLib\{GUID}\major.minor\lcid\win32 (or win64)
-        //
-        // WOW64 redirects Registry.ClassesRoot to different hives depending on process bitness:
-        //   32-bit process → HKLM\Software\WOW6432Node\Classes\TypeLib
-        //   64-bit process → HKLM\Software\Classes\TypeLib
-        // Some type libraries (e.g. MSVBVM60) are registered only in the 64-bit hive even though
-        // the DLL itself is 32-bit, so we must try both views explicitly.
-        foreach (var view in new[] { Microsoft.Win32.RegistryView.Registry64, Microsoft.Win32.RegistryView.Registry32 }) {
-            var result = TryRegistryLookupInView(guid, major, minor, lcid, view);
-            if (result != null) return result;
-        }
-
-        return null;
-    }
-
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    static string? TryRegistryLookupInView(Guid guid, int major, int minor, int lcid, Microsoft.Win32.RegistryView view)
-    {
-        string guidKey = $@"Software\Classes\TypeLib\{{{guid}}}\{major}.{minor}";
-        string lcidStr = lcid.ToString();
-
-        using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, view);
-        using var typeLibKey = hklm.OpenSubKey(guidKey);
-        if (typeLibKey == null) return null;
-
-        // Iterate all LCID subkeys, preferring the requested LCID then 0, then any other.
-        // Non-numeric subkeys (FLAGS, HELPDIR) are skipped.
-        var lcidOrder = typeLibKey.GetSubKeyNames()
-            .Where(k => k.All(char.IsAsciiDigit))
-            .OrderBy(k => k == lcidStr ? 0 : k == "0" ? 1 : 2);
-
-        foreach (string lcidSubKey in lcidOrder) {
-            using var lcidKey = typeLibKey.OpenSubKey(lcidSubKey);
-            if (lcidKey == null) continue;
-
-            foreach (string archKey in new[] { "win64", "win32" }) {
-                using var archSubKey = lcidKey.OpenSubKey(archKey);
-                var path = archSubKey?.GetValue(null) as string;
-                if (!string.IsNullOrEmpty(path) && IsTypeLibPath(path)) {
-                    return path;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="path"/> refers to a COM type library
-    /// that can be loaded — either a plain file path, or an embedded-resource path of the form
-    /// <c>file.dll\N</c> where N is a decimal resource identifier understood by
-    /// <c>LoadTypeLib</c>.
-    /// </summary>
-    public static bool IsTypeLibPath(string? path)
-    {
-        if (string.IsNullOrEmpty(path)) return false;
-        if (File.Exists(path)) return true;
-
-        // COM type libraries embedded inside DLLs are registered with a trailing resource-ID
-        // suffix, e.g. "C:\Windows\System32\MSVBVM60.DLL\2".  File.Exists rejects such paths
-        // (the \N component is not a directory), but LoadTypeLib handles them natively.
-        int lastSep = path.LastIndexOf('\\');
-        if (lastSep > 0)
-        {
-            string suffix = path[(lastSep + 1)..];
-            if (suffix.Length > 0 && suffix.All(char.IsAsciiDigit))
-                return File.Exists(path[..lastSep]);
-        }
-
-        return false;
     }
 }
 

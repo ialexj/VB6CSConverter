@@ -32,6 +32,4 @@ public record class VisualBasicProjectReference(
     int MinorVersion,
     int Lcid,
     string Description,
-    string DeclaredPath,
-    string? ResolvedPath,
-    bool IsTransitive = false);
+    string DeclaredPath);

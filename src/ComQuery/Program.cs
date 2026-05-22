@@ -8,7 +8,6 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using VB6Parser;
 
 namespace ComQuery;
 
@@ -111,7 +110,7 @@ public static class Program
                     // Enqueue transitive dependencies
                     if (model.DiscoveredDependencies != null) {
                         foreach (var dep in model.DiscoveredDependencies.Where(d => !seenGuids.ContainsKey(d.Guid))) {
-                            var depPath = VisualBasicProject.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);
+                            var depPath = TypeLibraryInspector.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);
                             if (depPath != null) {
                                 var depName = dep.Guid.ToString("B");
                                 toInspect.Enqueue((dep.Guid, dep.Major, dep.Minor, depName, depPath, true));
@@ -148,7 +147,7 @@ public static class Program
         // GUID?
         if (Guid.TryParseExact(filter.Trim('{', '}'), "D", out var guid)
             || Guid.TryParseExact(filter, "B", out guid)) {
-            var path = VisualBasicProject.ResolveTypeLibPath(guid, 0, 0);
+            var path = TypeLibraryInspector.ResolveTypeLibPath(guid, 0, 0);
             if (path != null)
                 yield return (guid, 0, 0, guid.ToString("B"), path, false);
             yield break;

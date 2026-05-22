@@ -87,3 +87,12 @@ public record ComQueryLibrary(
     IReadOnlyList<ComQueryDiscoveredDep>? DiscoveredDependencies = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Description = null);
+
+/// <summary>Identifies a COM type library for inspection by GUID, version, and metadata.</summary>
+public record ComReference(
+    Guid Guid,
+    int MajorVersion,
+    int MinorVersion,
+    int Lcid,
+    string Description,
+    bool IsTransitive = false);

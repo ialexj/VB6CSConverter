@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using ComQuery;
-using VB6Parser;
 using LibraryMemberKind = ComQuery.LibraryMemberKind;
 using LibraryTypeKind = ComQuery.LibraryTypeKind;
 
@@ -289,7 +288,7 @@ public class TypeLibraryInspectorIntegrationTests
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
-        VisualBasicProject.IsTypeLibPath(MsvbvmPath + @"\3").Should().BeTrue(
+        TypeLibraryInspector.IsTypeLibPath(MsvbvmPath + @"\3").Should().BeTrue(
             "a DLL\\N path is a valid type library path when the base DLL exists — " +
             "LoadTypeLib accepts this format natively");
     }
@@ -299,26 +298,26 @@ public class TypeLibraryInspectorIntegrationTests
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
-        VisualBasicProject.IsTypeLibPath(MsvbvmPath).Should().BeTrue(
+        TypeLibraryInspector.IsTypeLibPath(MsvbvmPath).Should().BeTrue(
             "a plain DLL path should be accepted");
     }
 
     [TestMethod]
     public void IsTypeLibPath_NonExistentFile_ReturnsFalse()
     {
-        VisualBasicProject.IsTypeLibPath(@"C:\does\not\exist.dll").Should().BeFalse();
+        TypeLibraryInspector.IsTypeLibPath(@"C:\does\not\exist.dll").Should().BeFalse();
     }
 
     [TestMethod]
     public void IsTypeLibPath_NonExistentFileWithResourceId_ReturnsFalse()
     {
-        VisualBasicProject.IsTypeLibPath(@"C:\does\not\exist.dll\2").Should().BeFalse();
+        TypeLibraryInspector.IsTypeLibPath(@"C:\does\not\exist.dll\2").Should().BeFalse();
     }
 
     [TestMethod]
     public void IsTypeLibPath_Null_ReturnsFalse()
     {
-        VisualBasicProject.IsTypeLibPath(null).Should().BeFalse();
+        TypeLibraryInspector.IsTypeLibPath(null).Should().BeFalse();
     }
 
     [TestMethod]
@@ -326,7 +325,7 @@ public class TypeLibraryInspectorIntegrationTests
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
-        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        var path = TypeLibraryInspector.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
 
         path.Should().NotBeNull(
             $"GUID {{{VbRuntimeSubLibGuid}}} is registered in HKCR\\TypeLib with path " +
@@ -342,7 +341,7 @@ public class TypeLibraryInspectorIntegrationTests
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
-        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        var path = TypeLibraryInspector.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
         if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
 
         var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
@@ -357,7 +356,7 @@ public class TypeLibraryInspectorIntegrationTests
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
-        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        var path = TypeLibraryInspector.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
         if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
 
         var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
@@ -372,7 +371,7 @@ public class TypeLibraryInspectorIntegrationTests
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
-        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        var path = TypeLibraryInspector.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
         if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
 
         var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
@@ -395,7 +394,7 @@ public class TypeLibraryInspectorIntegrationTests
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
-        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        var path = TypeLibraryInspector.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
         if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
 
         var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
@@ -516,7 +515,7 @@ public class TypeLibraryInspectorIntegrationTests
     {
         if (!File.Exists(MsvbvmPath)) Assert.Inconclusive("MSVBVM60.DLL not found — skipping");
 
-        var path = VisualBasicProject.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
+        var path = TypeLibraryInspector.ResolveTypeLibPath(VbRuntimeSubLibGuid, 6, 0);
         if (path == null) Assert.Inconclusive($"GUID {{{VbRuntimeSubLibGuid}}} not registered — skipping");
 
         var reference = MakeReference(VbRuntimeSubLibGuid, 6, 0, "VB runtime", path!);
@@ -601,8 +600,8 @@ public class TypeLibraryInspectorIntegrationTests
     [TestMethod]
     public void Inspect_VbaLib_Collection_ImplementsIEnumerable()
     {
-        var path = VisualBasicProject.ResolveTypeLibPath(VbaLibGuid, 6, 0)
-                ?? VisualBasicProject.ResolveTypeLibPath(VbaLibGuid, 5, 0);
+        var path = TypeLibraryInspector.ResolveTypeLibPath(VbaLibGuid, 6, 0)
+                ?? TypeLibraryInspector.ResolveTypeLibPath(VbaLibGuid, 5, 0);
         if (path == null) Assert.Inconclusive($"GUID {{{VbaLibGuid}}} not registered — skipping");
 
         var reference = MakeReference(VbaLibGuid, 6, 0, "VBA", path!);
@@ -831,10 +830,9 @@ public class TypeLibraryInspectorIntegrationTests
         }
     }
 
-    static VisualBasicProjectReference MakeReference(
+    static ComReference MakeReference(
         Guid guid, int major, int minor, string description, string path) =>
-        new(ProjectReferenceKind.ActiveX, guid, major, minor, 0, description,
-            DeclaredPath: path, ResolvedPath: path);
+        new(guid, major, minor, 0, description);
 
     static readonly JsonSerializerOptions JsonOptions = new()
     {

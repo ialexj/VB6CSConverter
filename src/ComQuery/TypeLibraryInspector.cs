@@ -6,7 +6,6 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
-using VB6Parser;
 
 namespace ComQuery;
 
@@ -46,7 +45,7 @@ public sealed class TypeLibraryInspector
     /// <see cref="ComQueryLibrary"/>, or <see langword="null"/> if the file
     /// cannot be loaded or parsed.
     /// </summary>
-    public static ComQueryLibrary? Inspect(VisualBasicProjectReference reference, string path)
+    public static ComQueryLibrary? Inspect(ComReference reference, string path)
     {
         if (!TryLoadTypeLibWithFallback(reference.Guid, reference.MajorVersion, reference.MinorVersion, reference.Lcid, path,
                                         out var typeLib, out string loadedFromPath, out int hr)) {
@@ -915,7 +914,7 @@ public sealed class TypeLibraryInspector
         void AddCandidate(string? path)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
-            if (!VisualBasicProject.IsTypeLibPath(path)) return;
+            if (!IsTypeLibPath(path)) return;
             if (!seen.Add(path)) return;
             candidates.Add(path);
         }
@@ -1026,5 +1025,83 @@ public sealed class TypeLibraryInspector
         foreach (var key in remaining) {
             yield return key;
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Type library path resolution
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="path"/> refers to a COM type library
+    /// that can be loaded — either a plain file path, or an embedded-resource path of the form
+    /// <c>file.dll\N</c> where N is a decimal resource identifier understood by
+    /// <c>LoadTypeLib</c>.
+    /// </summary>
+    public static bool IsTypeLibPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return false;
+        if (File.Exists(path)) return true;
+
+        // COM type libraries embedded inside DLLs are registered with a trailing resource-ID
+        // suffix, e.g. "C:\Windows\System32\MSVBVM60.DLL\2".  File.Exists rejects such paths
+        // (the \N component is not a directory), but LoadTypeLib handles them natively.
+        int lastSep = path.LastIndexOf('\\');
+        if (lastSep > 0)
+        {
+            string suffix = path[(lastSep + 1)..];
+            if (suffix.Length > 0 && suffix.All(char.IsAsciiDigit))
+                return File.Exists(path[..lastSep]);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves a type library GUID + version to its file path via the Windows registry.
+    /// Returns <see langword="null"/> when the library is not registered.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    public static string? ResolveTypeLibPath(Guid guid, int major, int minor)
+        => TryRegistryLookup(guid, major, minor, 0);
+
+    [SupportedOSPlatform("windows")]
+    static string? TryRegistryLookup(Guid guid, int major, int minor, int lcid)
+    {
+        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 }) {
+            var result = TryRegistryLookupInView(guid, major, minor, lcid, view);
+            if (result != null) return result;
+        }
+
+        return null;
+    }
+
+    [SupportedOSPlatform("windows")]
+    static string? TryRegistryLookupInView(Guid guid, int major, int minor, int lcid, RegistryView view)
+    {
+        string guidKey = $@"Software\Classes\TypeLib\{{{guid}}}\{major}.{minor}";
+        string lcidStr = lcid.ToString();
+
+        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
+        using var typeLibKey = hklm.OpenSubKey(guidKey);
+        if (typeLibKey == null) return null;
+
+        var lcidOrder = typeLibKey.GetSubKeyNames()
+            .Where(k => k.All(char.IsAsciiDigit))
+            .OrderBy(k => k == lcidStr ? 0 : k == "0" ? 1 : 2);
+
+        foreach (string lcidSubKey in lcidOrder) {
+            using var lcidKey = typeLibKey.OpenSubKey(lcidSubKey);
+            if (lcidKey == null) continue;
+
+            foreach (string archKey in new[] { "win64", "win32" }) {
+                using var archSubKey = lcidKey.OpenSubKey(archKey);
+                var path = archSubKey?.GetValue(null) as string;
+                if (!string.IsNullOrEmpty(path) && IsTypeLibPath(path)) {
+                    return path;
+                }
+            }
+        }
+
+        return null;
     }
 }
