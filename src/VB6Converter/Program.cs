@@ -131,34 +131,42 @@ public static class Program
 
                 async Task RunRewriter(bool compile, string title, Func<ConversionTarget, SemanticModel, LoggedRewriter> rewriter)
                 {
-                    if (compile && compilation is null || hasChanges) {
-                        compilation = await CollectDiagnostics(ws, options.OutputDir);
-                        PauseIfRequested(options.Pause);
+                    bool hasRewriterChanges = false;
+                    do {
+                        // Reload from disk to avoid stale in-memory project state caused by
+                        // parallel SaveDocument writes during the conversion phase (each
+                        // thread's doc.Project snapshot only carries its own file's update,
+                        // so the last writer wins and all other documents appear empty).
+                        await ws.ReloadProject();
+
+                        if (compile && compilation is null || hasChanges) {
+                            compilation = await CollectDiagnostics(ws, options.OutputDir);
+                            PauseIfRequested(options.Pause);
+                        }
+
+                        hasRewriterChanges = await RunOperations(title, ws.ActiveTargets,
+                            (t, ctx, cancel) => ws.WithCompilationUnit(t, cancel, cu => {
+                                var sm = compilation?.GetSemanticModel(cu.SyntaxTree, true);
+
+                                var r = rewriter(t, sm);
+                                r.Progress = (current, total) => {
+                                    ctx.IsIndeterminate = false;
+                                    ctx.MaxValue = total;
+                                    ctx.Value = current;
+                                };
+
+                                cu = (CompilationUnitSyntax)r.Visit(cu);
+                                cu = (CompilationUnitSyntax)new UsingsRewriter(t.Name).Visit(cu);
+
+                                return ValueTask.FromResult(cu);
+                            }));
+
+                        if (hasRewriterChanges) {
+                            hasChanges = true;
+                        }
                     }
-
-                    hasChanges |= await RunOperations(title, ws.ActiveTargets,
-                        (t, ctx, cancel) => ws.WithCompilationUnit(t, cancel, cu => {
-                            var sm = compilation?.GetSemanticModel(cu.SyntaxTree, true);
-
-                            var r = rewriter(t, sm);
-                            r.Progress = (current, total) => {
-                                ctx.IsIndeterminate = false;
-                                ctx.MaxValue = total;
-                                ctx.Value = current;
-                            };
-
-                            cu = (CompilationUnitSyntax)r.Visit(cu);
-                            cu = (CompilationUnitSyntax)new UsingsRewriter(t.Name).Visit(cu);
-
-                            return ValueTask.FromResult(cu);
-                        }));
+                    while (hasRewriterChanges);
                 }
-
-                // Reload from disk to avoid stale in-memory project state caused by
-                // parallel SaveDocument writes during the conversion phase (each
-                // thread's doc.Project snapshot only carries its own file's update,
-                // so the last writer wins and all other documents appear empty).
-                await ws.ReloadProject();
 
                 Log.Rewriting.Information("====== Starting Fixups ======");
 
