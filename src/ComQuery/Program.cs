@@ -15,7 +15,7 @@ public static class Program
 {
     public class CommandLineOptions
     {
-        [Option("lib", Required = false, HelpText = "Library to query (name, GUID in {braces}, or file path). Repeatable. Includes type information.")]
+        [Option("lib", Required = false, HelpText = "Library to query (name, GUID in {braces}, or file path), optionally followed by ,major,minor for exact version. Repeatable. Includes type information.")]
         public IEnumerable<string> Libs { get; set; } = [];
 
         [Option("type", Required = false, HelpText = "Filter to types matching name or GUID within queried libraries. Repeatable.")]
@@ -144,21 +144,52 @@ public static class Program
             yield break;
         }
 
+        // Strip optional version suffix: {base},{major},{minor}
+        TryParseVersionSuffix(filter, out string core, out int major, out int minor);
+
         // GUID?
-        if (Guid.TryParseExact(filter.Trim('{', '}'), "D", out var guid)
-            || Guid.TryParseExact(filter, "B", out guid)) {
-            var path = TypeLibraryInspector.ResolveTypeLibPath(guid, 0, 0);
+        if (Guid.TryParseExact(core.Trim('{', '}'), "D", out var guid)
+            || Guid.TryParseExact(core, "B", out guid)) {
+            var path = TypeLibraryInspector.ResolveTypeLibPath(guid, major, minor);
             if (path != null)
-                yield return (guid, 0, 0, guid.ToString("B"), path, false);
+                yield return (guid, major, minor, guid.ToString("B"), path, false);
             yield break;
         }
 
         // Name: search registry
         foreach (var lib in RegistryEnumerator.EnumerateRegisteredLibraries()) {
             if (lib.Path == null) continue;
-            if (lib.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                || lib.SafeName.Contains(filter, StringComparison.OrdinalIgnoreCase))
-                yield return (lib.Guid, lib.Major, lib.Minor, lib.Name, lib.Path, false);
+            if (!lib.Name.Contains(core, StringComparison.OrdinalIgnoreCase))
+                continue;
+            // When a version was specified, restrict to that exact version.
+            if (major != 0 && (lib.Major != major || lib.Minor != minor))
+                continue;
+            yield return (lib.Guid, lib.Major, lib.Minor, lib.Name, lib.Path, false);
         }
+    }
+
+    /// <summary>
+    /// Extracts a trailing <c>,major,minor</c> version suffix from a lib-filter string.
+    /// Returns <see langword="true"/> when a valid suffix was found; in that case
+    /// <paramref name="core"/> is the filter without the suffix and
+    /// <paramref name="major"/>/<paramref name="minor"/> are the parsed integers.
+    /// Returns <see langword="false"/> when no version suffix is present, and sets
+    /// <paramref name="core"/> to the original <paramref name="filter"/> unchanged.
+    /// </summary>
+    static bool TryParseVersionSuffix(string filter, out string core, out int major, out int minor)
+    {
+        core = filter;
+        major = minor = 0;
+
+        var parts = filter.Split(',');
+        if (parts.Length < 3) return false;
+
+        if (!int.TryParse(parts[^1], out int parsedMinor)) return false;
+        if (!int.TryParse(parts[^2], out int parsedMajor)) return false;
+
+        major = parsedMajor;
+        minor = parsedMinor;
+        core = string.Join(',', parts[..^2]);
+        return true;
     }
 }

@@ -266,6 +266,21 @@ public static class ReferenceStubGenerator
         return decl;
     }
 
+    // Members already provided by System.Exception — re-declaring them in a derived stub
+    // class causes CS0114 (hides inherited member) or CS0108 (shadows) errors.
+    static readonly HashSet<string> ExceptionInheritedMembers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "HelpLink", "InnerException", "Message", "Source", "StackTrace", "TargetSite",
+        "GetBaseException", "GetObjectData",
+    };
+
+    // COM exposes System.Exception via the dual interface _Exception.
+    static bool InheritsException(ComQueryType type) =>
+        (type.ImplementedInterfaces ?? []).Any(i =>
+            string.Equals(i, "_Exception", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(i, "Exception", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(i, "System.Exception", StringComparison.OrdinalIgnoreCase));
+
     // ──────────────────────────────────────────────────────────────────────
     // Class / module
     // ──────────────────────────────────────────────────────────────────────
@@ -273,6 +288,7 @@ public static class ReferenceStubGenerator
     static ClassDeclarationSyntax GenerateClass(ComQueryLibrary library, ComQueryType type, string emittedTypeName)
     {
         bool isStatic = type.Kind == LibraryTypeKind.Module;
+        bool exceptionDerived = !isStatic && InheritsException(type);
 
         var memberDecls = new List<MemberDeclarationSyntax>();
         // Seed with the class name to prevent CS0542 (member name same as enclosing type)
@@ -287,6 +303,7 @@ public static class ReferenceStubGenerator
         var handledPropertyNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
+            if (exceptionDerived && ExceptionInheritedMembers.Contains(group.Key)) continue;
             var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
 
@@ -335,6 +352,7 @@ public static class ReferenceStubGenerator
         foreach (var method in (type.Members ?? [])
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
+            if (exceptionDerived && ExceptionInheritedMembers.Contains(method.Name)) continue;
             string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
             string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
 

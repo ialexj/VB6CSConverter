@@ -40,14 +40,12 @@ internal static class RegistryEnumerator
 
                 // Library name is stored under the version key's default value
                 string libName = versionKey.GetValue(null) as string ?? guidKeyName;
-                string safeName = ReferenceNaming.MakeSafeName(libName);
 
                 // Find the path for the current process architecture
                 string? path = FindPathForCurrentArch(versionKey);
 
                 yield return new ComQueryLibrary(
                     Name: libName,
-                    SafeName: safeName,
                     Guid: guid,
                     Major: major,
                     Minor: minor,

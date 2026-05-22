@@ -620,7 +620,7 @@ public class ReferenceStubGeneratorTests
             new ComQueryType("CursorTypeEnum", LibraryTypeKind.Enum, [], [new("ForwardOnly", 0)]),
             new ComQueryType("Connection", LibraryTypeKind.DispatchInterface, [], []));
 
-        var transitiveLib = new ComQueryLibrary("StdOle", "StdOle", Guid.NewGuid(), 2, 0,
+        var transitiveLib = new ComQueryLibrary("StdOle", Guid.NewGuid(), 2, 0,
             IsTransitive: true,
             Types: [new ComQueryType("OLE_COLOR", LibraryTypeKind.Alias, AliasedType: "uint")]);
 
@@ -958,13 +958,13 @@ public class ReferenceStubGeneratorTests
     // ──────────────────────────────────────────────────────────────────────
 
     static ComQueryLibrary MakeLibrary(string safeName, params ComQueryType[] types)
-        => new(safeName, safeName, TestGuid, 1, 0, Types: types);
+        => new(safeName, TestGuid, 1, 0, Types: types);
 
     // A library whose DiscoveredDependencies include mscorlib, triggering the
     // normalization + event-collapsing pipeline (DotnetLibraryGuids.RequiresNormalization).
     static readonly Guid MscorlibGuid = new("BED7F4EA-1A96-11d2-8F08-00A0C9A6186D");
     static ComQueryLibrary MakeDotnetLibrary(string safeName, params ComQueryType[] types)
-        => new(safeName, safeName, TestGuid, 1, 0,
+        => new(safeName, TestGuid, 1, 0,
             Types: types,
             DiscoveredDependencies: [new ComQueryDiscoveredDep(MscorlibGuid, 2, 4)]);
 }

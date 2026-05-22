@@ -67,7 +67,6 @@ public record ComQueryDiscoveredDep(Guid Guid, int Major, int Minor);
 
 public record ComQueryLibrary(
     string Name,
-    string SafeName,
     Guid Guid,
     int Major,
     int Minor,
@@ -79,4 +78,7 @@ public record ComQueryLibrary(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<ComQueryDiscoveredDep>? DiscoveredDependencies = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? Description = null);
+    string? Description = null)
+{
+    public string SafeName => ReferenceNaming.MakeSafeName(Name);
+}

@@ -74,8 +74,8 @@ public static class Program
                 AnsiConsole.MarkupLine("[grey]No COM references found in project.[/]");
                 return 0;
             }
-            foreach (var reference in vbProject.References.Where(r => !DotnetLibraryGuids.Contains(r.Guid)))
-                libFilters.Add(reference.Guid.ToString("B"));
+            foreach (var reference in vbProject.References)
+                libFilters.Add($"{reference.Guid:B},{reference.MajorVersion},{reference.MinorVersion}");
         }
 
         if (libFilters.Count == 0) {
@@ -117,7 +117,9 @@ public static class Program
             return false;
         }
 
-        var merged = LibraryMerger.Merge(x86Libs, x64Libs);
+        IReadOnlyList<ComQueryLibrary> merged = LibraryMerger.Merge(x86Libs, x64Libs)
+            .Where(lib => !DotnetLibraryGuids.Contains(lib.Guid))
+            .ToList();
 
         if (syntheticSets.Count > 0)
             merged = SyntheticMembersApplicator.Apply(merged, syntheticSets);

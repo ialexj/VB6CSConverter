@@ -20,7 +20,7 @@ public class LibraryMergerTests
     [TestMethod]
     public void Merge_X86OnlyLibrary_IncludedInResult()
     {
-        var x86 = new ComQueryLibrary("LibA", "LibA", GuidA, 1, 0);
+        var x86 = new ComQueryLibrary("LibA", GuidA, 1, 0);
         var merged = LibraryMerger.Merge([x86], []);
         merged.Should().ContainSingle(l => l.Guid == GuidA);
     }
@@ -28,7 +28,7 @@ public class LibraryMergerTests
     [TestMethod]
     public void Merge_X64OnlyLibrary_IncludedInResult()
     {
-        var x64 = new ComQueryLibrary("LibC", "LibC", GuidC, 1, 0);
+        var x64 = new ComQueryLibrary("LibC", GuidC, 1, 0);
         var merged = LibraryMerger.Merge([], [x64]);
         merged.Should().ContainSingle(l => l.Guid == GuidC);
     }
@@ -36,8 +36,8 @@ public class LibraryMergerTests
     [TestMethod]
     public void Merge_BothArchLibraries_MergedByGuid()
     {
-        var x86 = new ComQueryLibrary("LibB", "LibB", GuidB, 1, 0);
-        var x64 = new ComQueryLibrary("LibB", "LibB", GuidB, 1, 0);
+        var x86 = new ComQueryLibrary("LibB", GuidB, 1, 0);
+        var x64 = new ComQueryLibrary("LibB", GuidB, 1, 0);
         var merged = LibraryMerger.Merge([x86], [x64]);
         merged.Should().ContainSingle(l => l.Guid == GuidB, "same GUID must be merged into one library");
     }
@@ -47,12 +47,12 @@ public class LibraryMergerTests
     {
         // x86 has LibA + LibB; x64 has LibB + LibC → result should have LibA + LibB + LibC
         var x86Libs = new ComQueryLibrary[] {
-            new("LibA", "LibA", GuidA, 1, 0),
-            new("LibB", "LibB", GuidB, 1, 0),
+            new("LibA", GuidA, 1, 0),
+            new("LibB", GuidB, 1, 0),
         };
         var x64Libs = new ComQueryLibrary[] {
-            new("LibB", "LibB", GuidB, 1, 0),
-            new("LibC", "LibC", GuidC, 1, 0),
+            new("LibB", GuidB, 1, 0),
+            new("LibC", GuidC, 1, 0),
         };
 
         var merged = LibraryMerger.Merge(x86Libs, x64Libs);
@@ -122,7 +122,7 @@ public class LibraryMergerTests
     public void Merge_X86OnlyMember_IncludedInResult()
     {
         var x86Lib = MakeLib(GuidA, "T1", new ComQueryMember("X86OnlyProp", LibraryMemberKind.PropertyGet, "bool", []));
-        var x64Lib = new ComQueryLibrary("LibA", "LibA", GuidA, 1, 0,
+        var x64Lib = new ComQueryLibrary("LibA", GuidA, 1, 0,
             Types: [new ComQueryType("T1", LibraryTypeKind.Interface, [])]);
 
         var merged = LibraryMerger.Merge([x86Lib], [x64Lib]);
@@ -133,7 +133,7 @@ public class LibraryMergerTests
     [TestMethod]
     public void Merge_X64OnlyMember_IncludedInResult()
     {
-        var x86Lib = new ComQueryLibrary("LibA", "LibA", GuidA, 1, 0,
+        var x86Lib = new ComQueryLibrary("LibA", GuidA, 1, 0,
             Types: [new ComQueryType("T1", LibraryTypeKind.Interface, [])]);
         var x64Lib = MakeLib(GuidA, "T1", new ComQueryMember("X64OnlyProp", LibraryMemberKind.PropertyGet, "bool", []));
 
@@ -147,6 +147,6 @@ public class LibraryMergerTests
     // ──────────────────────────────────────────────────────────────────────
 
     static ComQueryLibrary MakeLib(Guid guid, string typeName, params ComQueryMember[] members)
-        => new("Lib", "Lib", guid, 1, 0,
+        => new("Lib", guid, 1, 0,
             Types: [new ComQueryType(typeName, LibraryTypeKind.Interface, members)]);
 }

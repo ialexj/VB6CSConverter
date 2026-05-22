@@ -223,9 +223,10 @@ public class TypeLibraryInspectorIntegrationTests
             var files = ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
 
             // All files should live under outDir/<SafeName>/
-            var expectedSubdir = Path.Combine(outDir, model.SafeName);
+            var safeName = ComStubGenerator.ReferenceNaming.MakeSafeName(model.Name);
+            var expectedSubdir = Path.Combine(outDir, safeName);
             files.All(f => f.StartsWith(expectedSubdir, StringComparison.OrdinalIgnoreCase))
-                .Should().BeTrue($"all stubs must be under the safe-name subfolder '{model.SafeName}'");
+                .Should().BeTrue($"all stubs must be under the safe-name subfolder '{safeName}'");
         }
         finally {
             if (Directory.Exists(outDir))

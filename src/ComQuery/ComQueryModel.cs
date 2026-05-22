@@ -74,7 +74,6 @@ public record ComQueryDiscoveredDep(Guid Guid, int Major, int Minor);
 /// <summary>All type information extracted from a single COM type library.</summary>
 public record ComQueryLibrary(
     string Name,
-    string SafeName,
     Guid Guid,
     int Major,
     int Minor,

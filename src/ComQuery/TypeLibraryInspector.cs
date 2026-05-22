@@ -111,8 +111,6 @@ public sealed class TypeLibraryInspector
         libName = string.IsNullOrWhiteSpace(libName) ? fallbackName : libName;
         string? libDescription = string.IsNullOrWhiteSpace(libDoc) ? null : libDoc;
 
-        string safeName = ReferenceNaming.MakeSafeName(libName);
-
         int typeCount = typeLib.GetTypeInfoCount();
         var types     = new List<ComQueryType>(typeCount);
         var discoveredDeps = new HashSet<ComQueryDiscoveredDep>();
@@ -160,7 +158,6 @@ public sealed class TypeLibraryInspector
 
         return new ComQueryLibrary(
             Name: libName,
-            SafeName: safeName,
             Guid: guid,
             Major: major,
             Minor: minor,

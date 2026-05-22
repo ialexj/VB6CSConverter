@@ -418,11 +418,11 @@ public class DotnetStubGeneratorTests
 
     /// <summary>Library that depends on mscorlib — normalization rewriter is applied.</summary>
     static ComQueryLibrary MakeLibrary(string safeName, params ComQueryType[] types)
-        => new(safeName, safeName, TestGuid, 1, 0,
+        => new(safeName, TestGuid, 1, 0,
             Types: types,
             DiscoveredDependencies: [new ComQueryDiscoveredDep(MscorlibGuid, 2, 0)]);
 
     /// <summary>Library with no .NET runtime dependency — normalization rewriter is NOT applied.</summary>
     static ComQueryLibrary MakeLibraryNoDotnetDeps(string safeName, params ComQueryType[] types)
-        => new(safeName, safeName, TestGuid, 1, 0, Types: types);
+        => new(safeName, TestGuid, 1, 0, Types: types);
 }

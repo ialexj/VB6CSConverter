@@ -55,6 +55,9 @@ public static class Program
 
         [Option('n', "prefer-namespace", Required = false, HelpText = "Namespace prefixes to prefer when disambiguating ambiguous type references, in order of preference.")]
         public IEnumerable<string> PreferredNamespaces { get; set; } = [];
+
+        [Option("pause", Required = false, HelpText = "Pause for user input after each diagnostics collection. Press any key to continue, Ctrl-C to stop.")]
+        public bool Pause { get; set; }
     }
 
     public static Task Main(string[] args)
@@ -130,6 +133,7 @@ public static class Program
                 {
                     if (compile && compilation is null || hasChanges) {
                         compilation = await CollectDiagnostics(ws, options.OutputDir);
+                        PauseIfRequested(options.Pause);
                     }
 
                     hasChanges |= await RunOperations(title, ws.ActiveTargets,
@@ -165,6 +169,8 @@ public static class Program
                 }
 
                 await RunRewriter(true, "Finding Types", (t, sm) => new TypeFinder(sm));
+                await RunRewriter(true, "Qualifying Ambiguous Types", (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
+
                 await RunRewriter(true, "Finding Members", (t, sm) => new MemberFinder(sm));
                 await RunRewriter(true, "Disambiguate Array Access", (t, sm) => new ArrayCallDisambiguator(sm));
                 await RunRewriter(true, "Rewriting parameterized property setters", (t, sm) => new ParameterizedPropertyRewriter(sm));
@@ -185,7 +191,6 @@ public static class Program
                 await RunRewriter(true, "Refining Types", (t, sm) => new TypeRefiner(varTypes));
                 await RunRewriter(true, "Coercing Literals", (t, sm) => new LiteralCoercionRewriter(sm));
                 await RunRewriter(true, "Adding Type Casts", (t, sm) => new TypeCastRewriter(sm));
-                await RunRewriter(true, "Qualifying Ambiguous Types", (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
 
                 //await RunRewriter(true, "Rewriting DAO", (t, sm) => new DAORewriter(sm));
 
@@ -200,7 +205,15 @@ public static class Program
         // Collect diagnostics
         if (!options.SkipDiagnostics) {
             await CollectDiagnostics(ws, options.OutputDir);
+            PauseIfRequested(options.Pause);
         }
+    }
+
+    static void PauseIfRequested(bool pause)
+    {
+        if (!pause) return;
+        AnsiConsole.MarkupLine("[grey]Press any key to continue (Ctrl-C to stop)...[/]");
+        Console.ReadKey(intercept: true);
     }
 
     static async Task<Compilation> GetCompilation(ConversionWorkspace ws)

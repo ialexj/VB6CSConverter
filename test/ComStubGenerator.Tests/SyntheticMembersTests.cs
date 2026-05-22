@@ -40,7 +40,7 @@ public class SyntheticMembersTests
     public void Apply_MatchingTargetByName_MemberIsAdded()
     {
         // SafeName differs from Name — matching should succeed via Name too
-        var lib = new ComQueryLibrary("My Lib", "MyLib", GuidA, 1, 0,
+        var lib = new ComQueryLibrary("My Lib", GuidA, 1, 0,
             Types: [new ComQueryType("MyType", LibraryTypeKind.Interface,
                 [new ComQueryMember("Existing", LibraryMemberKind.Method, "void", [])])]);
 
@@ -324,7 +324,7 @@ public class SyntheticMembersTests
 
     static ComQueryLibrary MakeLib(Guid guid, string libName, string typeName,
         params ComQueryMember[] members)
-        => new(libName, libName, guid, 1, 0,
+        => new(libName, guid, 1, 0,
             Types: [new ComQueryType(typeName, LibraryTypeKind.Interface, members)]);
 
     static string WriteTemp(string content)
