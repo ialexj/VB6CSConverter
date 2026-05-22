@@ -17,6 +17,8 @@ public static class SyntheticMembersLoader
     static readonly JsonSerializerOptions JsonOptions = new() {
         Converters = { new JsonStringEnumConverter() },
         PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
     };
 
     /// <summary>
