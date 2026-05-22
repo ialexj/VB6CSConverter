@@ -52,6 +52,9 @@ public static class Program
 
         [Option("overwrite-user", Required = false, HelpText = "Overwrite files that don't have the GeneratedCode attribute.")]
         public bool OverwriteNonGenerated { get; set; }
+
+        [Option('n', "prefer-namespace", Required = false, HelpText = "Namespace prefixes to prefer when disambiguating ambiguous type references, in order of preference.")]
+        public IEnumerable<string> PreferredNamespaces { get; set; } = [];
     }
 
     public static Task Main(string[] args)
@@ -182,6 +185,7 @@ public static class Program
                 await RunRewriter(true, "Refining Types", (t, sm) => new TypeRefiner(varTypes));
                 await RunRewriter(true, "Coercing Literals", (t, sm) => new LiteralCoercionRewriter(sm));
                 await RunRewriter(true, "Adding Type Casts", (t, sm) => new TypeCastRewriter(sm));
+                await RunRewriter(true, "Qualifying Ambiguous Types", (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
 
                 //await RunRewriter(true, "Rewriting DAO", (t, sm) => new DAORewriter(sm));
 
