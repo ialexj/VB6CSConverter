@@ -21,4 +21,18 @@
   <ItemGroup>
     <ProjectReference Include="..\VB6Parser\VB6Parser.csproj" />
   </ItemGroup>
+
+  <!-- Build ComQuery x86 into comquery\x86\ -->
+  <Target Name="BuildComQueryX86" AfterTargets="Build">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComQuery\ComQuery.csproj"
+             Properties="Configuration=$(Configuration);PlatformTarget=x86;OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\comquery\x86\"
+             Targets="Build" />
+  </Target>
+
+  <!-- Build ComQuery x64 into comquery\x64\ -->
+  <Target Name="BuildComQueryX64" AfterTargets="BuildComQueryX86">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComQuery\ComQuery.csproj"
+             Properties="Configuration=$(Configuration);PlatformTarget=x64;OutputPath=$(MSBuildThisFileDirectory)bin\$(Configuration)\net10.0\comquery\x64\"
+             Targets="Build" />
+  </Target>
 </Project>

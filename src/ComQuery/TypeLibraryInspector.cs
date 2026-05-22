@@ -1078,26 +1078,36 @@ public sealed class TypeLibraryInspector
     [SupportedOSPlatform("windows")]
     static string? TryRegistryLookupInView(Guid guid, int major, int minor, int lcid, RegistryView view)
     {
-        string guidKey = $@"Software\Classes\TypeLib\{{{guid}}}\{major}.{minor}";
         string lcidStr = lcid.ToString();
+        string preferredVersion = $"{major}.{minor}";
 
         using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
-        using var typeLibKey = hklm.OpenSubKey(guidKey);
-        if (typeLibKey == null) return null;
+        using var guidKey = hklm.OpenSubKey($@"Software\Classes\TypeLib\{{{guid}}}");
+        if (guidKey == null) return null;
 
-        var lcidOrder = typeLibKey.GetSubKeyNames()
-            .Where(k => k.All(char.IsAsciiDigit))
-            .OrderBy(k => k == lcidStr ? 0 : k == "0" ? 1 : 2);
+        // Enumerate all version subkeys, preferring the exact requested version.
+        // When major=0 and minor=0 (version unspecified), this falls back to whatever
+        // version is registered rather than failing with a hard "0.0" miss.
+        var versions = OrderKeysPrefer(guidKey.GetSubKeyNames(), preferredVersion);
 
-        foreach (string lcidSubKey in lcidOrder) {
-            using var lcidKey = typeLibKey.OpenSubKey(lcidSubKey);
-            if (lcidKey == null) continue;
+        foreach (string version in versions) {
+            using var typeLibKey = guidKey.OpenSubKey(version);
+            if (typeLibKey == null) continue;
 
-            foreach (string archKey in new[] { "win64", "win32" }) {
-                using var archSubKey = lcidKey.OpenSubKey(archKey);
-                var path = archSubKey?.GetValue(null) as string;
-                if (!string.IsNullOrEmpty(path) && IsTypeLibPath(path)) {
-                    return path;
+            var lcidOrder = typeLibKey.GetSubKeyNames()
+                .Where(k => k.All(char.IsAsciiDigit))
+                .OrderBy(k => k == lcidStr ? 0 : k == "0" ? 1 : 2);
+
+            foreach (string lcidSubKey in lcidOrder) {
+                using var lcidKey = typeLibKey.OpenSubKey(lcidSubKey);
+                if (lcidKey == null) continue;
+
+                foreach (string archKey in new[] { "win64", "win32" }) {
+                    using var archSubKey = lcidKey.OpenSubKey(archKey);
+                    var path = archSubKey?.GetValue(null) as string;
+                    if (!string.IsNullOrEmpty(path) && IsTypeLibPath(path)) {
+                        return path;
+                    }
                 }
             }
         }

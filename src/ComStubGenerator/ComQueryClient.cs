@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -46,8 +47,12 @@ public static class ComQueryClient
             RedirectStandardError = true,
         };
 
-        foreach (var lib in libArgs)
-            psi.ArgumentList.Add($"--lib={lib}");
+        var libList = libArgs.ToList();
+        if (libList.Count > 0) {
+            psi.ArgumentList.Add("--lib");
+            foreach (var lib in libList)
+                psi.ArgumentList.Add(lib);
+        }
 
         using var process = Process.Start(psi)!;
 
