@@ -30,6 +30,11 @@ public static class Program
         [Option("include-com-plumbing", Required = false, Default = false,
             HelpText = "Include COM infrastructure members (IUnknown, IDispatch, AddRef, Release, etc.) in generated stubs.")]
         public bool IncludeComPlumbing { get; set; }
+
+        [Option("synthetic-member-path", Required = false,
+            HelpText = "Path to a JSON file providing synthetic members to inject into COM types. " +
+                       "Defaults to synthetic_members.json in the executable folder.")]
+        public string? SyntheticMemberPath { get; set; }
     }
 
     public static async Task<int> Main(string[] args)
@@ -52,6 +57,15 @@ public static class Program
             return 2;
         }
 
+        IReadOnlyList<SyntheticMemberSet> syntheticSets;
+        try {
+            syntheticSets = SyntheticMembersLoader.Load(options.SyntheticMemberPath);
+        }
+        catch (System.IO.FileNotFoundException ex) {
+            AnsiConsole.MarkupLineInterpolated($"[red]Synthetic members file not found: {ex.FileName}[/]");
+            return 1;
+        }
+
         var libFilters = new List<string>(options.Libs);
 
         if (options.Project != null) {
@@ -69,7 +83,7 @@ public static class Program
             return 0;
         }
 
-        bool anyFailed = await GenerateStubsWindows(libFilters, options.OutputDir, options.Arch, !options.IncludeComPlumbing);
+        bool anyFailed = await GenerateStubsWindows(libFilters, options.OutputDir, options.Arch, !options.IncludeComPlumbing, syntheticSets);
         return anyFailed ? 1 : 0;
     }
 
@@ -78,7 +92,8 @@ public static class Program
         IEnumerable<string> libFilters,
         string outputDir,
         string arch,
-        bool filterComPlumbing)
+        bool filterComPlumbing,
+        IReadOnlyList<SyntheticMemberSet> syntheticSets)
     {
         AnsiConsole.MarkupLine("[yellow]Querying COM type libraries...[/]");
 
@@ -103,6 +118,9 @@ public static class Program
         }
 
         var merged = LibraryMerger.Merge(x86Libs, x64Libs);
+
+        if (syntheticSets.Count > 0)
+            merged = SyntheticMembersApplicator.Apply(merged, syntheticSets);
 
         int resolved = 0, generated = 0;
         var reportLines = new List<string>();
