@@ -36,6 +36,8 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
                 SpecialType.System_Single  => CoerceNumericLiteral(node.Right,
                     v => v is double or int,
                     text => Literal(float.Parse(text))),
+                SpecialType.System_Int32   => CoerceUIntToInt(node.Right),
+                SpecialType.System_UInt32  => CoerceIntToUInt(node.Right),
                 _ => node.Right
             };
 
@@ -69,6 +71,72 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
         }
 
         return expr;
+    }
+
+    /// <summary>
+    /// When the RHS is a <c>uint</c> numeric literal (e.g. a hex literal like <c>0x80000010</c>
+    /// that overflows <c>int</c>) and the LHS is <c>int</c>, rewrite the literal to its
+    /// signed-integer equivalent.  For all values except <c>int.MinValue</c> this produces a
+    /// unary-minus expression wrapping the absolute value (e.g. <c>-2147483632</c>).  For the
+    /// single special case of <c>0x80000000</c> it emits the identifier <c>int.MinValue</c>.
+    /// </summary>
+    private static ExpressionSyntax CoerceUIntToInt(ExpressionSyntax expr)
+    {
+        if (expr is not LiteralExpressionSyntax lit
+            || !lit.IsKind(SyntaxKind.NumericLiteralExpression)
+            || lit.Token.Value is not uint uintVal)
+            return expr;
+
+        var intVal = unchecked((int)uintVal);
+
+        if (intVal == int.MinValue)
+        {
+            // -(2147483648) would make the inner literal uint, giving a long result.
+            // Emit int.MinValue instead.
+            return MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                PredefinedType(Token(lit.Token.LeadingTrivia, SyntaxKind.IntKeyword, TriviaList())),
+                IdentifierName(Identifier(TriviaList(), "MinValue", lit.Token.TrailingTrivia)));
+        }
+
+        // intVal is always negative here: uintVal > int.MaxValue implies intVal < 0.
+        // -intVal fits in int because intVal != int.MinValue.
+        var absLit = LiteralExpression(
+            SyntaxKind.NumericLiteralExpression,
+            Literal(-intVal).WithTrailingTrivia(lit.Token.TrailingTrivia));
+
+        return PrefixUnaryExpression(
+            SyntaxKind.UnaryMinusExpression,
+            Token(lit.Token.LeadingTrivia, SyntaxKind.MinusToken, TriviaList()),
+            absLit);
+    }
+
+    /// <summary>
+    /// Rewrites a negative int literal (or unary-minus wrapping a positive literal) to its
+    /// unsigned 32-bit equivalent when the LHS is <c>uint</c>.  For example <c>-2147483632</c>
+    /// becomes <c>2147483664</c> and <c>-1</c> becomes <c>4294967295</c>.
+    /// </summary>
+    private static ExpressionSyntax CoerceIntToUInt(ExpressionSyntax expr)
+    {
+        if (expr is not PrefixUnaryExpressionSyntax unary
+            || !unary.IsKind(SyntaxKind.UnaryMinusExpression)
+            || unary.Operand is not LiteralExpressionSyntax inner
+            || !inner.IsKind(SyntaxKind.NumericLiteralExpression))
+            return expr;
+
+        uint uintVal;
+        if (inner.Token.Value is int posInt && posInt > 0)
+            uintVal = unchecked((uint)(-posInt));
+        else if (inner.Token.Value is uint posUint)
+            // Handles -(2147483648) where the inner literal is already uint.
+            uintVal = unchecked((uint)(-(long)posUint));
+        else
+            return expr;
+
+        var newToken = Literal(uintVal.ToString(), uintVal)
+            .WithLeadingTrivia(unary.OperatorToken.LeadingTrivia)
+            .WithTrailingTrivia(inner.Token.TrailingTrivia);
+        return LiteralExpression(SyntaxKind.NumericLiteralExpression, newToken);
     }
 
     /// <summary>

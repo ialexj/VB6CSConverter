@@ -88,6 +88,56 @@ public class LiteralCoercionTests
         => CheckCoercion(
             "class T { float Width { get; set; } void M() { this.Width = 8.25F; } }");
 
+    // ── int (uint overflow literals) ──────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesUIntHexLiteralToInt()
+        => CheckCoercion(
+            "class T { int Flags { get; set; } void M() { this.Flags = 0x80000010; } }",
+            "class T { int Flags { get; set; } void M() { this.Flags = -2147483632; } }");
+
+    [TestMethod]
+    public void CoercesUIntHexLiteralMinValueToIntMinValue()
+        => CheckCoercion(
+            "class T { int Flags { get; set; } void M() { this.Flags = 0x80000000; } }",
+            "class T { int Flags { get; set; } void M() { this.Flags = int.MinValue; } }");
+
+    [TestMethod]
+    public void CoercesUIntMaxToInt()
+        => CheckCoercion(
+            "class T { int Flags { get; set; } void M() { this.Flags = 0xFFFFFFFF; } }",
+            "class T { int Flags { get; set; } void M() { this.Flags = -1; } }");
+
+    [TestMethod]
+    public void LeavesNonOverflowingHexIntUnchanged()
+        => CheckCoercion(
+            "class T { int Flags { get; set; } void M() { this.Flags = 0x7FFFFFFF; } }");
+
+    // ── uint (negative int literals) ─────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesNegativeIntToUInt()
+        => CheckCoercion(
+            "class T { uint Flags { get; set; } void M() { this.Flags = -2147483632; } }",
+            "class T { uint Flags { get; set; } void M() { this.Flags = 2147483664; } }");
+
+    [TestMethod]
+    public void CoercesNegativeOneToUIntMax()
+        => CheckCoercion(
+            "class T { uint Flags { get; set; } void M() { this.Flags = -1; } }",
+            "class T { uint Flags { get; set; } void M() { this.Flags = 4294967295; } }");
+
+    [TestMethod]
+    public void CoercesIntMinValueToUInt()
+        => CheckCoercion(
+            "class T { uint Flags { get; set; } void M() { this.Flags = -2147483648; } }",
+            "class T { uint Flags { get; set; } void M() { this.Flags = 2147483648; } }");
+
+    [TestMethod]
+    public void LeavesPositiveIntAssignedToUIntUnchanged()
+        => CheckCoercion(
+            "class T { uint Flags { get; set; } void M() { this.Flags = 42; } }");
+
     // ── untyped / other types unchanged ──────────────────────────────────────
 
     [TestMethod]
