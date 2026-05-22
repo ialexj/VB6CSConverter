@@ -114,7 +114,14 @@ public static class LibraryMerger
         };
     }
 
-    static IReadOnlyList<ComQueryMember>? MergeMembers(
+    /// <summary>
+    /// Returns a new <see cref="ComQueryType"/> with <paramref name="extra"/> members
+    /// merged in using the same union / type-specificity rules as the per-architecture merge.
+    /// </summary>
+    public static ComQueryType ApplySyntheticMembers(ComQueryType type, IReadOnlyList<ComQueryMember> extra)
+        => type with { Members = MergeMembers(type.Members, extra) };
+
+    internal static IReadOnlyList<ComQueryMember>? MergeMembers(
         IReadOnlyList<ComQueryMember>? x86Members,
         IReadOnlyList<ComQueryMember>? x64Members)
     {
