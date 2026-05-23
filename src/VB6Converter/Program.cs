@@ -126,29 +126,29 @@ public static class Program
             bool hasChanges;
             int count = 0;
             do {
+                // Reload from disk to avoid stale in-memory project state caused by
+                // parallel SaveDocument writes during the conversion phase (each
+                // thread's doc.Project snapshot only carries its own file's update,
+                // so the last writer wins and all other documents appear empty).
+                await ws.ReloadProject();
+
                 hasChanges = false;
                 Compilation compilation = null;
 
-                async Task RunRewriter(bool compile, string title, Func<ConversionTarget, SemanticModel, LoggedRewriter> rewriter)
+                async Task RunRewriter(bool compile, string title, Func<ConversionTarget, SemanticModel, Task<LoggedRewriter>> rewriter)
                 {
                     bool hasRewriterChanges = false;
                     do {
-                        // Reload from disk to avoid stale in-memory project state caused by
-                        // parallel SaveDocument writes during the conversion phase (each
-                        // thread's doc.Project snapshot only carries its own file's update,
-                        // so the last writer wins and all other documents appear empty).
-                        await ws.ReloadProject();
-
-                        if (compile && compilation is null || hasChanges) {
+                        if (compile && compilation is null || hasRewriterChanges || hasChanges) {
                             compilation = await CollectDiagnostics(ws, options.OutputDir);
                             PauseIfRequested(options.Pause);
                         }
 
                         hasRewriterChanges = await RunOperations(title, ws.ActiveTargets,
-                            (t, ctx, cancel) => ws.WithCompilationUnit(t, cancel, cu => {
+                            async (t, ctx, cancel) => await ws.WithCompilationUnit(t, cancel, async cu => {
                                 var sm = compilation?.GetSemanticModel(cu.SyntaxTree, true);
 
-                                var r = rewriter(t, sm);
+                                var r = await rewriter(t, sm);
                                 r.Progress = (current, total) => {
                                     ctx.IsIndeterminate = false;
                                     ctx.MaxValue = total;
@@ -157,8 +157,7 @@ public static class Program
 
                                 cu = (CompilationUnitSyntax)r.Visit(cu);
                                 cu = (CompilationUnitSyntax)new UsingsRewriter(t.Name).Visit(cu);
-
-                                return ValueTask.FromResult(cu);
+                                return cu;
                             }));
 
                         if (hasRewriterChanges) {
@@ -172,37 +171,28 @@ public static class Program
 
                 if (count == 0) {
                     // These rewrites work first time
-                    await RunRewriter(false, "Creating control singletons", (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
-                    await RunRewriter(false, "Fixing Foreach Variable", (t, sm) => new ForEachVariableRewriter());
+                    await RunRewriter(false, "Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
+                    await RunRewriter(false, "Fixing Foreach Variable", async(t, sm) => new ForEachVariableRewriter());
                 }
 
-                await RunRewriter(true, "Finding Types", (t, sm) => new TypeFinder(sm));
-                await RunRewriter(true, "Qualifying Ambiguous Types", (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
+                await RunRewriter(true, "Finding Types", async (t, sm) => new TypeFinder(sm));
+                await RunRewriter(true, "Qualifying Ambiguous Types", async (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
+                await RunRewriter(true, "Finding Members", async (t, sm) => new MemberFinder(sm));
 
-                await RunRewriter(true, "Finding Members", (t, sm) => new MemberFinder(sm));
-                await RunRewriter(true, "Disambiguate Array Access", (t, sm) => new ArrayCallDisambiguator(sm));
-                await RunRewriter(true, "Rewriting parameterized property setters", (t, sm) => new ParameterizedPropertyRewriter(sm));
+                await RunRewriter(true, "Rewriting bitwise Or/And", async (t, sm) => new BitwiseOrRewriter(sm));
+                await RunRewriter(true, "Disambiguate Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
+                await RunRewriter(true, "Rewriting parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
 
-                var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
+                await RunRewriter(false, "Refining Types", async (t, sm) => {
+                    var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
+                    await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
+                    return new TypeRefiner(varTypes);
+                });
 
-                if (compilation is null || hasChanges) {
-                    compilation = await GetCompilation(ws);
-                }
+                await RunRewriter(true, "Coercing Literals", async (t, sm) => new LiteralCoercionRewriter(sm));
+                await RunRewriter(true, "Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
 
-                await RunRewriter(true, "Rewriting bitwise Or/And", (t, sm) => new BitwiseOrRewriter(sm));
-
-                await RunOperations("Collecting Variables", ws.Targets,
-                    (t, ctx, cancel) => ws.WithCompilationUnit(t, cancel, async cu => {
-                        var sm = compilation.GetSemanticModel(cu.SyntaxTree, false);
-                        await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
-                        return cu;
-                    }));
-
-                await RunRewriter(true, "Refining Types", (t, sm) => new TypeRefiner(varTypes));
-                await RunRewriter(true, "Coercing Literals", (t, sm) => new LiteralCoercionRewriter(sm));
-                await RunRewriter(true, "Adding Type Casts", (t, sm) => new TypeCastRewriter(sm));
-
-                //await RunRewriter(true, "Rewriting DAO", (t, sm) => new DAORewriter(sm));
+                //await RunRewriter(true, "Rewriting DAO", async (t, sm) => new DAORewriter(sm));
 
                 if (hasChanges) {
                     count++;
