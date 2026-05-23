@@ -61,6 +61,9 @@ public static class Program
 
         [Option("pause", Required = false, HelpText = "Pause for user input after each diagnostics collection. Press any key to continue, Ctrl-C to stop.")]
         public bool Pause { get; set; }
+
+        [Option("split-lines", Default = 5000, HelpText = "Maximum lines per generated .cs file before splitting into numbered partial classes (0 = disabled). Designer files are never split.")]
+        public int SplitLines { get; set; } = 5000;
     }
 
     public static Task Main(string[] args)
@@ -115,6 +118,54 @@ public static class Program
                         var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
                         return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
                     }));
+
+                // Split Form/Control designer code into separate *.designer.cs partial classes
+                var formControlTargets = targetsThatNeedTranform
+                    .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
+                    .ToArray();
+                if (formControlTargets.Length > 0) {
+                    await RunOperations("Splitting designer files", formControlTargets, (t, ctx, cancel) =>
+                        ws.WithCompilationUnit(t, cancel, cu => {
+                            var (mainCu, designerCu) = DesignerFileSplitter.Split(cu);
+                            if (designerCu is not null)
+                                File.WriteAllText(t.DesignerOutputPath, designerCu.NormalizeWhitespace().ToFullString());
+                            return ValueTask.FromResult(mainCu);
+                        }));
+                }
+
+                // Split files that exceed the line budget into numbered partial classes
+                if (options.SplitLines > 0) {
+                    foreach (var t in targetsThatNeedTranform) {
+                        if (!File.Exists(t.OutputPath)) continue;
+
+                        var content = await File.ReadAllTextAsync(t.OutputPath);
+                        var cu = CSharpSyntaxTree.ParseText(content, path: t.OutputPath).GetCompilationUnitRoot();
+                        var chunks = LargeFileSplitter.Split(cu, options.SplitLines);
+                        if (chunks.Count <= 1) continue;
+
+                        var baseName = Path.GetFileNameWithoutExtension(t.OutputPath);
+                        var dir = Path.GetDirectoryName(t.OutputPath)!;
+
+                        // Remove numbered files left over from a previous run
+                        foreach (var f in Directory.GetFiles(dir, baseName + "*.cs")) {
+                            var stem = Path.GetFileNameWithoutExtension(f);
+                            if (stem.Length > baseName.Length && stem[baseName.Length..].All(char.IsDigit))
+                                File.Delete(f);
+                        }
+
+                        // Write each chunk and register it as a new conversion target
+                        var splitTargets = new List<ConversionTarget>(chunks.Count);
+                        for (int i = 0; i < chunks.Count; i++) {
+                            var name = baseName + (i + 1);
+                            var path = Path.Combine(dir, name + ".cs");
+                            await File.WriteAllTextAsync(path, chunks[i].NormalizeWhitespace().ToFullString());
+                            splitTargets.Add(ConversionTarget.CreateForSplit(name, path));
+                        }
+
+                        File.Delete(t.OutputPath);
+                        ws.ReplaceWithSplitParts(t, splitTargets);
+                    }
+                }
             }
             else {
                 AnsiConsole.MarkupLine("[yellow]Some files aren't yet fully converted.[/]");
@@ -186,7 +237,7 @@ public static class Program
                 await RunRewriter(true, "Disambiguate Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
                 await RunRewriter(true, "Rewriting parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
 
-                await RunRewriter(false, "Refining Types", async (t, sm) => {
+                await RunRewriter(true, "Refining Types", async (t, sm) => {
                     var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
                     await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
                     return new TypeRefiner(varTypes);
@@ -287,8 +338,12 @@ public static class Program
             RedirectStandardError = true,
         };
 
-        foreach (var name in excludeReferences)
-            psi.ArgumentList.Add($"--exclude-references={name}");
+        var excludeList = excludeReferences.ToList();
+        if (excludeList.Count > 0) {
+            psi.ArgumentList.Add("--exclude-references");
+            foreach (var name in excludeList)
+                psi.ArgumentList.Add(name);
+        }
 
         using var process = Process.Start(psi)!;
 

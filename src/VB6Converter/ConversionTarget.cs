@@ -22,6 +22,12 @@ public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
 
     public bool HasErrors => System.IO.File.Exists($"{OutputPath}.log");
 
+    public string DesignerOutputPath => Path.Combine(
+        Path.GetDirectoryName(OutputPath)!,
+        Path.GetFileNameWithoutExtension(OutputPath) + ".designer.cs");
+
+    public static ConversionTarget CreateForSplit(string name, string outputPath)
+        => new ConversionTarget(new VisualBasicProjectFile(outputPath, name, VisualBasicFileType.Module), outputPath);
 
     public static ConversionTarget Create(VisualBasicProjectFile file, string outDir, string projectBasePath)
     {
@@ -39,4 +45,4 @@ public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
         return new ConversionTarget(file, Path.Combine(outDir, outputRelativePath));
     }
 }
-  
+

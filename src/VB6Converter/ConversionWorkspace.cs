@@ -137,7 +137,7 @@ public sealed class ConversionWorkspace : IDisposable
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1068:CancellationToken parameters must come last", Justification = "This is a wrapper for a callback, which works best last.")]
     public async ValueTask<bool> WithCompilationUnit(
-        ConversionTarget target, CancellationToken cancel, 
+        ConversionTarget target, CancellationToken cancel,
         Func<CompilationUnitSyntax, ValueTask<CompilationUnitSyntax>> task)
     {
         var log = Log.ForFile(target.Name);
@@ -181,6 +181,17 @@ public sealed class ConversionWorkspace : IDisposable
 
     public IEnumerable<string> GetForms() => Targets.Where(t => t.File.Type == VisualBasicFileType.Form).Select(t => t.File.Name);
 
+    public void ReplaceWithSplitParts(ConversionTarget original, IReadOnlyList<ConversionTarget> parts)
+    {
+        var list = ActiveTargets.ToList();
+        int idx = list.IndexOf(original);
+        if (idx >= 0) {
+            list.RemoveAt(idx);
+            list.InsertRange(idx, parts);
+        }
+        ActiveTargets = list.AsReadOnly();
+    }
+
     Document GetOrCreateDocument(ConversionTarget target)
     {
         lock (_ws) {
@@ -193,7 +204,7 @@ public sealed class ConversionWorkspace : IDisposable
                 doc = Project.Documents.FirstOrDefault(d => string.IsNullOrEmpty(d.FilePath)
                     && string.Equals(d.Name, target.OutputDocumentName, StringComparison.CurrentCultureIgnoreCase));
             }
-            
+
             if (doc is null) {
                 doc = Project.AddDocument(target.OutputDocumentName, string.Empty, filePath: target.OutputPath);
                 Project = doc.Project;
