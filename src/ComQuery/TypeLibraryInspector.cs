@@ -115,10 +115,17 @@ public sealed class TypeLibraryInspector
         var types     = new List<ComQueryType>(typeCount);
         var discoveredDeps = new HashSet<ComQueryDiscoveredDep>();
 
+        // Any coclass in an .ocx/.oca file is an ActiveX control, regardless of whether
+        // the vendor set TYPEFLAG_FCONTROL (some older controls omit this flag).
+        // .oca files are VB6-generated cached type libraries derived from .ocx files.
+        string ext = Path.GetExtension(loadedFromPath);
+        bool isOcxLibrary = string.Equals(ext, ".ocx", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(ext, ".oca", StringComparison.OrdinalIgnoreCase);
+
         for (int i = 0; i < typeCount; i++) {
             ComQueryType? typeModel;
             try {
-                typeModel = InspectTypeInfo(typeLib, i, discoveredDeps);
+                typeModel = InspectTypeInfo(typeLib, i, discoveredDeps, isOcxLibrary);
             }
             catch (Exception ex) {
                 string typeName = TryGetTypeName(typeLib, i);
@@ -175,7 +182,8 @@ public sealed class TypeLibraryInspector
     static ComQueryType? InspectTypeInfo(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         int index,
-        HashSet<ComQueryDiscoveredDep> discoveredDeps)
+        HashSet<ComQueryDiscoveredDep> discoveredDeps,
+        bool isOcxLibrary = false)
     {
         typeLib.GetTypeInfo(index, out var typeInfo);
         if (typeInfo == null) return null;
@@ -237,7 +245,8 @@ public sealed class TypeLibraryInspector
             }
 
             bool isControl = kind == LibraryTypeKind.Class
-                && (typeAttr.wTypeFlags & System.Runtime.InteropServices.ComTypes.TYPEFLAGS.TYPEFLAG_FCONTROL) != 0;
+                && ((typeAttr.wTypeFlags & System.Runtime.InteropServices.ComTypes.TYPEFLAGS.TYPEFLAG_FCONTROL) != 0
+                    || isOcxLibrary);
 
             return new ComQueryType(
                 Name: typeName,
