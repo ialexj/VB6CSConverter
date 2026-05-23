@@ -491,20 +491,29 @@ public static class ReferenceStubGenerator
         if (innerIndexer == null) return null;
 
         string propName  = MakeSafeIdentifier(noParamDefault.Name);
-        string returnCsType = innerIndexer.ReturnType;
         var indexerParams   = BuildParameters(innerIndexer.Parameters).ToArray();
 
-        // Check whether the inner type also exposes a PropertySet for the same default member,
-        // which would make the forwarding indexer read/write (e.g. rs["MyField"] = value).
-        var innerSetter = (innerType.Members ?? []).FirstOrDefault(
-            m => m.Kind == LibraryMemberKind.PropertySet && m.IsDefault && m.Parameters.Count > 0);
+        // Recursively follow the no-param default property chain on the item type.
+        // e.g. Fields["key"] returns Field, and Field.Value (no-param DISPID 0) returns object,
+        // so the outer indexer on Recordset should return object, not Field.
+        string rawReturnType = innerIndexer.ReturnType;
+        string returnCsType  = ResolveDefaultChainType(rawReturnType, library);
+
+        // Determine whether the forwarding indexer should expose a setter.
+        // If we followed the chain one more step (e.g. Field → Field.Value), check for a
+        // no-param DISPID 0 PropertySet on the intermediate item type (Field).
+        // Otherwise fall back to looking for a parameterised DISPID 0 PropertySet on innerType.
+        bool hasSetter = returnCsType != rawReturnType
+            ? HasNoParamDefaultSetter(rawReturnType, library)
+            : (innerType.Members ?? []).Any(
+                  m => m.Kind == LibraryMemberKind.PropertySet && m.IsDefault && m.Parameters.Count > 0);
 
         var accessors = new List<AccessorDeclarationSyntax>();
         if (isForInterface) {
             accessors.Add(
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
-            if (innerSetter != null) {
+            if (hasSetter) {
                 accessors.Add(
                     AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
@@ -515,7 +524,7 @@ public static class ReferenceStubGenerator
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                     .WithExpressionBody(ThrowNotImplementedExprBody())
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
-            if (innerSetter != null) {
+            if (hasSetter) {
                 accessors.Add(
                     AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
                         .WithExpressionBody(ThrowNotImplementedExprBody())
@@ -680,6 +689,70 @@ public static class ReferenceStubGenerator
         }
 
         return syntax;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Default-property chain resolution helpers
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Follows the chain of no-parameter default properties (DISPID 0) starting from
+    /// <paramref name="typeName"/> until no further no-param default exists, and returns
+    /// the terminal return type.  This mirrors VB6's implicit default-member resolution:
+    /// <c>rs!SomeColumn</c> → <c>rs.Fields["SomeColumn"].Value</c>, where <c>.Value</c>
+    /// is the no-param default property of <c>Field</c>.
+    /// <para>
+    /// A visited-set guards against cycles in pathological type libraries.
+    /// </para>
+    /// </summary>
+    static string ResolveDefaultChainType(string typeName, ComQueryLibrary library)
+    {
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string current = typeName;
+
+        while (visited.Add(current)) {
+            string simple = current.Contains('.')
+                ? current[(current.LastIndexOf('.') + 1)..]
+                : current;
+
+            var resolvedType = (library.Types ?? []).FirstOrDefault(t =>
+                string.Equals(t.Name, simple, StringComparison.OrdinalIgnoreCase));
+            if (resolvedType == null) break;
+
+            var noParamDefault = (resolvedType.Members ?? []).FirstOrDefault(
+                m => m.Kind == LibraryMemberKind.PropertyGet && m.IsDefault && m.Parameters.Count == 0);
+            if (noParamDefault == null) break;
+
+            current = noParamDefault.ReturnType;
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the type identified by <paramref name="typeName"/>
+    /// exposes a writable no-index-parameter default property (DISPID 0 PropertySet).
+    /// <para>
+    /// A plain property setter (e.g. <c>Field.Value = x</c>) has exactly one parameter in the
+    /// COM type library — the value to assign — which is never an index.  We therefore accept
+    /// setters with zero or one parameters; setters with two or more parameters carry at least
+    /// one index parameter and belong to parameterised indexers, not plain default properties.
+    /// </para>
+    /// </summary>
+    static bool HasNoParamDefaultSetter(string typeName, ComQueryLibrary library)
+    {
+        string simple = typeName.Contains('.')
+            ? typeName[(typeName.LastIndexOf('.') + 1)..]
+            : typeName;
+
+        var resolvedType = (library.Types ?? []).FirstOrDefault(t =>
+            string.Equals(t.Name, simple, StringComparison.OrdinalIgnoreCase));
+        if (resolvedType == null) return false;
+
+        // Count <= 1: plain setters expose at most the one value-to-assign parameter;
+        // they do not carry any additional index parameters.
+        return (resolvedType.Members ?? []).Any(
+            m => m.Kind == LibraryMemberKind.PropertySet && m.IsDefault && m.Parameters.Count <= 1);
     }
 
     static ArrowExpressionClauseSyntax ThrowNotImplementedExprBody() =>
