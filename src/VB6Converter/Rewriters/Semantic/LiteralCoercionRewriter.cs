@@ -52,6 +52,88 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
             return base.VisitParameter(node);
         });
 
+    public override SyntaxNode VisitVariableDeclarator(VariableDeclaratorSyntax node)
+        => Rewrite(node, node =>
+        {
+            if (node.Initializer is null)
+                return base.VisitVariableDeclarator(node);
+
+            var symbol = semantics.GetDeclaredSymbol(node);
+            ITypeSymbol? varType = symbol switch
+            {
+                ILocalSymbol local   => local.Type,
+                IFieldSymbol field   => field.Type,
+                _ => null
+            };
+            if (varType is null)
+                return base.VisitVariableDeclarator(node);
+
+            var coerced = CoerceByType(node.Initializer.Value, varType);
+            if (!ReferenceEquals(coerced, node.Initializer.Value))
+                return node.WithInitializer(node.Initializer.WithValue(coerced));
+
+            return base.VisitVariableDeclarator(node);
+        });
+
+    public override SyntaxNode VisitReturnStatement(ReturnStatementSyntax node)
+        => Rewrite(node, node =>
+        {
+            if (node.Expression is null)
+                return base.VisitReturnStatement(node);
+
+            var enclosing = semantics.GetEnclosingSymbol(node.SpanStart);
+            ITypeSymbol? returnType = enclosing switch
+            {
+                IMethodSymbol   m => m.ReturnType,
+                IPropertySymbol p => p.Type,
+                _ => null
+            };
+            if (returnType is null)
+                return base.VisitReturnStatement(node);
+
+            var coerced = CoerceByType(node.Expression, returnType);
+            if (!ReferenceEquals(coerced, node.Expression))
+                return node.WithExpression(coerced);
+
+            return base.VisitReturnStatement(node);
+        });
+
+    public override SyntaxNode VisitArgument(ArgumentSyntax node)
+        => Rewrite(node, node =>
+        {
+            if (node.Parent is not ArgumentListSyntax list
+                || list.Parent is not InvocationExpressionSyntax invocation)
+                return base.VisitArgument(node);
+
+            var symbolInfo = semantics.GetSymbolInfo(invocation);
+            if ((symbolInfo.Symbol ?? symbolInfo.CandidateSymbols.FirstOrDefault())
+                    is not IMethodSymbol method)
+                return base.VisitArgument(node);
+
+            IParameterSymbol? paramSymbol;
+            if (node.NameColon is not null)
+            {
+                var name = node.NameColon.Name.Identifier.Text;
+                paramSymbol = method.Parameters.FirstOrDefault(p => p.Name == name);
+            }
+            else
+            {
+                int index = list.Arguments.IndexOf(node);
+                paramSymbol = index >= 0 && index < method.Parameters.Length
+                    ? method.Parameters[index]
+                    : null;
+            }
+
+            if (paramSymbol is null)
+                return base.VisitArgument(node);
+
+            var coerced = CoerceByType(node.Expression, paramSymbol.Type);
+            if (!ReferenceEquals(coerced, node.Expression))
+                return node.WithExpression(coerced);
+
+            return base.VisitArgument(node);
+        });
+
     private ExpressionSyntax CoerceByType(ExpressionSyntax expr, ITypeSymbol targetType)
     {
         if (targetType.TypeKind == TypeKind.Enum && targetType is INamedTypeSymbol enumType)

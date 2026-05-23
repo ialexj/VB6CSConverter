@@ -235,6 +235,105 @@ public class LiteralCoercionTests
         => CheckCoercion(
             "class T { void M(decimal d = 8.25M) { } }");
 
+    // ── variable initializers ────────────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesDecimalLocalInitializer()
+        => CheckCoercion(
+            "class T { void M() { decimal d = 8.25; } }",
+            "class T { void M() { decimal d = 8.25M; } }");
+
+    [TestMethod]
+    public void CoercesBoolLocalInitializer()
+        => CheckCoercion(
+            "class T { void M() { bool b = -1; } }",
+            "class T { void M() { bool b = true; } }");
+
+    [TestMethod]
+    public void CoercesDecimalFieldInitializer()
+        => CheckCoercion(
+            "class T { decimal _d = 8.25; }",
+            "class T { decimal _d = 8.25M; }");
+
+    [TestMethod]
+    public void CoercesEnumLocalInitializer()
+        => CheckCoercion(
+            "enum E { Off = 0, On = 1 } class T { void M() { E e = 1; } }",
+            "enum E { Off = 0, On = 1 } class T { void M() { E e = E.On; } }");
+
+    [TestMethod]
+    public void LeavesAlreadyCorrectLocalInitializerUnchanged()
+        => CheckCoercion(
+            "class T { void M() { decimal d = 8.25M; } }");
+
+    // ── return statements ─────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesDecimalReturnStatement()
+        => CheckCoercion(
+            "class T { decimal M() { return 8.25; } }",
+            "class T { decimal M() { return 8.25M; } }");
+
+    [TestMethod]
+    public void CoercesBoolReturnStatement()
+        => CheckCoercion(
+            "class T { bool M() { return -1; } }",
+            "class T { bool M() { return true; } }");
+
+    [TestMethod]
+    public void CoercesFloatReturnStatement()
+        => CheckCoercion(
+            "class T { float M() { return 8.25; } }",
+            "class T { float M() { return 8.25F; } }");
+
+    [TestMethod]
+    public void CoercesEnumReturnStatement()
+        => CheckCoercion(
+            "enum E { Off = 0, On = 1 } class T { E M() { return 1; } }",
+            "enum E { Off = 0, On = 1 } class T { E M() { return E.On; } }");
+
+    [TestMethod]
+    public void LeavesAlreadyCorrectReturnStatementUnchanged()
+        => CheckCoercion(
+            "class T { decimal M() { return 8.25M; } }");
+
+    // ── arguments ─────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesDecimalArgument()
+        => CheckCoercion(
+            "class T { void Take(decimal d) { } void M() { Take(8.25); } }",
+            "class T { void Take(decimal d) { } void M() { Take(8.25M); } }");
+
+    [TestMethod]
+    public void CoercesBoolArgument()
+        => CheckCoercion(
+            "class T { void Take(bool b) { } void M() { Take(-1); } }",
+            "class T { void Take(bool b) { } void M() { Take(true); } }");
+
+    [TestMethod]
+    public void CoercesFloatArgument()
+        => CheckCoercion(
+            "class T { void Take(float f) { } void M() { Take(8.25); } }",
+            "class T { void Take(float f) { } void M() { Take(8.25F); } }");
+
+    [TestMethod]
+    public void CoercesEnumArgument()
+        => CheckCoercion(
+            "enum E { Off = 0, On = 1 } class T { void Take(E e) { } void M() { Take(1); } }",
+            "enum E { Off = 0, On = 1 } class T { void Take(E e) { } void M() { Take(E.On); } }");
+
+    [TestMethod]
+    public void CoercesNamedArgument()
+        => CheckCoercion(
+            "class T { void Take(decimal d) { } void M() { Take(d: 8.25); } }",
+            "class T { void Take(decimal d) { } void M() { Take(d: 8.25M); } }");
+
+    [TestMethod]
+    public void LeavesAlreadyCorrectArgumentUnchanged()
+        => CheckCoercion(
+            "class T { void Take(decimal d) { } void M() { Take(8.25M); } }");
+
     // ── untyped / other types unchanged ──────────────────────────────────────
 
     [TestMethod]
