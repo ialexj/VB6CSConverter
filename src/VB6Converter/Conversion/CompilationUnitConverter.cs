@@ -62,6 +62,7 @@ public static class CompilationUnitConverter
             .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
             .WithStaticKeyword(Token(SyntaxKind.StaticKeyword)));
 
+
         return CompilationUnit([], List(usings), [], []);
     }
 }
