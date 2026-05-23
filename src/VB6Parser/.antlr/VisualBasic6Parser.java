@@ -1,4 +1,4 @@
-// Generated from c:/Users/aj/source/repos/VB6Converter/VB6Parser/VisualBasic6.g4 by ANTLR 4.13.1
+// Generated from c:/Users/aj/source/repos/VB6Converter/src/VB6Parser/VisualBasic6.g4 by ANTLR 4.13.1
 import org.antlr.v4.runtime.atn.*;
 import org.antlr.v4.runtime.dfa.DFA;
 import org.antlr.v4.runtime.*;
@@ -261,6 +261,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_startRule; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterStartRule(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitStartRule(this);
+		}
 	}
 
 	public final StartRuleContext startRule() throws RecognitionException {
@@ -321,6 +329,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_module; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModule(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModule(this);
+		}
 	}
 
 	public final ModuleContext module() throws RecognitionException {
@@ -576,6 +592,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleReferences; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleReferences(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleReferences(this);
+		}
 	}
 
 	public final ModuleReferencesContext moduleReferences() throws RecognitionException {
@@ -641,6 +665,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleReference; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleReference(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleReference(this);
+		}
 	}
 
 	public final ModuleReferenceContext moduleReference() throws RecognitionException {
@@ -735,6 +767,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleReferenceValue; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleReferenceValue(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleReferenceValue(this);
+		}
 	}
 
 	public final ModuleReferenceValueContext moduleReferenceValue() throws RecognitionException {
@@ -765,6 +805,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleReferenceComponent; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleReferenceComponent(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleReferenceComponent(this);
+		}
 	}
 
 	public final ModuleReferenceComponentContext moduleReferenceComponent() throws RecognitionException {
@@ -801,6 +849,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleHeader; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleHeader(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleHeader(this);
+		}
 	}
 
 	public final ModuleHeaderContext moduleHeader() throws RecognitionException {
@@ -859,6 +915,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleConfig; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleConfig(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleConfig(this);
+		}
 	}
 
 	public final ModuleConfigContext moduleConfig() throws RecognitionException {
@@ -958,6 +1022,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleConfigElement; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleConfigElement(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleConfigElement(this);
+		}
 	}
 
 	public final ModuleConfigElementContext moduleConfigElement() throws RecognitionException {
@@ -1024,6 +1096,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleAttributes; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleAttributes(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleAttributes(this);
+		}
 	}
 
 	public final ModuleAttributesContext moduleAttributes() throws RecognitionException {
@@ -1102,6 +1182,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleOptions; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleOptions(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleOptions(this);
+		}
 	}
 
 	public final ModuleOptionsContext moduleOptions() throws RecognitionException {
@@ -1180,6 +1268,14 @@ public class VisualBasic6Parser extends Parser {
 	public static class OptionExplicitStmtContext extends ModuleOptionContext {
 		public TerminalNode OPTION_EXPLICIT() { return getToken(VisualBasic6Parser.OPTION_EXPLICIT, 0); }
 		public OptionExplicitStmtContext(ModuleOptionContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOptionExplicitStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOptionExplicitStmt(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class OptionBaseStmtContext extends ModuleOptionContext {
@@ -1187,11 +1283,27 @@ public class VisualBasic6Parser extends Parser {
 		public TerminalNode WS() { return getToken(VisualBasic6Parser.WS, 0); }
 		public TerminalNode INTEGERLITERAL() { return getToken(VisualBasic6Parser.INTEGERLITERAL, 0); }
 		public OptionBaseStmtContext(ModuleOptionContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOptionBaseStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOptionBaseStmt(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class OptionPrivateModuleStmtContext extends ModuleOptionContext {
 		public TerminalNode OPTION_PRIVATE_MODULE() { return getToken(VisualBasic6Parser.OPTION_PRIVATE_MODULE, 0); }
 		public OptionPrivateModuleStmtContext(ModuleOptionContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOptionPrivateModuleStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOptionPrivateModuleStmt(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class OptionCompareStmtContext extends ModuleOptionContext {
@@ -1200,6 +1312,14 @@ public class VisualBasic6Parser extends Parser {
 		public TerminalNode BINARY() { return getToken(VisualBasic6Parser.BINARY, 0); }
 		public TerminalNode TEXT() { return getToken(VisualBasic6Parser.TEXT, 0); }
 		public OptionCompareStmtContext(ModuleOptionContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOptionCompareStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOptionCompareStmt(this);
+		}
 	}
 
 	public final ModuleOptionContext moduleOption() throws RecognitionException {
@@ -1289,6 +1409,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleBody; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleBody(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleBody(this);
+		}
 	}
 
 	public final ModuleBodyContext moduleBody() throws RecognitionException {
@@ -1390,6 +1518,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleBodyElement; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleBodyElement(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleBodyElement(this);
+		}
 	}
 
 	public final ModuleBodyElementContext moduleBodyElement() throws RecognitionException {
@@ -1532,6 +1668,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_controlProperties; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterControlProperties(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitControlProperties(this);
+		}
 	}
 
 	public final ControlPropertiesContext controlProperties() throws RecognitionException {
@@ -1652,6 +1796,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_cp_Properties; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCp_Properties(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCp_Properties(this);
+		}
 	}
 
 	public final Cp_PropertiesContext cp_Properties() throws RecognitionException {
@@ -1719,6 +1871,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_cp_SingleProperty; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCp_SingleProperty(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCp_SingleProperty(this);
+		}
 	}
 
 	public final Cp_SinglePropertyContext cp_SingleProperty() throws RecognitionException {
@@ -1852,6 +2012,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_cp_PropertyName; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCp_PropertyName(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCp_PropertyName(this);
+		}
 	}
 
 	public final Cp_PropertyNameContext cp_PropertyName() throws RecognitionException {
@@ -1949,6 +2117,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_cp_PropertyValue; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCp_PropertyValue(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCp_PropertyValue(this);
+		}
 	}
 
 	public final Cp_PropertyValueContext cp_PropertyValue() throws RecognitionException {
@@ -2046,6 +2222,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_cp_NestedProperty; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCp_NestedProperty(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCp_NestedProperty(this);
+		}
 	}
 
 	public final Cp_NestedPropertyContext cp_NestedProperty() throws RecognitionException {
@@ -2171,6 +2355,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_cp_ControlType; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCp_ControlType(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCp_ControlType(this);
+		}
 	}
 
 	public final Cp_ControlTypeContext cp_ControlType() throws RecognitionException {
@@ -2203,6 +2395,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_cp_ControlIdentifier; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCp_ControlIdentifier(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCp_ControlIdentifier(this);
+		}
 	}
 
 	public final Cp_ControlIdentifierContext cp_ControlIdentifier() throws RecognitionException {
@@ -2235,6 +2435,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_moduleBlock; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterModuleBlock(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitModuleBlock(this);
+		}
 	}
 
 	public final ModuleBlockContext moduleBlock() throws RecognitionException {
@@ -2283,6 +2491,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_attributeStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterAttributeStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitAttributeStmt(this);
+		}
 	}
 
 	public final AttributeStmtContext attributeStmt() throws RecognitionException {
@@ -2394,6 +2610,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_block; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterBlock(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitBlock(this);
+		}
 	}
 
 	public final BlockContext block() throws RecognitionException {
@@ -2678,6 +2902,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_blockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterBlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitBlockStmt(this);
+		}
 	}
 
 	public final BlockStmtContext blockStmt() throws RecognitionException {
@@ -3139,6 +3371,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_appActivateStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterAppActivateStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitAppActivateStmt(this);
+		}
 	}
 
 	public final AppActivateStmtContext appActivateStmt() throws RecognitionException {
@@ -3206,6 +3446,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_beepStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterBeepStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitBeepStmt(this);
+		}
 	}
 
 	public final BeepStmtContext beepStmt() throws RecognitionException {
@@ -3240,6 +3488,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_chDirStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterChDirStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitChDirStmt(this);
+		}
 	}
 
 	public final ChDirStmtContext chDirStmt() throws RecognitionException {
@@ -3278,6 +3534,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_chDriveStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterChDriveStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitChDriveStmt(this);
+		}
 	}
 
 	public final ChDriveStmtContext chDriveStmt() throws RecognitionException {
@@ -3326,6 +3590,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_closeStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCloseStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCloseStmt(this);
+		}
 	}
 
 	public final CloseStmtContext closeStmt() throws RecognitionException {
@@ -3425,6 +3697,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_constStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterConstStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitConstStmt(this);
+		}
 	}
 
 	public final ConstStmtContext constStmt() throws RecognitionException {
@@ -3527,6 +3807,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_constSubStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterConstSubStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitConstSubStmt(this);
+		}
 	}
 
 	public final ConstSubStmtContext constSubStmt() throws RecognitionException {
@@ -3604,6 +3892,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_commentStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCommentStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCommentStmt(this);
+		}
 	}
 
 	public final CommentStmtContext commentStmt() throws RecognitionException {
@@ -3642,6 +3938,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_dateStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterDateStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitDateStmt(this);
+		}
 	}
 
 	public final DateStmtContext dateStmt() throws RecognitionException {
@@ -3727,6 +4031,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_declareStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterDeclareStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitDeclareStmt(this);
+		}
 	}
 
 	public final DeclareStmtContext declareStmt() throws RecognitionException {
@@ -3895,6 +4207,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_deftypeStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterDeftypeStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitDeftypeStmt(this);
+		}
 	}
 
 	public final DeftypeStmtContext deftypeStmt() throws RecognitionException {
@@ -3991,6 +4311,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_deleteSettingStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterDeleteSettingStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitDeleteSettingStmt(this);
+		}
 	}
 
 	public final DeleteSettingStmtContext deleteSettingStmt() throws RecognitionException {
@@ -4099,6 +4427,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_doLoopStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterDoLoopStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitDoLoopStmt(this);
+		}
 	}
 
 	public final DoLoopStmtContext doLoopStmt() throws RecognitionException {
@@ -4296,6 +4632,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_endStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterEndStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitEndStmt(this);
+		}
 	}
 
 	public final EndStmtContext endStmt() throws RecognitionException {
@@ -4347,6 +4691,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_enumerationStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterEnumerationStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitEnumerationStmt(this);
+		}
 	}
 
 	public final EnumerationStmtContext enumerationStmt() throws RecognitionException {
@@ -4438,6 +4790,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_enumerationStmt_Constant; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterEnumerationStmt_Constant(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitEnumerationStmt_Constant(this);
+		}
 	}
 
 	public final EnumerationStmt_ConstantContext enumerationStmt_Constant() throws RecognitionException {
@@ -4529,6 +4889,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_eraseStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterEraseStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitEraseStmt(this);
+		}
 	}
 
 	public final EraseStmtContext eraseStmt() throws RecognitionException {
@@ -4607,6 +4975,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_errorStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterErrorStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitErrorStmt(this);
+		}
 	}
 
 	public final ErrorStmtContext errorStmt() throws RecognitionException {
@@ -4654,6 +5030,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_eventStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterEventStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitEventStmt(this);
+		}
 	}
 
 	public final EventStmtContext eventStmt() throws RecognitionException {
@@ -4717,6 +5101,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_exitStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterExitStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitExitStmt(this);
+		}
 	}
 
 	public final ExitStmtContext exitStmt() throws RecognitionException {
@@ -4767,6 +5159,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_filecopyStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterFilecopyStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitFilecopyStmt(this);
+		}
 	}
 
 	public final FilecopyStmtContext filecopyStmt() throws RecognitionException {
@@ -4852,6 +5252,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_forEachStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterForEachStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitForEachStmt(this);
+		}
 	}
 
 	public final ForEachStmtContext forEachStmt() throws RecognitionException {
@@ -4997,6 +5405,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_forNextStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterForNextStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitForNextStmt(this);
+		}
 	}
 
 	public final ForNextStmtContext forNextStmt() throws RecognitionException {
@@ -5189,6 +5605,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_functionStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterFunctionStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitFunctionStmt(this);
+		}
 	}
 
 	public final FunctionStmtContext functionStmt() throws RecognitionException {
@@ -5334,6 +5758,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_getStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterGetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitGetStmt(this);
+		}
 	}
 
 	public final GetStmtContext getStmt() throws RecognitionException {
@@ -5429,6 +5861,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_goSubStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterGoSubStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitGoSubStmt(this);
+		}
 	}
 
 	public final GoSubStmtContext goSubStmt() throws RecognitionException {
@@ -5467,6 +5907,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_goToStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterGoToStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitGoToStmt(this);
+		}
 	}
 
 	public final GoToStmtContext goToStmt() throws RecognitionException {
@@ -5522,6 +5970,14 @@ public class VisualBasic6Parser extends Parser {
 			return getRuleContext(IfElseBlockStmtContext.class,0);
 		}
 		public BlockIfThenElseContext(IfThenElseStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterBlockIfThenElse(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitBlockIfThenElse(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class InlineIfThenElseContext extends IfThenElseStmtContext {
@@ -5542,6 +5998,14 @@ public class VisualBasic6Parser extends Parser {
 		}
 		public TerminalNode ELSE() { return getToken(VisualBasic6Parser.ELSE, 0); }
 		public InlineIfThenElseContext(IfThenElseStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterInlineIfThenElse(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitInlineIfThenElse(this);
+		}
 	}
 
 	public final IfThenElseStmtContext ifThenElseStmt() throws RecognitionException {
@@ -5651,6 +6115,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_ifInlineBlockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterIfInlineBlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitIfInlineBlockStmt(this);
+		}
 	}
 
 	public final IfInlineBlockStmtContext ifInlineBlockStmt() throws RecognitionException {
@@ -5716,6 +6188,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_ifBlockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterIfBlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitIfBlockStmt(this);
+		}
 	}
 
 	public final IfBlockStmtContext ifBlockStmt() throws RecognitionException {
@@ -5805,6 +6285,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_ifConditionStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterIfConditionStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitIfConditionStmt(this);
+		}
 	}
 
 	public final IfConditionStmtContext ifConditionStmt() throws RecognitionException {
@@ -5851,6 +6339,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_ifElseIfBlockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterIfElseIfBlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitIfElseIfBlockStmt(this);
+		}
 	}
 
 	public final IfElseIfBlockStmtContext ifElseIfBlockStmt() throws RecognitionException {
@@ -5946,6 +6442,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_ifElseBlockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterIfElseBlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitIfElseBlockStmt(this);
+		}
 	}
 
 	public final IfElseBlockStmtContext ifElseBlockStmt() throws RecognitionException {
@@ -6029,6 +6533,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_implementsStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterImplementsStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitImplementsStmt(this);
+		}
 	}
 
 	public final ImplementsStmtContext implementsStmt() throws RecognitionException {
@@ -6077,6 +6589,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_inputStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterInputStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitInputStmt(this);
+		}
 	}
 
 	public final InputStmtContext inputStmt() throws RecognitionException {
@@ -6159,6 +6679,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_killStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterKillStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitKillStmt(this);
+		}
 	}
 
 	public final KillStmtContext killStmt() throws RecognitionException {
@@ -6206,6 +6734,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_letStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterLetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitLetStmt(this);
+		}
 	}
 
 	public final LetStmtContext letStmt() throws RecognitionException {
@@ -6292,6 +6828,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_lineInputStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterLineInputStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitLineInputStmt(this);
+		}
 	}
 
 	public final LineInputStmtContext lineInputStmt() throws RecognitionException {
@@ -6355,6 +6899,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_loadStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterLoadStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitLoadStmt(this);
+		}
 	}
 
 	public final LoadStmtContext loadStmt() throws RecognitionException {
@@ -6401,6 +6953,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_lockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterLockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitLockStmt(this);
+		}
 	}
 
 	public final LockStmtContext lockStmt() throws RecognitionException {
@@ -6495,6 +7055,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_lsetStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterLsetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitLsetStmt(this);
+		}
 	}
 
 	public final LsetStmtContext lsetStmt() throws RecognitionException {
@@ -6565,6 +7133,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_macroConstStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterMacroConstStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitMacroConstStmt(this);
+		}
 	}
 
 	public final MacroConstStmtContext macroConstStmt() throws RecognitionException {
@@ -6636,6 +7212,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_macroIfThenElseStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterMacroIfThenElseStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitMacroIfThenElseStmt(this);
+		}
 	}
 
 	public final MacroIfThenElseStmtContext macroIfThenElseStmt() throws RecognitionException {
@@ -6708,6 +7292,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_macroIfBlockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterMacroIfBlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitMacroIfBlockStmt(this);
+		}
 	}
 
 	public final MacroIfBlockStmtContext macroIfBlockStmt() throws RecognitionException {
@@ -6800,6 +7392,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_macroElseIfBlockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterMacroElseIfBlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitMacroElseIfBlockStmt(this);
+		}
 	}
 
 	public final MacroElseIfBlockStmtContext macroElseIfBlockStmt() throws RecognitionException {
@@ -6884,6 +7484,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_macroElseBlockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterMacroElseBlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitMacroElseBlockStmt(this);
+		}
 	}
 
 	public final MacroElseBlockStmtContext macroElseBlockStmt() throws RecognitionException {
@@ -6962,6 +7570,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_midStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterMidStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitMidStmt(this);
+		}
 	}
 
 	public final MidStmtContext midStmt() throws RecognitionException {
@@ -7033,6 +7649,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_mkdirStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterMkdirStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitMkdirStmt(this);
+		}
 	}
 
 	public final MkdirStmtContext mkdirStmt() throws RecognitionException {
@@ -7078,6 +7702,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_nameStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterNameStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitNameStmt(this);
+		}
 	}
 
 	public final NameStmtContext nameStmt() throws RecognitionException {
@@ -7132,6 +7764,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_onErrorStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOnErrorStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOnErrorStmt(this);
+		}
 	}
 
 	public final OnErrorStmtContext onErrorStmt() throws RecognitionException {
@@ -7224,6 +7864,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_onGoToStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOnGoToStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOnGoToStmt(this);
+		}
 	}
 
 	public final OnGoToStmtContext onGoToStmt() throws RecognitionException {
@@ -7321,6 +7969,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_onGoSubStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOnGoSubStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOnGoSubStmt(this);
+		}
 	}
 
 	public final OnGoSubStmtContext onGoSubStmt() throws RecognitionException {
@@ -7430,6 +8086,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_openStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOpenStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOpenStmt(this);
+		}
 	}
 
 	public final OpenStmtContext openStmt() throws RecognitionException {
@@ -7586,6 +8250,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_outputList; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOutputList(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOutputList(this);
+		}
 	}
 
 	public final OutputListContext outputList() throws RecognitionException {
@@ -7764,6 +8436,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_outputList_Expression; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterOutputList_Expression(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitOutputList_Expression(this);
+		}
 	}
 
 	public final OutputList_ExpressionContext outputList_Expression() throws RecognitionException {
@@ -7871,6 +8551,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_printStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterPrintStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitPrintStmt(this);
+		}
 	}
 
 	public final PrintStmtContext printStmt() throws RecognitionException {
@@ -7966,6 +8654,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_propertyGetStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterPropertyGetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitPropertyGetStmt(this);
+		}
 	}
 
 	public final PropertyGetStmtContext propertyGetStmt() throws RecognitionException {
@@ -8129,6 +8825,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_propertySetStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterPropertySetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitPropertySetStmt(this);
+		}
 	}
 
 	public final PropertySetStmtContext propertySetStmt() throws RecognitionException {
@@ -8270,6 +8974,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_propertyLetStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterPropertyLetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitPropertyLetStmt(this);
+		}
 	}
 
 	public final PropertyLetStmtContext propertyLetStmt() throws RecognitionException {
@@ -8403,6 +9115,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_putStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterPutStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitPutStmt(this);
+		}
 	}
 
 	public final PutStmtContext putStmt() throws RecognitionException {
@@ -8506,6 +9226,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_raiseEventStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterRaiseEventStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitRaiseEventStmt(this);
+		}
 	}
 
 	public final RaiseEventStmtContext raiseEventStmt() throws RecognitionException {
@@ -8597,6 +9325,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_randomizeStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterRandomizeStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitRandomizeStmt(this);
+		}
 	}
 
 	public final RandomizeStmtContext randomizeStmt() throws RecognitionException {
@@ -8654,6 +9390,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_redimStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterRedimStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitRedimStmt(this);
+		}
 	}
 
 	public final RedimStmtContext redimStmt() throws RecognitionException {
@@ -8754,6 +9498,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_redimSubStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterRedimSubStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitRedimSubStmt(this);
+		}
 	}
 
 	public final RedimSubStmtContext redimSubStmt() throws RecognitionException {
@@ -8833,6 +9585,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_resetStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterResetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitResetStmt(this);
+		}
 	}
 
 	public final ResetStmtContext resetStmt() throws RecognitionException {
@@ -8869,6 +9629,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_resumeStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterResumeStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitResumeStmt(this);
+		}
 	}
 
 	public final ResumeStmtContext resumeStmt() throws RecognitionException {
@@ -8931,6 +9699,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_returnStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterReturnStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitReturnStmt(this);
+		}
 	}
 
 	public final ReturnStmtContext returnStmt() throws RecognitionException {
@@ -8965,6 +9741,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_rmdirStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterRmdirStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitRmdirStmt(this);
+		}
 	}
 
 	public final RmdirStmtContext rmdirStmt() throws RecognitionException {
@@ -9010,6 +9794,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_rsetStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterRsetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitRsetStmt(this);
+		}
 	}
 
 	public final RsetStmtContext rsetStmt() throws RecognitionException {
@@ -9080,6 +9872,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_savepictureStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSavepictureStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSavepictureStmt(this);
+		}
 	}
 
 	public final SavepictureStmtContext savepictureStmt() throws RecognitionException {
@@ -9153,6 +9953,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_saveSettingStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSaveSettingStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSaveSettingStmt(this);
+		}
 	}
 
 	public final SaveSettingStmtContext saveSettingStmt() throws RecognitionException {
@@ -9271,6 +10079,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_seekStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSeekStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSeekStmt(this);
+		}
 	}
 
 	public final SeekStmtContext seekStmt() throws RecognitionException {
@@ -9349,6 +10165,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_selectCaseStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSelectCaseStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSelectCaseStmt(this);
+		}
 	}
 
 	public final SelectCaseStmtContext selectCaseStmt() throws RecognitionException {
@@ -9445,6 +10269,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_sC_Case; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSC_Case(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSC_Case(this);
+		}
 	}
 
 	public final SC_CaseContext sC_Case() throws RecognitionException {
@@ -9602,11 +10434,27 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public CaseCondExprContext(SC_CondContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCaseCondExpr(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCaseCondExpr(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class CaseCondElseContext extends SC_CondContext {
 		public TerminalNode ELSE() { return getToken(VisualBasic6Parser.ELSE, 0); }
 		public CaseCondElseContext(SC_CondContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCaseCondElse(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCaseCondElse(this);
+		}
 	}
 
 	public final SC_CondContext sC_Cond() throws RecognitionException {
@@ -9703,6 +10551,14 @@ public class VisualBasic6Parser extends Parser {
 			return getRuleContext(ValueStmtContext.class,0);
 		}
 		public CaseCondExprValueContext(SC_CondExprContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCaseCondExprValue(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCaseCondExprValue(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class CaseCondExprIsContext extends SC_CondExprContext {
@@ -9718,6 +10574,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public CaseCondExprIsContext(SC_CondExprContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCaseCondExprIs(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCaseCondExprIs(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class CaseCondExprToContext extends SC_CondExprContext {
@@ -9733,6 +10597,14 @@ public class VisualBasic6Parser extends Parser {
 		}
 		public TerminalNode TO() { return getToken(VisualBasic6Parser.TO, 0); }
 		public CaseCondExprToContext(SC_CondExprContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCaseCondExprTo(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCaseCondExprTo(this);
+		}
 	}
 
 	public final SC_CondExprContext sC_CondExpr() throws RecognitionException {
@@ -9830,6 +10702,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_sendkeysStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSendkeysStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSendkeysStmt(this);
+		}
 	}
 
 	public final SendkeysStmtContext sendkeysStmt() throws RecognitionException {
@@ -9908,6 +10788,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_setattrStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSetattrStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSetattrStmt(this);
+		}
 	}
 
 	public final SetattrStmtContext setattrStmt() throws RecognitionException {
@@ -9978,6 +10866,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_setStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSetStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSetStmt(this);
+		}
 	}
 
 	public final SetStmtContext setStmt() throws RecognitionException {
@@ -10037,6 +10933,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_stopStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterStopStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitStopStmt(this);
+		}
 	}
 
 	public final StopStmtContext stopStmt() throws RecognitionException {
@@ -10089,6 +10993,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_subStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSubStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSubStmt(this);
+		}
 	}
 
 	public final SubStmtContext subStmt() throws RecognitionException {
@@ -10216,6 +11128,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_timeStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterTimeStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitTimeStmt(this);
+		}
 	}
 
 	public final TimeStmtContext timeStmt() throws RecognitionException {
@@ -10292,6 +11212,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_typeStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterTypeStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitTypeStmt(this);
+		}
 	}
 
 	public final TypeStmtContext typeStmt() throws RecognitionException {
@@ -10387,6 +11315,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_typeStmt_Element; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterTypeStmt_Element(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitTypeStmt_Element(this);
+		}
 	}
 
 	public final TypeStmt_ElementContext typeStmt_Element() throws RecognitionException {
@@ -10507,6 +11443,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_typeOfStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterTypeOfStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitTypeOfStmt(this);
+		}
 	}
 
 	public final TypeOfStmtContext typeOfStmt() throws RecognitionException {
@@ -10561,6 +11505,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_unloadStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterUnloadStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitUnloadStmt(this);
+		}
 	}
 
 	public final UnloadStmtContext unloadStmt() throws RecognitionException {
@@ -10607,6 +11559,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_unlockStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterUnlockStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitUnlockStmt(this);
+		}
 	}
 
 	public final UnlockStmtContext unlockStmt() throws RecognitionException {
@@ -10714,6 +11674,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.COMMA, i);
 		}
 		public VsStructContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsStruct(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsStruct(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsAddContext extends ValueStmtContext {
@@ -10729,6 +11697,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsAddContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsAdd(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsAdd(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsLtContext extends ValueStmtContext {
@@ -10744,6 +11720,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsLtContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsLt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsLt(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsAddressOfContext extends ValueStmtContext {
@@ -10753,6 +11737,14 @@ public class VisualBasic6Parser extends Parser {
 			return getRuleContext(ValueStmtContext.class,0);
 		}
 		public VsAddressOfContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsAddressOf(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsAddressOf(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsNewContext extends ValueStmtContext {
@@ -10762,6 +11754,14 @@ public class VisualBasic6Parser extends Parser {
 			return getRuleContext(ValueStmtContext.class,0);
 		}
 		public VsNewContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsNew(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsNew(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsMultContext extends ValueStmtContext {
@@ -10777,6 +11777,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsMultContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsMult(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsMult(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsNegationContext extends ValueStmtContext {
@@ -10786,6 +11794,14 @@ public class VisualBasic6Parser extends Parser {
 		}
 		public TerminalNode WS() { return getToken(VisualBasic6Parser.WS, 0); }
 		public VsNegationContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsNegation(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsNegation(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsAssignContext extends ValueStmtContext {
@@ -10801,6 +11817,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsAssignContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsAssign(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsAssign(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsDivContext extends ValueStmtContext {
@@ -10816,6 +11840,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsDivContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsDiv(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsDiv(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsLikeContext extends ValueStmtContext {
@@ -10831,6 +11863,14 @@ public class VisualBasic6Parser extends Parser {
 		}
 		public TerminalNode LIKE() { return getToken(VisualBasic6Parser.LIKE, 0); }
 		public VsLikeContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsLike(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsLike(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsPlusContext extends ValueStmtContext {
@@ -10840,6 +11880,14 @@ public class VisualBasic6Parser extends Parser {
 		}
 		public TerminalNode WS() { return getToken(VisualBasic6Parser.WS, 0); }
 		public VsPlusContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsPlus(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsPlus(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsNotContext extends ValueStmtContext {
@@ -10854,6 +11902,14 @@ public class VisualBasic6Parser extends Parser {
 		public TerminalNode LPAREN() { return getToken(VisualBasic6Parser.LPAREN, 0); }
 		public TerminalNode RPAREN() { return getToken(VisualBasic6Parser.RPAREN, 0); }
 		public VsNotContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsNot(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsNot(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsGeqContext extends ValueStmtContext {
@@ -10869,6 +11925,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsGeqContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsGeq(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsGeq(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsTypeOfContext extends ValueStmtContext {
@@ -10876,6 +11940,14 @@ public class VisualBasic6Parser extends Parser {
 			return getRuleContext(TypeOfStmtContext.class,0);
 		}
 		public VsTypeOfContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsTypeOf(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsTypeOf(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsICSContext extends ValueStmtContext {
@@ -10883,6 +11955,14 @@ public class VisualBasic6Parser extends Parser {
 			return getRuleContext(ImplicitCallStmt_InStmtContext.class,0);
 		}
 		public VsICSContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsICS(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsICS(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsNeqContext extends ValueStmtContext {
@@ -10898,6 +11978,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsNeqContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsNeq(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsNeq(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsXorContext extends ValueStmtContext {
@@ -10913,6 +12001,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsXorContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsXor(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsXor(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsAndContext extends ValueStmtContext {
@@ -10928,6 +12024,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsAndContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsAnd(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsAnd(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsPowContext extends ValueStmtContext {
@@ -10943,6 +12047,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsPowContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsPow(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsPow(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsLeqContext extends ValueStmtContext {
@@ -10958,6 +12070,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsLeqContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsLeq(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsLeq(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsIsContext extends ValueStmtContext {
@@ -10973,6 +12093,14 @@ public class VisualBasic6Parser extends Parser {
 		}
 		public TerminalNode IS() { return getToken(VisualBasic6Parser.IS, 0); }
 		public VsIsContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsIs(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsIs(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsModContext extends ValueStmtContext {
@@ -10988,6 +12116,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsModContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsMod(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsMod(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsAmpContext extends ValueStmtContext {
@@ -11003,6 +12139,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsAmpContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsAmp(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsAmp(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsOrContext extends ValueStmtContext {
@@ -11018,6 +12162,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsOrContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsOr(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsOr(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsMinusContext extends ValueStmtContext {
@@ -11033,6 +12185,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsMinusContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsMinus(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsMinus(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsLiteralContext extends ValueStmtContext {
@@ -11040,6 +12200,14 @@ public class VisualBasic6Parser extends Parser {
 			return getRuleContext(LiteralContext.class,0);
 		}
 		public VsLiteralContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsLiteral(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsLiteral(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsEqvContext extends ValueStmtContext {
@@ -11055,6 +12223,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsEqvContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsEqv(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsEqv(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsImpContext extends ValueStmtContext {
@@ -11070,6 +12246,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsImpContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsImp(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsImp(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsGtContext extends ValueStmtContext {
@@ -11085,6 +12269,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsGtContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsGt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsGt(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsEqContext extends ValueStmtContext {
@@ -11100,6 +12292,14 @@ public class VisualBasic6Parser extends Parser {
 			return getToken(VisualBasic6Parser.WS, i);
 		}
 		public VsEqContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsEq(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsEq(this);
+		}
 	}
 	@SuppressWarnings("CheckReturnValue")
 	public static class VsMidContext extends ValueStmtContext {
@@ -11107,6 +12307,14 @@ public class VisualBasic6Parser extends Parser {
 			return getRuleContext(MidStmtContext.class,0);
 		}
 		public VsMidContext(ValueStmtContext ctx) { copyFrom(ctx); }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVsMid(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVsMid(this);
+		}
 	}
 
 	public final ValueStmtContext valueStmt() throws RecognitionException {
@@ -12050,6 +13258,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_variableStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVariableStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVariableStmt(this);
+		}
 	}
 
 	public final VariableStmtContext variableStmt() throws RecognitionException {
@@ -12134,6 +13350,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_variableListStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVariableListStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVariableListStmt(this);
+		}
 	}
 
 	public final VariableListStmtContext variableListStmt() throws RecognitionException {
@@ -12221,6 +13445,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_variableSubStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVariableSubStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVariableSubStmt(this);
+		}
 	}
 
 	public final VariableSubStmtContext variableSubStmt() throws RecognitionException {
@@ -12351,6 +13583,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_whileWendStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterWhileWendStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitWhileWendStmt(this);
+		}
 	}
 
 	public final WhileWendStmtContext whileWendStmt() throws RecognitionException {
@@ -12450,6 +13690,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_widthStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterWidthStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitWidthStmt(this);
+		}
 	}
 
 	public final WidthStmtContext widthStmt() throws RecognitionException {
@@ -12525,6 +13773,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_withStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterWithStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitWithStmt(this);
+		}
 	}
 
 	public final WithStmtContext withStmt() throws RecognitionException {
@@ -12623,6 +13879,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_writeStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterWriteStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitWriteStmt(this);
+		}
 	}
 
 	public final WriteStmtContext writeStmt() throws RecognitionException {
@@ -12695,6 +13959,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_explicitCallStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterExplicitCallStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitExplicitCallStmt(this);
+		}
 	}
 
 	public final ExplicitCallStmtContext explicitCallStmt() throws RecognitionException {
@@ -12753,6 +14025,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_eCS_ProcedureCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterECS_ProcedureCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitECS_ProcedureCall(this);
+		}
 	}
 
 	public final ECS_ProcedureCallContext eCS_ProcedureCall() throws RecognitionException {
@@ -12861,6 +14141,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_eCS_MemberProcedureCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterECS_MemberProcedureCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitECS_MemberProcedureCall(this);
+		}
 	}
 
 	public final ECS_MemberProcedureCallContext eCS_MemberProcedureCall() throws RecognitionException {
@@ -12977,6 +14265,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_implicitCallStmt_InBlock; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterImplicitCallStmt_InBlock(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitImplicitCallStmt_InBlock(this);
+		}
 	}
 
 	public final ImplicitCallStmt_InBlockContext implicitCallStmt_InBlock() throws RecognitionException {
@@ -13026,6 +14322,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_iCS_B_ProcedureCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterICS_B_ProcedureCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitICS_B_ProcedureCall(this);
+		}
 	}
 
 	public final ICS_B_ProcedureCallContext iCS_B_ProcedureCall() throws RecognitionException {
@@ -13084,6 +14388,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_iCS_B_MemberProcedureCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterICS_B_MemberProcedureCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitICS_B_MemberProcedureCall(this);
+		}
 	}
 
 	public final ICS_B_MemberProcedureCallContext iCS_B_MemberProcedureCall() throws RecognitionException {
@@ -13169,6 +14481,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_implicitCallStmt_InStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterImplicitCallStmt_InStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitImplicitCallStmt_InStmt(this);
+		}
 	}
 
 	public final ImplicitCallStmt_InStmtContext implicitCallStmt_InStmt() throws RecognitionException {
@@ -13234,6 +14554,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_iCS_S_VariableOrProcedureCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterICS_S_VariableOrProcedureCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitICS_S_VariableOrProcedureCall(this);
+		}
 	}
 
 	public final ICS_S_VariableOrProcedureCallContext iCS_S_VariableOrProcedureCall() throws RecognitionException {
@@ -13316,6 +14644,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_iCS_S_ProcedureOrArrayCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterICS_S_ProcedureOrArrayCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitICS_S_ProcedureOrArrayCall(this);
+		}
 	}
 
 	public final ICS_S_ProcedureOrArrayCallContext iCS_S_ProcedureOrArrayCall() throws RecognitionException {
@@ -13464,6 +14800,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_iCS_S_NestedProcedureCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterICS_S_NestedProcedureCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitICS_S_NestedProcedureCall(this);
+		}
 	}
 
 	public final ICS_S_NestedProcedureCallContext iCS_S_NestedProcedureCall() throws RecognitionException {
@@ -13563,6 +14907,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_iCS_S_MembersCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterICS_S_MembersCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitICS_S_MembersCall(this);
+		}
 	}
 
 	public final ICS_S_MembersCallContext iCS_S_MembersCall() throws RecognitionException {
@@ -13645,6 +14997,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_iCS_S_MemberCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterICS_S_MemberCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitICS_S_MemberCall(this);
+		}
 	}
 
 	public final ICS_S_MemberCallContext iCS_S_MemberCall() throws RecognitionException {
@@ -13704,6 +15064,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_iCS_S_DictionaryCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterICS_S_DictionaryCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitICS_S_DictionaryCall(this);
+		}
 	}
 
 	public final ICS_S_DictionaryCallContext iCS_S_DictionaryCall() throws RecognitionException {
@@ -13751,6 +15119,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_argsCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterArgsCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitArgsCall(this);
+		}
 	}
 
 	public final ArgsCallContext argsCall() throws RecognitionException {
@@ -13897,6 +15273,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_argCall; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterArgCall(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitArgCall(this);
+		}
 	}
 
 	public final ArgCallContext argCall() throws RecognitionException {
@@ -13954,6 +15338,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_dictionaryCallStmt; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterDictionaryCallStmt(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitDictionaryCallStmt(this);
+		}
 	}
 
 	public final DictionaryCallStmtContext dictionaryCallStmt() throws RecognitionException {
@@ -14011,6 +15403,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_argList; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterArgList(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitArgList(this);
+		}
 	}
 
 	public final ArgListContext argList() throws RecognitionException {
@@ -14134,6 +15534,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_arg; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterArg(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitArg(this);
+		}
 	}
 
 	public final ArgContext arg() throws RecognitionException {
@@ -14287,6 +15695,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_argDefaultValue; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterArgDefaultValue(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitArgDefaultValue(this);
+		}
 	}
 
 	public final ArgDefaultValueContext argDefaultValue() throws RecognitionException {
@@ -14342,6 +15758,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_subscripts; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSubscripts(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSubscripts(this);
+		}
 	}
 
 	public final SubscriptsContext subscripts() throws RecognitionException {
@@ -14422,6 +15846,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_subscript; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterSubscript(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitSubscript(this);
+		}
 	}
 
 	public final SubscriptContext subscript() throws RecognitionException {
@@ -14479,6 +15911,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_ambiguousIdentifier; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterAmbiguousIdentifier(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitAmbiguousIdentifier(this);
+		}
 	}
 
 	public final AmbiguousIdentifierContext ambiguousIdentifier() throws RecognitionException {
@@ -15029,6 +16469,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_asTypeClause; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterAsTypeClause(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitAsTypeClause(this);
+		}
 	}
 
 	public final AsTypeClauseContext asTypeClause() throws RecognitionException {
@@ -15097,6 +16545,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_baseType; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterBaseType(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitBaseType(this);
+		}
 	}
 
 	public final BaseTypeContext baseType() throws RecognitionException {
@@ -15145,6 +16601,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_certainIdentifier; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterCertainIdentifier(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitCertainIdentifier(this);
+		}
 	}
 
 	public final CertainIdentifierContext certainIdentifier() throws RecognitionException {
@@ -15691,6 +17155,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_comparisonOperator; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterComparisonOperator(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitComparisonOperator(this);
+		}
 	}
 
 	public final ComparisonOperatorContext comparisonOperator() throws RecognitionException {
@@ -15739,6 +17211,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_complexType; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterComplexType(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitComplexType(this);
+		}
 	}
 
 	public final ComplexTypeContext complexType() throws RecognitionException {
@@ -15793,6 +17273,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_fieldLength; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterFieldLength(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitFieldLength(this);
+		}
 	}
 
 	public final FieldLengthContext fieldLength() throws RecognitionException {
@@ -16007,6 +17495,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_letterrange; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterLetterrange(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitLetterrange(this);
+		}
 	}
 
 	public final LetterrangeContext letterrange() throws RecognitionException {
@@ -16073,6 +17569,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_lineLabel; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterLineLabel(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitLineLabel(this);
+		}
 	}
 
 	public final LineLabelContext lineLabel() throws RecognitionException {
@@ -16115,6 +17619,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_literal; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterLiteral(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitLiteral(this);
+		}
 	}
 
 	public final LiteralContext literal() throws RecognitionException {
@@ -16155,6 +17667,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_publicPrivateVisibility; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterPublicPrivateVisibility(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitPublicPrivateVisibility(this);
+		}
 	}
 
 	public final PublicPrivateVisibilityContext publicPrivateVisibility() throws RecognitionException {
@@ -16196,6 +17716,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_publicPrivateGlobalVisibility; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterPublicPrivateGlobalVisibility(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitPublicPrivateGlobalVisibility(this);
+		}
 	}
 
 	public final PublicPrivateGlobalVisibilityContext publicPrivateGlobalVisibility() throws RecognitionException {
@@ -16246,6 +17774,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_type; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterType(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitType(this);
+		}
 	}
 
 	public final TypeContext type() throws RecognitionException {
@@ -16328,6 +17864,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_typeHint; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterTypeHint(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitTypeHint(this);
+		}
 	}
 
 	public final TypeHintContext typeHint() throws RecognitionException {
@@ -16370,6 +17914,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_visibility; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterVisibility(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitVisibility(this);
+		}
 	}
 
 	public final VisibilityContext visibility() throws RecognitionException {
@@ -16552,6 +18104,14 @@ public class VisualBasic6Parser extends Parser {
 			super(parent, invokingState);
 		}
 		@Override public int getRuleIndex() { return RULE_ambiguousKeyword; }
+		@Override
+		public void enterRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).enterAmbiguousKeyword(this);
+		}
+		@Override
+		public void exitRule(ParseTreeListener listener) {
+			if ( listener instanceof VisualBasic6Listener ) ((VisualBasic6Listener)listener).exitAmbiguousKeyword(this);
+		}
 	}
 
 	public final AmbiguousKeywordContext ambiguousKeyword() throws RecognitionException {

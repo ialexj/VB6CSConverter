@@ -1,4 +1,4 @@
-// Generated from c:/Users/aj/source/repos/VB6Converter/VB6Parser/VisualBasic6.g4 by ANTLR 4.13.1
+// Generated from c:/Users/aj/source/repos/VB6Converter/src/VB6Parser/VisualBasic6.g4 by ANTLR 4.13.1
 
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.ErrorNode;
@@ -712,6 +712,18 @@ public class VisualBasic6BaseListener implements VisualBasic6Listener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterIfInlineBlockStmt(VisualBasic6Parser.IfInlineBlockStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitIfInlineBlockStmt(VisualBasic6Parser.IfInlineBlockStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterIfBlockStmt(VisualBasic6Parser.IfBlockStmtContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -851,6 +863,18 @@ public class VisualBasic6BaseListener implements VisualBasic6Listener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitLsetStmt(VisualBasic6Parser.LsetStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterMacroConstStmt(VisualBasic6Parser.MacroConstStmtContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitMacroConstStmt(VisualBasic6Parser.MacroConstStmtContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *

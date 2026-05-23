@@ -1,4 +1,4 @@
-// Generated from c:/Users/aj/source/repos/VB6Converter/VB6Parser/VisualBasic6.g4 by ANTLR 4.13.1
+// Generated from c:/Users/aj/source/repos/VB6Converter/src/VB6Parser/VisualBasic6.g4 by ANTLR 4.13.1
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Token;

@@ -1,4 +1,4 @@
-// Generated from c:/Users/aj/source/repos/VB6Converter/VB6Parser/VisualBasic6.g4 by ANTLR 4.13.1
+// Generated from c:/Users/aj/source/repos/VB6Converter/src/VB6Parser/VisualBasic6.g4 by ANTLR 4.13.1
 import org.antlr.v4.runtime.tree.ParseTreeListener;
 
 /**
@@ -599,6 +599,16 @@ public interface VisualBasic6Listener extends ParseTreeListener {
 	 */
 	void exitBlockIfThenElse(VisualBasic6Parser.BlockIfThenElseContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link VisualBasic6Parser#ifInlineBlockStmt}.
+	 * @param ctx the parse tree
+	 */
+	void enterIfInlineBlockStmt(VisualBasic6Parser.IfInlineBlockStmtContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VisualBasic6Parser#ifInlineBlockStmt}.
+	 * @param ctx the parse tree
+	 */
+	void exitIfInlineBlockStmt(VisualBasic6Parser.IfInlineBlockStmtContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link VisualBasic6Parser#ifBlockStmt}.
 	 * @param ctx the parse tree
 	 */
@@ -718,6 +728,16 @@ public interface VisualBasic6Listener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitLsetStmt(VisualBasic6Parser.LsetStmtContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VisualBasic6Parser#macroConstStmt}.
+	 * @param ctx the parse tree
+	 */
+	void enterMacroConstStmt(VisualBasic6Parser.MacroConstStmtContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VisualBasic6Parser#macroConstStmt}.
+	 * @param ctx the parse tree
+	 */
+	void exitMacroConstStmt(VisualBasic6Parser.MacroConstStmtContext ctx);
 	/**
 	 * Enter a parse tree produced by {@link VisualBasic6Parser#macroIfThenElseStmt}.
 	 * @param ctx the parse tree
