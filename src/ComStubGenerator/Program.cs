@@ -35,6 +35,10 @@ public static class Program
             HelpText = "Path to a JSON file providing synthetic members to inject into COM types. " +
                        "Defaults to synthetic_members.json in the executable folder.")]
         public string? SyntheticMemberPath { get; set; }
+
+        [Option("exclude-references", Required = false,
+            HelpText = "Library names to suppress stub generation for.")]
+        public IEnumerable<string> ExcludeReferences { get; set; } = [];
     }
 
     public static async Task<int> Main(string[] args)
@@ -83,7 +87,7 @@ public static class Program
             return 0;
         }
 
-        bool anyFailed = await GenerateStubsWindows(libFilters, options.OutputDir, options.Arch, !options.IncludeComPlumbing, syntheticSets);
+        bool anyFailed = await GenerateStubsWindows(libFilters, options.OutputDir, options.Arch, !options.IncludeComPlumbing, syntheticSets, options.ExcludeReferences);
         return anyFailed ? 1 : 0;
     }
 
@@ -93,7 +97,8 @@ public static class Program
         string outputDir,
         string arch,
         bool filterComPlumbing,
-        IReadOnlyList<SyntheticMemberSet> syntheticSets)
+        IReadOnlyList<SyntheticMemberSet> syntheticSets,
+        IEnumerable<string> excludeReferences)
     {
         AnsiConsole.MarkupLine("[yellow]Querying COM type libraries...[/]");
 
@@ -117,8 +122,11 @@ public static class Program
             return false;
         }
 
+        var excludeSet = new HashSet<string>(excludeReferences, StringComparer.OrdinalIgnoreCase);
+
         IReadOnlyList<ComQueryLibrary> merged = LibraryMerger.Merge(x86Libs, x64Libs)
             .Where(lib => !DotnetLibraryGuids.Contains(lib.Guid))
+            .Where(lib => !excludeSet.Contains(lib.Name))
             .ToList();
 
         if (syntheticSets.Count > 0)

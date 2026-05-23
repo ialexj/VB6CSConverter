@@ -56,6 +56,9 @@ public static class Program
         [Option('n', "prefer-namespace", Required = false, HelpText = "Namespace prefixes to prefer when disambiguating ambiguous type references, in order of preference.")]
         public IEnumerable<string> PreferredNamespaces { get; set; } = [];
 
+        [Option("exclude-references", Required = false, HelpText = "COM library names to suppress stub generation for.")]
+        public IEnumerable<string> ExcludeReferences { get; set; } = [];
+
         [Option("pause", Required = false, HelpText = "Pause for user input after each diagnostics collection. Press any key to continue, Ctrl-C to stop.")]
         public bool Pause { get; set; }
     }
@@ -80,7 +83,7 @@ public static class Program
         // ── Pre-conversion: generate COM reference stubs ────────────────────
         if (!options.SkipReferenceStubs && vbProject.References.Count > 0) {
             var referenceDir = Path.Join(options.OutputDir, "_References");
-            await GenerateReferenceStubs(options.Project, referenceDir);
+            await GenerateReferenceStubs(options.Project, referenceDir, options.ExcludeReferences);
         }
         // ────────────────────────────────────────────────────────────────────
 
@@ -260,7 +263,7 @@ public static class Program
     // Reference stub generation — delegates to the ComStubGenerator executable
     // ─────────────────────────────────────────────────────────────────────
 
-    static async Task GenerateReferenceStubs(string projectPath, string outputDir)
+    static async Task GenerateReferenceStubs(string projectPath, string outputDir, IEnumerable<string> excludeReferences)
     {
         AnsiConsole.MarkupLine("[yellow]Generating COM reference stubs...[/]");
 
@@ -283,6 +286,9 @@ public static class Program
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+
+        foreach (var name in excludeReferences)
+            psi.ArgumentList.Add($"--exclude-references={name}");
 
         using var process = Process.Start(psi)!;
 
