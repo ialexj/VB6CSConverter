@@ -92,28 +92,32 @@ public static class Program
                 await Task.Yield();
 
                 try {
-                    var model = TypeLibraryInspector.Inspect(entry.Guid, entry.Major, entry.Minor, entry.Name, entry.Path, entry.IsTransitive);
-                    if (model == null) {
+                    var models = TypeLibraryInspector.InspectAll(entry.Guid, entry.Major, entry.Minor, entry.Name, entry.Path, entry.IsTransitive);
+                    if (models.Count == 0) {
                         anyFailed = true;
                         return;
                     }
 
-                    // Optionally filter types
-                    if (typeFilters.Count > 0 && model.Types != null) {
-                        var filtered = model.Types.Where(t => typeFilters.Any(f =>
-                            string.Equals(t.Name, f, StringComparison.OrdinalIgnoreCase))).ToList();
-                        model = model with { Types = filtered };
-                    }
+                    foreach (var model in models) {
+                        var m = model;
 
-                    results.Add(model);
+                        // Optionally filter types
+                        if (typeFilters.Count > 0 && m.Types != null) {
+                            var filtered = m.Types.Where(t => typeFilters.Any(f =>
+                                string.Equals(t.Name, f, StringComparison.OrdinalIgnoreCase))).ToList();
+                            m = m with { Types = filtered };
+                        }
 
-                    // Enqueue transitive dependencies
-                    if (model.DiscoveredDependencies != null) {
-                        foreach (var dep in model.DiscoveredDependencies.Where(d => !seenGuids.ContainsKey(d.Guid))) {
-                            var depPath = TypeLibraryInspector.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);
-                            if (depPath != null) {
-                                var depName = dep.Guid.ToString("B");
-                                toInspect.Enqueue((dep.Guid, dep.Major, dep.Minor, depName, depPath, true));
+                        results.Add(m);
+
+                        // Enqueue transitive dependencies (shared across all libraries from this entry)
+                        if (m.DiscoveredDependencies != null) {
+                            foreach (var dep in m.DiscoveredDependencies.Where(d => !seenGuids.ContainsKey(d.Guid))) {
+                                var depPath = TypeLibraryInspector.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);
+                                if (depPath != null) {
+                                    var depName = dep.Guid.ToString("B");
+                                    toInspect.Enqueue((dep.Guid, dep.Major, dep.Minor, depName, depPath, true));
+                                }
                             }
                         }
                     }

@@ -70,32 +70,76 @@ public sealed class TypeLibraryInspector
     }
 
     /// <summary>
-    /// Loads the type library identified by <paramref name="guid"/>, version, and
-    /// <paramref name="path"/>, and returns a <see cref="ComQueryLibrary"/>, or
-    /// <see langword="null"/> if the file cannot be loaded or parsed.
+    /// Loads all type libraries associated with <paramref name="path"/> and returns every
+    /// distinct <see cref="ComQueryLibrary"/> that can be built from them.
+    /// <para>
+    /// For <c>.ocx</c> files a companion <c>.oca</c> cache (written by VB6) is tried in
+    /// addition to the OCX itself.  The two often expose type libraries with different names
+    /// (e.g. <c>ActiveBarLibraryCtl</c> from the OCA vs <c>ActiveBarLibrary</c> from the
+    /// OCX), so both are returned when they differ, allowing stub generation to cover all
+    /// identifiers that VB6 code might reference.
+    /// </para>
     /// </summary>
-    public static ComQueryLibrary? Inspect(Guid guid, int major, int minor, string name, string path, bool isTransitive = false)
+    public static IReadOnlyList<ComQueryLibrary> InspectAll(Guid guid, int major, int minor, string name, string path, bool isTransitive = false)
     {
+        var results = new List<ComQueryLibrary>();
+
+        // For .ocx files, also try the companion .oca (VB6's OLE Control Cache), which may
+        // carry a different library name than the OCX resource.
+        if (path.EndsWith(".ocx", StringComparison.OrdinalIgnoreCase)) {
+            string? dir = Path.GetDirectoryName(path);
+            string stem = Path.GetFileNameWithoutExtension(path);
+            if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(stem)) {
+                string ocaPath = Path.Combine(dir, stem + ".oca");
+                if (File.Exists(ocaPath)) {
+                    int ocaHr = LoadTypeLib(ocaPath, out var ocaTypeLib);
+                    if (ocaHr == 0 && ocaTypeLib != null) {
+                        try {
+                            var ocaModel = InspectTypeLib(ocaTypeLib, guid, major, minor, isTransitive, ocaPath, name);
+                            if (ocaModel != null)
+                                results.Add(ocaModel);
+                        }
+                        catch (Exception ex) {
+                            Log.Warning($"TypeLibraryInspector: InspectTypeLib failed for {ocaPath}", ex);
+                        }
+                        finally {
+                            Marshal.ReleaseComObject(ocaTypeLib);
+                        }
+                    }
+                    else {
+                        Log.Warning($"TypeLibraryInspector: LoadTypeLib({ocaPath}) returned HRESULT 0x{ocaHr:X8} — skipping OCA companion");
+                    }
+                }
+            }
+        }
+
+        // Load the primary type library (or the best fallback for it).
         if (!TryLoadTypeLibWithFallback(guid, major, minor, 0, path,
                                         out var typeLib, out string loadedFromPath, out int hr)) {
-            Log.Warning($"TypeLibraryInspector: unable to load type library for {path}; last HRESULT 0x{hr:X8} ({DescribeLoadTypeLibFailure(hr)})");
-            return null;
+            if (results.Count == 0)
+                Log.Warning($"TypeLibraryInspector: unable to load type library for {path}; last HRESULT 0x{hr:X8} ({DescribeLoadTypeLibFailure(hr)})");
+            return results;
         }
 
-        if (!string.Equals(path, loadedFromPath, StringComparison.OrdinalIgnoreCase)) {
+        if (!string.Equals(path, loadedFromPath, StringComparison.OrdinalIgnoreCase))
             Log.Information($"TypeLibraryInspector: using fallback type library path {loadedFromPath} for {path}");
-        }
 
         try {
-            return InspectTypeLib(typeLib, guid, major, minor, isTransitive, loadedFromPath, name);
+            var model = InspectTypeLib(typeLib, guid, major, minor, isTransitive, loadedFromPath, name);
+            if (model != null) {
+                // Only add if distinct from any OCA result already collected.
+                if (!results.Any(r => string.Equals(r.Name, model.Name, StringComparison.OrdinalIgnoreCase)))
+                    results.Add(model);
+            }
         }
         catch (Exception ex) {
             Log.Warning($"TypeLibraryInspector: InspectTypeLib failed for {loadedFromPath}", ex);
-            return null;
         }
         finally {
             Marshal.ReleaseComObject(typeLib);
         }
+
+        return results;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -920,12 +964,16 @@ public sealed class TypeLibraryInspector
             candidates.Add(path);
         }
 
-        AddCandidate(primaryPath);
-
+        // 1. Registry-registered paths: may include a resource-ID suffix ("path.ocx\2") that
+        //    points to a different embedded type library than the raw file load would give.
         foreach (var path in EnumerateRegisteredTypeLibPaths(guid, major, minor, lcid)) {
             AddCandidate(path);
         }
 
+        // 2. Primary path (the file declared in the VBP / passed by the caller).
+        AddCandidate(primaryPath);
+
+        // 3. Remaining sibling type-lib files.
         foreach (var path in EnumerateSiblingTypeLibFiles(primaryPath)) {
             AddCandidate(path);
         }
@@ -969,7 +1017,7 @@ public sealed class TypeLibraryInspector
         string stem = Path.GetFileNameWithoutExtension(primaryPath);
         if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(stem)) yield break;
 
-        foreach (var ext in new[] { ".tlb", ".olb", ".oca", ".ocx", ".dll" }) {
+        foreach (var ext in new[] { ".tlb", ".olb", ".ocx", ".oca", ".dll" }) {
             yield return Path.Combine(directory, stem + ext);
         }
     }
