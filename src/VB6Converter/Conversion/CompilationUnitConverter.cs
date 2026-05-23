@@ -24,13 +24,13 @@ public static class CompilationUnitConverter
         UsingsRewriter.Default
     ];
 
-    public static CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string nsName, string className, bool isStatic)
+    public static CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string nsName, string className, bool isStatic, ConversionOptions options = null)
     {
         using var _ = new TraceMethod(module);
 
         var namespaceName = ParseName(nsName ?? className);
 
-        var @class = ClassConverter.GetClass(module, new ClassContext(className, isStatic));
+        var @class = ClassConverter.GetClass(module, new ClassContext(className, isStatic, options ?? ConversionOptions.Default));
 
         var @namespace = FileScopedNamespaceDeclaration(namespaceName)
             .WithMembers(SingletonList<MemberDeclarationSyntax>(@class));

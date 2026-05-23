@@ -32,15 +32,15 @@ public static class CommonConverter
         return Identifier(text);
     }
 
-    public static TypeSyntax ToTypeSyntax(this AsTypeClauseContext asType, bool objectIfNull = false)
+    public static TypeSyntax ToTypeSyntax(this AsTypeClauseContext asType, bool objectIfNull = false, bool useDynamic = true)
     {
         if (asType == null) {
-            return objectIfNull 
-                ? PredefinedType(Token(SyntaxKind.ObjectKeyword)) 
+            return objectIfNull
+                ? (useDynamic ? IdentifierName("dynamic") : PredefinedType(Token(SyntaxKind.ObjectKeyword)))
                 : PredefinedType(Token(SyntaxKind.VoidKeyword));
         }
         
-        var type = asType.type().ToTypeSyntax();
+        var type = asType.type().ToTypeSyntax(useDynamic);
         
         if (asType.fieldLength() is FieldLengthContext length) {
             type = type.WithAdditionalAnnotations(new SyntaxAnnotation("FixedLength", length.INTEGERLITERAL().Symbol.Text));
@@ -49,7 +49,7 @@ public static class CommonConverter
         return type;
     }
 
-    public static TypeSyntax ToTypeSyntax(this TypeContext type)
+    public static TypeSyntax ToTypeSyntax(this TypeContext type, bool useDynamic = true)
     {
         static PredefinedTypeSyntax Predefined(SyntaxKind kind) => PredefinedType(Token(kind));
 
@@ -68,6 +68,7 @@ public static class CommonConverter
         }
         else if (type.baseType() is BaseTypeContext baseType) {
             var typeSymbol = ((ITerminalNode)baseType.GetChild(0)).Symbol;
+            TypeSyntax DynamicOrObject() => useDynamic ? IdentifierName("dynamic") : Predefined(SyntaxKind.ObjectKeyword);
             ts = typeSymbol.Type switch {
                 BOOLEAN => Predefined(SyntaxKind.BoolKeyword),
                 BYTE => Predefined(SyntaxKind.ByteKeyword),
@@ -78,8 +79,8 @@ public static class CommonConverter
                 LONG => Predefined(SyntaxKind.IntKeyword),
                 SINGLE => Predefined(SyntaxKind.FloatKeyword),
                 STRING => Predefined(SyntaxKind.StringKeyword),
-                OBJECT => Predefined(SyntaxKind.ObjectKeyword),
-                VARIANT => Predefined(SyntaxKind.ObjectKeyword),
+                OBJECT => DynamicOrObject(),
+                VARIANT => DynamicOrObject(),
                 _ => ParseTypeName(typeSymbol.Text)
             };
         }

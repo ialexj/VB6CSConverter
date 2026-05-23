@@ -7,6 +7,9 @@ using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter.Conversion;
 
-public readonly record struct CallContext(ImplicitCallStmt_InStmtContext With) { }
+public readonly record struct CallContext(ImplicitCallStmt_InStmtContext With = null, ConversionOptions Options = null) { }
 
-public readonly record struct ClassContext(string Name, bool Static) { }
+public readonly record struct ClassContext(string Name, bool Static, ConversionOptions Options = null)
+{
+    public bool UseDynamic => Options?.UseDynamic ?? true;
+}

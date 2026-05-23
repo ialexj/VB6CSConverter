@@ -19,11 +19,11 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
         return ConvertFile(input, output, name, name, type);
     }
 
-    public static VB6ToCSharpConversion ConvertFile(string input, string output, string className, string nsName, VisualBasicFileType type)
+    public static VB6ToCSharpConversion ConvertFile(string input, string output, string className, string nsName, VisualBasicFileType type, ConversionOptions options = null)
     {
         using var reader = OpenFile(input);
 
-        var conversion = Convert(reader, className, nsName, type);
+        var conversion = Convert(reader, className, nsName, type, options);
 
         var outputDir = Path.GetDirectoryName(output);
         if (!string.IsNullOrWhiteSpace(outputDir)) {
@@ -64,13 +64,13 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
         return conversion;
     }
 
-    public static VB6ToCSharpConversion ConvertString(string vb6CodeString, string className, string nsName = null, VisualBasicFileType type = VisualBasicFileType.Module)
+    public static VB6ToCSharpConversion ConvertString(string vb6CodeString, string className, string nsName = null, VisualBasicFileType type = VisualBasicFileType.Module, ConversionOptions options = null)
     {
         using var reader = new StringReader(vb6CodeString);
-        return Convert(reader, className, nsName, type);
+        return Convert(reader, className, nsName, type, options);
     }
 
-    public static VB6ToCSharpConversion Convert(TextReader input, string className, string nsName, VisualBasicFileType type)
+    public static VB6ToCSharpConversion Convert(TextReader input, string className, string nsName, VisualBasicFileType type, ConversionOptions options = null)
     {
         ArgumentNullException.ThrowIfNull(input);
 
@@ -81,7 +81,8 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
             
             var cu = CompilationUnitConverter.GetCompilationUnit(
                 parse.Start.module(), nsName, className,
-                isStatic: type == VisualBasicFileType.Module);
+                isStatic: type == VisualBasicFileType.Module,
+                options: options);
 
             var transformErrors = cu.GetTransformErrors().ToArray();
             foreach (var error in transformErrors) {

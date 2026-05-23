@@ -59,6 +59,9 @@ public static class Program
         [Option("exclude-references", Required = false, HelpText = "COM library names to suppress stub generation for.")]
         public IEnumerable<string> ExcludeReferences { get; set; } = [];
 
+        [Option("use-object", Required = false, HelpText = "Emit 'object' instead of 'dynamic' for untyped, Object, and Variant VB6 declarations.")]
+        public bool UseObject { get; set; }
+
         [Option("pause", Required = false, HelpText = "Pause for user input after each diagnostics collection. Press any key to continue, Ctrl-C to stop.")]
         public bool Pause { get; set; }
 
@@ -81,12 +84,14 @@ public static class Program
         Directory.CreateDirectory(options.OutputDir);
         Log.Init(options.OutputDir);
 
+        var conversionOptions = new ConversionOptions { UseDynamic = !options.UseObject };
+
         var vbProject = VisualBasicProject.Load(options.Project);
 
         // ── Pre-conversion: generate COM reference stubs ────────────────────
         if (!options.SkipReferenceStubs && vbProject.References.Count > 0) {
             var referenceDir = Path.Join(options.OutputDir, "_References");
-            await GenerateReferenceStubs(options.Project, referenceDir, options.ExcludeReferences);
+            await GenerateReferenceStubs(options.Project, referenceDir, options.ExcludeReferences, conversionOptions.UseDynamic);
         }
         // ────────────────────────────────────────────────────────────────────
 
@@ -113,7 +118,7 @@ public static class Program
                 await RunOperations("Converting VB6 to C#", targetsThatNeedTranform, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
                         var conversion = VB6ToCSharpConversion.ConvertFile(
-                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type);
+                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions);
 
                         var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
                         return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
@@ -314,7 +319,7 @@ public static class Program
     // Reference stub generation — delegates to the ComStubGenerator executable
     // ─────────────────────────────────────────────────────────────────────
 
-    static async Task GenerateReferenceStubs(string projectPath, string outputDir, IEnumerable<string> excludeReferences)
+    static async Task GenerateReferenceStubs(string projectPath, string outputDir, IEnumerable<string> excludeReferences, bool useDynamic = true)
     {
         AnsiConsole.MarkupLine("[yellow]Generating COM reference stubs...[/]");
 
@@ -343,6 +348,10 @@ public static class Program
             psi.ArgumentList.Add("--exclude-references");
             foreach (var name in excludeList)
                 psi.ArgumentList.Add(name);
+        }
+
+        if (!useDynamic) {
+            psi.ArgumentList.Add("--use-object");
         }
 
         using var process = Process.Start(psi)!;

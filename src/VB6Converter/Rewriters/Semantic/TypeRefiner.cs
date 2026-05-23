@@ -45,7 +45,7 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
                     continue;
                 }
 
-                if (type.SpecialType != SpecialType.System_Object) {
+                if (type.SpecialType != SpecialType.System_Object && type.TypeKind != TypeKind.Dynamic) {
                     continue;
                 }
 
@@ -61,6 +61,7 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
                             var rightType = sem.GetTypeInfo(assignment.Right);
                             if (rightType.Type != null 
                                 && rightType.Type.SpecialType != SpecialType.System_Object 
+                                && rightType.Type.TypeKind != TypeKind.Dynamic
                                 && rightType.Type.ToString() != "Microsoft.VisualBasic.VariantType"
                                 && !SymbolEqualityComparer.Default.Equals(type, rightType.Type)) {
 

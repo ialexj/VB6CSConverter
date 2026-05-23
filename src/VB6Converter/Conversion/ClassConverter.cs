@@ -179,12 +179,12 @@ public static class ClassConverter
                 if (moduleBlock.block() is BlockContext block) {
                     foreach (var stmt in block.blockStmt()) {
                         if (stmt.constStmt() is ConstStmtContext @const) {
-                            foreach (var f in GetConstantFields(@const)) {
+                            foreach (var f in GetConstantFields(@const, ctx.Options)) {
                                 yield return f;
                             }
                         }
                         else if (stmt.variableStmt() is VariableStmtContext var) {
-                            foreach (var f in GetVariableFields(var, ctx.Static)) {
+                            foreach (var f in GetVariableFields(var, ctx.Static, ctx.Options)) {
                                 yield return f;
                             }
                         }
@@ -192,7 +192,7 @@ public static class ClassConverter
                             // ignore
                         }
                         else {
-                            yield return GetErrorField(stmt, "Unknown class member declaration");
+                            yield return GetErrorField(stmt, "Unknown class member declaration", ctx.UseDynamic);
                         }
                     }
                 }
@@ -202,7 +202,7 @@ public static class ClassConverter
                 yield return GetEnum(enumCtx);
             }
             else if (e.typeStmt() is TypeStmtContext typeCtx) {
-                yield return GetStruct(typeCtx);
+                yield return GetStruct(typeCtx, ctx.UseDynamic);
             }
 
             else if (e.subStmt() is SubStmtContext sub) {
@@ -212,7 +212,7 @@ public static class ClassConverter
                 yield return GetMethod(func, ctx);
             }
             else if (e.declareStmt() is DeclareStmtContext declare) {
-                yield return GetExtern(declare);
+                yield return GetExtern(declare, ctx.UseDynamic);
             }
             else if (e.propertyAccessor() is IPropertyContext prop) {
                 if (prop is PropertyGetStmtContext getter 
@@ -233,16 +233,16 @@ public static class ClassConverter
             }
 
             else {
-                yield return GetErrorField(e, "Unknown member declaration");
+                yield return GetErrorField(e, "Unknown member declaration", ctx.UseDynamic);
             }
         }
 
         return [.. GetMembers()];
     }
 
-    static FieldDeclarationSyntax GetErrorField(IParseTree ctx, string message) =>
+    static FieldDeclarationSyntax GetErrorField(IParseTree ctx, string message, bool useDynamic = true) =>
         FieldDeclaration(
-            VariableDeclaration(PredefinedType(Token(SyntaxKind.ObjectKeyword)))
+            VariableDeclaration(useDynamic ? IdentifierName("dynamic") : PredefinedType(Token(SyntaxKind.ObjectKeyword)))
                 .WithVariables(SingletonSeparatedList(VariableDeclarator("_unknown"))))
         .WithError(TransformError.Create(ctx, message));
 
@@ -262,18 +262,18 @@ public static class ClassConverter
         return TokenList(GetTokens());
     }
 
-    public static IEnumerable<FieldDeclarationSyntax> GetConstantFields(ConstStmtContext @const)
-        => DeclarationConverter.GetConstantDeclarations(@const).Select(v => FieldDeclaration(v)
+    public static IEnumerable<FieldDeclarationSyntax> GetConstantFields(ConstStmtContext @const, ConversionOptions options = null)
+        => DeclarationConverter.GetConstantDeclarations(@const, options).Select(v => FieldDeclaration(v)
             .WithModifiers(TokenList(
                 @const.publicPrivateGlobalVisibility().GetVisibility(),
                 Token(SyntaxKind.ConstKeyword))));
 
-    public static IEnumerable<FieldDeclarationSyntax> GetVariableFields(VariableStmtContext var, bool isStatic)
-        => DeclarationConverter.GetVariableDeclarations(var).Select(v => FieldDeclaration(v)
+    public static IEnumerable<FieldDeclarationSyntax> GetVariableFields(VariableStmtContext var, bool isStatic, ConversionOptions options = null)
+        => DeclarationConverter.GetVariableDeclarations(var, options: options).Select(v => FieldDeclaration(v)
             .WithModifiers(GetModifiers(var.visibility(), isStatic)));
 
     
-    public static StructDeclarationSyntax GetStruct(TypeStmtContext type)
+    public static StructDeclarationSyntax GetStruct(TypeStmtContext type, bool useDynamic = true)
     {
         using var _ = new TraceMethod(type);
 
@@ -283,7 +283,7 @@ public static class ClassConverter
                 List<MemberDeclarationSyntax>(
                     type.typeStmt_Element().Select(e =>
                         FieldDeclaration(
-                            VariableDeclaration(CommonConverter.ToTypeSyntax(e.asTypeClause()))
+                            VariableDeclaration(CommonConverter.ToTypeSyntax(e.asTypeClause(), useDynamic: useDynamic))
                                 .WithVariables(
                                     SingletonSeparatedList(
                                         VariableDeclarator(GetIdentifier(e.ambiguousIdentifier())))))
@@ -318,21 +318,21 @@ public static class ClassConverter
     {
         using var _ = new TraceMethod(methodCtx);
 
-        var type = CommonConverter.ToTypeSyntax(methodCtx.asTypeClause(), methodCtx.IsFunction);
+        var type = CommonConverter.ToTypeSyntax(methodCtx.asTypeClause(), methodCtx.IsFunction, ctx.UseDynamic);
         var name = GetIdentifier(methodCtx.ambiguousIdentifier());
-        var body = StatementConverter.GetBlock(methodCtx.block(), default);
+        var body = StatementConverter.GetBlock(methodCtx.block(), new CallContext(null, ctx.Options));
 
         MemberDeclarationSyntax method;
         if (name.Text == "Class_Initialize") {
             method = ConstructorDeclaration(ctx.Name)
                 .WithModifiers(Modifiers(isPublic: true))
-                .WithParameterList(GetMethodParameters(methodCtx.argList()))
+                .WithParameterList(GetMethodParameters(methodCtx.argList(), ctx.UseDynamic))
                 .WithBody(body);
         }
         else {
             method = MethodDeclaration(type, name)
                 .WithModifiers(GetModifiers(methodCtx.visibility(), ctx.Static))
-                .WithParameterList(GetMethodParameters(methodCtx.argList()))
+                .WithParameterList(GetMethodParameters(methodCtx.argList(), ctx.UseDynamic))
                 .WithBody(body);
 
             method = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(method);
@@ -346,14 +346,14 @@ public static class ClassConverter
     {
         using var _ = new TraceMethod(propCtx);
 
-        var type = (TypeSyntax)PredefinedType(Token(SyntaxKind.ObjectKeyword));
+        var type = ctx.UseDynamic ? (TypeSyntax)IdentifierName("dynamic") : PredefinedType(Token(SyntaxKind.ObjectKeyword));
         var name = GetIdentifier(propCtx.ambiguousIdentifier());
-        var body = StatementConverter.GetBlock(propCtx.block(), default);
-        var parameters = GetMethodParameters(propCtx.argList());
+        var body = StatementConverter.GetBlock(propCtx.block(), new CallContext(null, ctx.Options));
+        var parameters = GetMethodParameters(propCtx.argList(), ctx.UseDynamic);
 
         // Multi-value (parameterized) property: no direct C# equivalent, emit as methods.
         if (propCtx is PropertyGetStmtContext getMulti && parameters.Parameters.Count > 0) {
-            var retType = CommonConverter.ToTypeSyntax(getMulti.asTypeClause(), true);
+            var retType = CommonConverter.ToTypeSyntax(getMulti.asTypeClause(), true, ctx.UseDynamic);
             MemberDeclarationSyntax getter = MethodDeclaration(retType, name)
                 .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
                 .WithParameterList(parameters)
@@ -379,7 +379,7 @@ public static class ClassConverter
 
         if (propCtx is PropertyGetStmtContext get) {
             kind = SyntaxKind.GetAccessorDeclaration;
-            type = CommonConverter.ToTypeSyntax(get.asTypeClause(), true);
+            type = CommonConverter.ToTypeSyntax(get.asTypeClause(), true, ctx.UseDynamic);
         }
         else if (propCtx is IPropertySetContext set) {
             kind = SyntaxKind.SetAccessorDeclaration;
@@ -394,7 +394,7 @@ public static class ClassConverter
             }
         }
         else {
-            return GetErrorField(propCtx, "Unknown property accessor");
+            return GetErrorField(propCtx, "Unknown property accessor", ctx.UseDynamic);
         }
 
         var attr = propCtx.block().blockStmt().Select(b => b.attributeStmt())
@@ -410,7 +410,7 @@ public static class ClassConverter
                 .WithModifiers(GetModifiers(propCtx.visibility(), false))
                 .WithParameterList(BracketedParameterList(SingletonSeparatedList(
                     Parameter(parameters.Parameters[0].Identifier)
-                        .WithType(PredefinedType(Token(SyntaxKind.ObjectKeyword)))
+                        .WithType(ctx.UseDynamic ? (TypeSyntax)IdentifierName("dynamic") : PredefinedType(Token(SyntaxKind.ObjectKeyword)))
                 )))
                 .WithAccessorList(AccessorList(
                     SingletonList(AccessorDeclaration(kind)
@@ -432,7 +432,7 @@ public static class ClassConverter
         return member;
     }
 
-    public static MethodDeclarationSyntax GetExtern(DeclareStmtContext declare)
+    public static MethodDeclarationSyntax GetExtern(DeclareStmtContext declare, bool useDynamic = true)
     {
         using var _ = new TraceMethod(declare);
 
@@ -449,10 +449,10 @@ public static class ClassConverter
         }
 
         return MethodDeclaration(
-            CommonConverter.ToTypeSyntax(declare.asTypeClause()),
+            CommonConverter.ToTypeSyntax(declare.asTypeClause(), useDynamic: useDynamic),
             GetIdentifier(declare.ambiguousIdentifier()))
             .WithModifiers(GetModifiers(declare.visibility(), true, SyntaxKind.ExternKeyword))
-            .WithParameterList(GetMethodParameters(declare.argList()))
+            .WithParameterList(GetMethodParameters(declare.argList(), useDynamic))
             .WithAttributeLists(SingletonList(AttributeList(SingletonSeparatedList(
                 Attribute(IdentifierName("DllImport"))
                     .WithArgumentList(AttributeArgumentList(SeparatedList(GetAttributeArguments())))
@@ -480,19 +480,19 @@ public static class ClassConverter
     }
 
 
-    public static ParameterListSyntax GetMethodParameters(ArgListContext argsContext)
+    public static ParameterListSyntax GetMethodParameters(ArgListContext argsContext, bool useDynamic = true)
     {
         using var _ = new TraceMethod(argsContext);
 
         return ParameterList(
             SeparatedList(
-                argsContext.arg().Select(GetParameter).ToArray()));
+                argsContext.arg().Select(a => GetParameter(a, useDynamic)).ToArray()));
     }
 
-    public static ParameterSyntax GetParameter(ArgContext arg)
+    public static ParameterSyntax GetParameter(ArgContext arg, bool useDynamic = true)
     {
         var parameter = Parameter(GetIdentifier(arg.ambiguousIdentifier()))
-            .WithType(CommonConverter.ToTypeSyntax(arg.asTypeClause(), true));
+            .WithType(CommonConverter.ToTypeSyntax(arg.asTypeClause(), true, useDynamic));
 
 
         if (arg.argDefaultValue() is ArgDefaultValueContext def) {

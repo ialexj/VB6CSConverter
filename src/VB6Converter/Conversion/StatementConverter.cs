@@ -58,10 +58,10 @@ public static class StatementConverter
             using var _ = new TraceMethod(stmt);
 
             if (stmt.constStmt() is ConstStmtContext @const) {
-                return DeclarationConverter.GetConstantDeclarations(@const).Select(LocalDeclarationStatement);
+                return DeclarationConverter.GetConstantDeclarations(@const, ctx.Options).Select(LocalDeclarationStatement);
             }
             else if (stmt.variableStmt() is VariableStmtContext var) {
-                return DeclarationConverter.GetVariableDeclarations(var, true).Select(LocalDeclarationStatement);
+                return DeclarationConverter.GetVariableDeclarations(var, true, ctx.Options).Select(LocalDeclarationStatement);
             }
             else if (stmt.eraseStmt() is EraseStmtContext erase) {
                 return GetErase(erase, ctx);
@@ -215,7 +215,7 @@ public static class StatementConverter
     public static StatementSyntax GetWith(WithStmtContext with, CallContext ctx)
     {
         using var _ = new TraceMethod(with);
-        return GetBlock(with.block(), new CallContext(with.implicitCallStmt_InStmt()), true);
+        return GetBlock(with.block(), new CallContext(with.implicitCallStmt_InStmt(), ctx.Options), true);
     }
 
     public static ExpressionStatementSyntax GetCall(ICallContext call, CallContext ctx)
@@ -423,7 +423,7 @@ public static class StatementConverter
 
         var statements = redim.redimSubStmt().Select<RedimSubStmtContext, ExpressionSyntax>(rd => {
             var variable   = GetCallIdentifierExpression(rd.implicitCallStmt_InStmt(), ctx);
-            var type       = rd.asTypeClause().ToTypeSyntax(true);
+            var type       = rd.asTypeClause().ToTypeSyntax(true, ctx.Options?.UseDynamic ?? true);
             var subscripts = rd.subscripts().subscript().Select(s => GetValue(s.valueStmt(0), ctx)).ToArray();
 
             if (redim.PRESERVE() is not null) {

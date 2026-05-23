@@ -12,16 +12,20 @@ using static VB6Parser.VisualBasic6Parser;
 namespace VB6Converter.Conversion;
 public static class DeclarationConverter
 {
-    public static IEnumerable<VariableDeclarationSyntax> GetConstantDeclarations(ConstStmtContext @const)
+    public static IEnumerable<VariableDeclarationSyntax> GetConstantDeclarations(ConstStmtContext @const, ConversionOptions options = null)
     {
         using var _ = new TraceMethod(@const);
+
+        bool useDynamic = options?.UseDynamic ?? true;
 
         foreach (var sub in @const.constSubStmt()) {
             var initializer = GetValue(sub.valueStmt(), default);
 
-            var type = sub.asTypeClause().ToTypeSyntax(true);
+            var type = sub.asTypeClause().ToTypeSyntax(true, useDynamic);
 
-            if (type is PredefinedTypeSyntax pre && pre.Keyword.IsKind(SyntaxKind.ObjectKeyword)) {
+            bool isObjectLike = (type is PredefinedTypeSyntax pre && pre.Keyword.IsKind(SyntaxKind.ObjectKeyword))
+                || (type is IdentifierNameSyntax id && id.Identifier.Text == "dynamic");
+            if (isObjectLike) {
                 if (initializer is LiteralExpressionSyntax literal) {
                     if (literal.IsKind(SyntaxKind.NumericLiteralExpression)) {
                         type = PredefinedType(Token(SyntaxKind.IntKeyword));
@@ -42,9 +46,11 @@ public static class DeclarationConverter
         }
     }
 
-    public static IEnumerable<VariableDeclarationSyntax> GetVariableDeclarations(VariableStmtContext var, bool defaultInit = false)
+    public static IEnumerable<VariableDeclarationSyntax> GetVariableDeclarations(VariableStmtContext var, bool defaultInit = false, ConversionOptions options = null)
     {
         using var _ = new TraceMethod(var);
+
+        bool useDynamic = options?.UseDynamic ?? true;
 
         foreach (var sub in var.variableListStmt().variableSubStmt()) {
 
@@ -68,7 +74,7 @@ public static class DeclarationConverter
                 }
             }
 
-            var baseType = sub.asTypeClause().ToTypeSyntax(true);
+            var baseType = sub.asTypeClause().ToTypeSyntax(true, useDynamic);
             var type = isArray
                 ? ArrayType(baseType, SingletonList(ArrayRankSpecifier(SeparatedList<ExpressionSyntax>(omittedExpressions))))
                 : baseType;

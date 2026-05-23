@@ -39,6 +39,10 @@ public static class Program
         [Option("exclude-references", Required = false,
             HelpText = "Library names to suppress stub generation for.")]
         public IEnumerable<string> ExcludeReferences { get; set; } = [];
+
+        [Option("use-object", Required = false, Default = false,
+            HelpText = "Emit 'object' instead of 'dynamic' for untyped, Object, and Variant COM members.")]
+        public bool UseObject { get; set; }
     }
 
     public static async Task<int> Main(string[] args)
@@ -87,7 +91,7 @@ public static class Program
             return 0;
         }
 
-        bool anyFailed = await GenerateStubsWindows(libFilters, options.OutputDir, options.Arch, !options.IncludeComPlumbing, syntheticSets, options.ExcludeReferences);
+        bool anyFailed = await GenerateStubsWindows(libFilters, options.OutputDir, options.Arch, !options.IncludeComPlumbing, syntheticSets, options.ExcludeReferences, !options.UseObject);
         return anyFailed ? 1 : 0;
     }
 
@@ -98,7 +102,8 @@ public static class Program
         string arch,
         bool filterComPlumbing,
         IReadOnlyList<SyntheticMemberSet> syntheticSets,
-        IEnumerable<string> excludeReferences)
+        IEnumerable<string> excludeReferences,
+        bool useDynamic = true)
     {
         AnsiConsole.MarkupLine("[yellow]Querying COM type libraries...[/]");
 
@@ -139,7 +144,7 @@ public static class Program
             if (library.Types == null || library.Types.Count == 0) continue;
             resolved++;
 
-            var written = ReferenceStubGenerator.Generate(library, outputDir, filterComPlumbing);
+            var written = ReferenceStubGenerator.Generate(library, outputDir, filterComPlumbing, useDynamic);
             generated += written.Count;
 
             reportLines.Add($"OK          {library.Name} - {library.Guid} - {library.Path}  ({written.Count} types)");

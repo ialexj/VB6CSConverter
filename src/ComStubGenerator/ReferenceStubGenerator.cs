@@ -24,7 +24,7 @@ public static class ReferenceStubGenerator
     /// <see cref="CollectAliases"/> and pass all libraries' aliases to
     /// <see cref="ReferenceUsingsGenerator.Generate"/> for global deduplication.
     /// </summary>
-    public static IReadOnlyList<string> Generate(ComQueryLibrary library, string referenceRoot, bool filterComPlumbing = true)
+    public static IReadOnlyList<string> Generate(ComQueryLibrary library, string referenceRoot, bool filterComPlumbing = true, bool useDynamic = true)
     {
         var written = new List<string>();
         var usedTypeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -52,7 +52,7 @@ public static class ReferenceStubGenerator
             if (type.Kind == LibraryTypeKind.Alias) continue;  // handled by CollectAliases / ReferenceUsingsGenerator
 
             string emittedTypeName = MakeUniqueName(MakeSafeIdentifier(type.Name), usedTypeNames);
-            string? source = GenerateType(library, type, emittedTypeName, cyclicFields, filterComPlumbing);
+            string? source = GenerateType(library, type, emittedTypeName, cyclicFields, filterComPlumbing, useDynamic);
             if (source == null) continue;
 
             string filePath = Path.Combine(libDir, $"{emittedTypeName}.cs");
@@ -179,7 +179,7 @@ public static class ReferenceStubGenerator
     // Interface / dispatch interface
     // ──────────────────────────────────────────────────────────────────────
 
-    static InterfaceDeclarationSyntax GenerateInterface(ComQueryLibrary library, ComQueryType type, string emittedTypeName)
+    static InterfaceDeclarationSyntax GenerateInterface(ComQueryLibrary library, ComQueryType type, string emittedTypeName, bool useDynamic = true)
     {
         var memberDecls = new List<MemberDeclarationSyntax>();
         // Seed with the interface name to prevent CS0542 (member name same as enclosing type)
@@ -213,8 +213,8 @@ public static class ReferenceStubGenerator
             // A default member (DISPID 0) with parameters becomes a C# indexer (this[...])
             // so that bang-operator conversions like rs!MyField → rs["MyField"] compile correctly.
             if (getter?.IsDefault == true && getter.Parameters.Count > 0) {
-                var indexerParams = BuildParameters(getter.Parameters).ToArray();
-                var indexer = IndexerDeclaration(ParseTypeName(propType))
+                var indexerParams = BuildParameters(getter.Parameters, useDynamic).ToArray();
+                var indexer = IndexerDeclaration(MemberType(propType, useDynamic))
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
@@ -222,7 +222,7 @@ public static class ReferenceStubGenerator
             }
             else {
                 string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
-                var prop = PropertyDeclaration(ParseTypeName(propType), Identifier(propertyName))
+                var prop = PropertyDeclaration(MemberType(propType, useDynamic), Identifier(propertyName))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(prop);
             }
@@ -314,7 +314,7 @@ public static class ReferenceStubGenerator
     // Class / module
     // ──────────────────────────────────────────────────────────────────────
 
-    static ClassDeclarationSyntax GenerateClass(ComQueryLibrary library, ComQueryType type, string emittedTypeName)
+    static ClassDeclarationSyntax GenerateClass(ComQueryLibrary library, ComQueryType type, string emittedTypeName, bool useDynamic = true)
     {
         bool isStatic = type.Kind == LibraryTypeKind.Module;
         bool exceptionDerived = !isStatic && InheritsException(type);
@@ -359,8 +359,8 @@ public static class ReferenceStubGenerator
             // A default member (DISPID 0) with parameters becomes a C# indexer (this[...])
             // so that bang-operator conversions like rs!MyField → rs["MyField"] compile correctly.
             if (getter?.IsDefault == true && getter.Parameters.Count > 0) {
-                var indexerParams = BuildParameters(getter.Parameters).ToArray();
-                var indexer = IndexerDeclaration(ParseTypeName(propType))
+                var indexerParams = BuildParameters(getter.Parameters, useDynamic).ToArray();
+                var indexer = IndexerDeclaration(MemberType(propType, useDynamic))
                     .WithModifiers(Modifiers(isPublic: true, isStatic: false))
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
@@ -369,7 +369,7 @@ public static class ReferenceStubGenerator
             }
             else {
                 string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
-                var prop = PropertyDeclaration(ParseTypeName(propType), Identifier(propertyName))
+                var prop = PropertyDeclaration(MemberType(propType, useDynamic), Identifier(propertyName))
                     .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(prop);
@@ -390,10 +390,10 @@ public static class ReferenceStubGenerator
             string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
             string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
 
-            var parameters = BuildParameters(method.Parameters).ToArray();
+            var parameters = BuildParameters(method.Parameters, useDynamic).ToArray();
 
             var methodDecl = MethodDeclaration(
-                    ParseTypeName(method.ReturnType),
+                    MemberType(method.ReturnType, useDynamic),
                     Identifier(methodName))
                 .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                 .WithParameterList(ParameterList(SeparatedList(parameters)))
@@ -404,7 +404,7 @@ public static class ReferenceStubGenerator
         }
 
         if (!isStatic) {
-            var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: false);
+            var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: false, useDynamic);
             if (forwardingIndexer != null) memberDecls.Add(forwardingIndexer);
         }
 
@@ -467,7 +467,8 @@ public static class ReferenceStubGenerator
     static MemberDeclarationSyntax? TryBuildDefaultForwardingIndexer(
         ComQueryLibrary library,
         ComQueryType type,
-        bool isForInterface)
+        bool isForInterface,
+        bool useDynamic = true)
     {
         // Find DISPID 0 PropertyGet with NO parameters (e.g. Fields on Recordset).
         var noParamDefault = (type.Members ?? []).FirstOrDefault(
@@ -491,29 +492,20 @@ public static class ReferenceStubGenerator
         if (innerIndexer == null) return null;
 
         string propName  = MakeSafeIdentifier(noParamDefault.Name);
-        var indexerParams   = BuildParameters(innerIndexer.Parameters).ToArray();
+        string returnCsType = innerIndexer.ReturnType;
+        var indexerParams   = BuildParameters(innerIndexer.Parameters, useDynamic).ToArray();
 
-        // Recursively follow the no-param default property chain on the item type.
-        // e.g. Fields["key"] returns Field, and Field.Value (no-param DISPID 0) returns object,
-        // so the outer indexer on Recordset should return object, not Field.
-        string rawReturnType = innerIndexer.ReturnType;
-        string returnCsType  = ResolveDefaultChainType(rawReturnType, library);
-
-        // Determine whether the forwarding indexer should expose a setter.
-        // If we followed the chain one more step (e.g. Field → Field.Value), check for a
-        // no-param DISPID 0 PropertySet on the intermediate item type (Field).
-        // Otherwise fall back to looking for a parameterised DISPID 0 PropertySet on innerType.
-        bool hasSetter = returnCsType != rawReturnType
-            ? HasNoParamDefaultSetter(rawReturnType, library)
-            : (innerType.Members ?? []).Any(
-                  m => m.Kind == LibraryMemberKind.PropertySet && m.IsDefault && m.Parameters.Count > 0);
+        // Check whether the inner type also exposes a PropertySet for the same default member,
+        // which would make the forwarding indexer read/write (e.g. rs["MyField"] = value).
+        var innerSetter = (innerType.Members ?? []).FirstOrDefault(
+            m => m.Kind == LibraryMemberKind.PropertySet && m.IsDefault && m.Parameters.Count > 0);
 
         var accessors = new List<AccessorDeclarationSyntax>();
         if (isForInterface) {
             accessors.Add(
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
-            if (hasSetter) {
+            if (innerSetter != null) {
                 accessors.Add(
                     AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
@@ -524,7 +516,7 @@ public static class ReferenceStubGenerator
                 AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                     .WithExpressionBody(ThrowNotImplementedExprBody())
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
-            if (hasSetter) {
+            if (innerSetter != null) {
                 accessors.Add(
                     AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
                         .WithExpressionBody(ThrowNotImplementedExprBody())
@@ -532,7 +524,7 @@ public static class ReferenceStubGenerator
             }
         }
 
-        var indexer = IndexerDeclaration(ParseTypeName(returnCsType))
+        var indexer = IndexerDeclaration(MemberType(returnCsType, useDynamic))
             .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
             .WithAccessorList(AccessorList(List(accessors)));
 
@@ -550,7 +542,8 @@ public static class ReferenceStubGenerator
     static StructDeclarationSyntax GenerateStruct(
         ComQueryType type,
         string emittedTypeName,
-        HashSet<(string TypeName, string FieldName)> cyclicFields)
+        HashSet<(string TypeName, string FieldName)> cyclicFields,
+        bool useDynamic = true)
     {
         // Seed with the struct name to prevent CS0542 (member name same as enclosing type)
         var usedFieldNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { emittedTypeName };
@@ -578,7 +571,7 @@ public static class ReferenceStubGenerator
 
             fieldDecls.Add(
                 FieldDeclaration(
-                    VariableDeclaration(ParseTypeName(field.ReturnType))
+                    VariableDeclaration(MemberType(field.ReturnType, useDynamic))
                         .WithVariables(SingletonSeparatedList(
                             VariableDeclarator(Identifier(fieldName)))))
                 .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword))));
@@ -660,19 +653,26 @@ public static class ReferenceStubGenerator
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
 
+    /// <summary>Maps a COM member type string to a Roslyn TypeSyntax, substituting
+    /// <c>dynamic</c> for <c>object</c> when <paramref name="useDynamic"/> is true.</summary>
+    static TypeSyntax MemberType(string typeName, bool useDynamic) =>
+        useDynamic && string.Equals(typeName, "object", StringComparison.OrdinalIgnoreCase)
+            ? (TypeSyntax)IdentifierName("dynamic")
+            : ParseTypeName(typeName);
+
     // C# requires that once a parameter has a default value, all subsequent parameters must
     // also have defaults.  Walk the list and force-optionalize any required `ref` param that
     // follows an optional one.  See docs/com.md for the known caveats.
-    static IEnumerable<ParameterSyntax> BuildParameters(IReadOnlyList<ComQueryParam> ps)
+    static IEnumerable<ParameterSyntax> BuildParameters(IReadOnlyList<ComQueryParam> ps, bool useDynamic = true)
     {
         bool seenOptional = false;
         foreach (var p in ps) {
             if (p.IsOptional) seenOptional = true;
-            yield return BuildParameter(p, forceOptional: seenOptional && !p.IsOptional);
+            yield return BuildParameter(p, useDynamic, forceOptional: seenOptional && !p.IsOptional);
         }
     }
 
-    static ParameterSyntax BuildParameter(ComQueryParam p, bool forceOptional = false)
+    static ParameterSyntax BuildParameter(ComQueryParam p, bool useDynamic = true, bool forceOptional = false)
     {
         // C# does not allow `ref` parameters to have default values, and does not allow
         // required parameters to follow optional ones.  In both cases we drop `ref` and
@@ -680,7 +680,7 @@ public static class ReferenceStubGenerator
         bool makeOptional = p.IsOptional || forceOptional;
         bool useRef = p.IsOut && !makeOptional;
         var syntax = Parameter(Identifier(MakeSafeIdentifier(p.Name)))
-        .WithType(ParseTypeName(useRef ? "ref " + p.Type : p.Type));
+        .WithType(useRef ? ParseTypeName("ref " + p.Type) : MemberType(p.Type, useDynamic));
         if (makeOptional) {
             syntax = syntax.WithDefault(
                 EqualsValueClause(
@@ -689,70 +689,6 @@ public static class ReferenceStubGenerator
         }
 
         return syntax;
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // Default-property chain resolution helpers
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Follows the chain of no-parameter default properties (DISPID 0) starting from
-    /// <paramref name="typeName"/> until no further no-param default exists, and returns
-    /// the terminal return type.  This mirrors VB6's implicit default-member resolution:
-    /// <c>rs!SomeColumn</c> → <c>rs.Fields["SomeColumn"].Value</c>, where <c>.Value</c>
-    /// is the no-param default property of <c>Field</c>.
-    /// <para>
-    /// A visited-set guards against cycles in pathological type libraries.
-    /// </para>
-    /// </summary>
-    static string ResolveDefaultChainType(string typeName, ComQueryLibrary library)
-    {
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string current = typeName;
-
-        while (visited.Add(current)) {
-            string simple = current.Contains('.')
-                ? current[(current.LastIndexOf('.') + 1)..]
-                : current;
-
-            var resolvedType = (library.Types ?? []).FirstOrDefault(t =>
-                string.Equals(t.Name, simple, StringComparison.OrdinalIgnoreCase));
-            if (resolvedType == null) break;
-
-            var noParamDefault = (resolvedType.Members ?? []).FirstOrDefault(
-                m => m.Kind == LibraryMemberKind.PropertyGet && m.IsDefault && m.Parameters.Count == 0);
-            if (noParamDefault == null) break;
-
-            current = noParamDefault.ReturnType;
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Returns <see langword="true"/> when the type identified by <paramref name="typeName"/>
-    /// exposes a writable no-index-parameter default property (DISPID 0 PropertySet).
-    /// <para>
-    /// A plain property setter (e.g. <c>Field.Value = x</c>) has exactly one parameter in the
-    /// COM type library — the value to assign — which is never an index.  We therefore accept
-    /// setters with zero or one parameters; setters with two or more parameters carry at least
-    /// one index parameter and belong to parameterised indexers, not plain default properties.
-    /// </para>
-    /// </summary>
-    static bool HasNoParamDefaultSetter(string typeName, ComQueryLibrary library)
-    {
-        string simple = typeName.Contains('.')
-            ? typeName[(typeName.LastIndexOf('.') + 1)..]
-            : typeName;
-
-        var resolvedType = (library.Types ?? []).FirstOrDefault(t =>
-            string.Equals(t.Name, simple, StringComparison.OrdinalIgnoreCase));
-        if (resolvedType == null) return false;
-
-        // Count <= 1: plain setters expose at most the one value-to-assign parameter;
-        // they do not carry any additional index parameters.
-        return (resolvedType.Members ?? []).Any(
-            m => m.Kind == LibraryMemberKind.PropertySet && m.IsDefault && m.Parameters.Count <= 1);
     }
 
     static ArrowExpressionClauseSyntax ThrowNotImplementedExprBody() =>
