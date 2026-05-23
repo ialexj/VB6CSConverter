@@ -22,7 +22,7 @@ public static class ReferenceNaming
         bool capitaliseNext = false;
 
         foreach (char c in raw.Trim()) {
-            if (char.IsLetterOrDigit(c)) {
+            if (char.IsLetterOrDigit(c) || c == '_') {
                 sb.Append(capitaliseNext ? char.ToUpperInvariant(c) : c);
                 capitaliseNext = false;
             }

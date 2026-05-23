@@ -17,7 +17,7 @@ public static class ReferenceNaming
         bool capitalizeNext = false;
 
         foreach (char c in raw.Trim()) {
-            if (char.IsLetterOrDigit(c)) {
+            if (char.IsLetterOrDigit(c) || c == '_') {
                 sb.Append(capitalizeNext ? char.ToUpperInvariant(c) : c);
                 capitalizeNext = false;
             }
