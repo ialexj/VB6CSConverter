@@ -181,6 +181,60 @@ public class LiteralCoercionTests
             "enum E { A = 0, B = 0, C = 1 } class T { E X { get; set; } void M() { this.X = 0; } }",
             "enum E { A = 0, B = 0, C = 1 } class T { E X { get; set; } void M() { this.X = E.A; } }");
 
+    // ── parameter defaults ───────────────────────────────────────────────────
+
+    [TestMethod]
+    public void CoercesBoolParameterDefaultNegativeOneToTrue()
+        => CheckCoercion(
+            "class T { void M(bool b = -1) { } }",
+            "class T { void M(bool b = true) { } }");
+
+    [TestMethod]
+    public void CoercesBoolParameterDefaultZeroToFalse()
+        => CheckCoercion(
+            "class T { void M(bool b = 0) { } }",
+            "class T { void M(bool b = false) { } }");
+
+    [TestMethod]
+    public void CoercesDecimalParameterDefault()
+        => CheckCoercion(
+            "class T { void M(decimal d = 8.25) { } }",
+            "class T { void M(decimal d = 8.25M) { } }");
+
+    [TestMethod]
+    public void CoercesFloatParameterDefault()
+        => CheckCoercion(
+            "class T { void M(float f = 8.25) { } }",
+            "class T { void M(float f = 8.25F) { } }");
+
+    [TestMethod]
+    public void CoercesIntParameterDefaultUIntOverflow()
+        => CheckCoercion(
+            "class T { void M(int x = 0x80000010) { } }",
+            "class T { void M(int x = -2147483632) { } }");
+
+    [TestMethod]
+    public void CoercesUIntParameterDefaultNegative()
+        => CheckCoercion(
+            "class T { void M(uint x = -1) { } }",
+            "class T { void M(uint x = 4294967295) { } }");
+
+    [TestMethod]
+    public void CoercesEnumParameterDefault()
+        => CheckCoercion(
+            "enum E { Off = 0, On = 1 } class T { void M(E e = 1) { } }",
+            "enum E { Off = 0, On = 1 } class T { void M(E e = E.On) { } }");
+
+    [TestMethod]
+    public void LeavesAlreadyCorrectBoolParameterDefaultUnchanged()
+        => CheckCoercion(
+            "class T { void M(bool b = true) { } }");
+
+    [TestMethod]
+    public void LeavesAlreadyCorrectDecimalParameterDefaultUnchanged()
+        => CheckCoercion(
+            "class T { void M(decimal d = 8.25M) { } }");
+
     // ── untyped / other types unchanged ──────────────────────────────────────
 
     [TestMethod]

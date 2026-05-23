@@ -28,33 +28,49 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
             if (lhsType is null)
                 return base.VisitAssignmentExpression(node);
 
-            ExpressionSyntax newRight;
-            if (lhsType.TypeKind == TypeKind.Enum && lhsType is INamedTypeSymbol enumType)
-            {
-                newRight = CoerceToEnumMember(node.Right, enumType);
-            }
-            else
-            {
-                newRight = lhsType.SpecialType switch
-                {
-                    SpecialType.System_Boolean => CoerceToBool(node.Right),
-                    SpecialType.System_Decimal => CoerceNumericLiteral(node.Right,
-                        v => v is double or int,
-                        text => Literal(decimal.Parse(text))),
-                    SpecialType.System_Single  => CoerceNumericLiteral(node.Right,
-                        v => v is double or int,
-                        text => Literal(float.Parse(text))),
-                    SpecialType.System_Int32   => CoerceUIntToInt(node.Right),
-                    SpecialType.System_UInt32  => CoerceIntToUInt(node.Right),
-                    _ => node.Right
-                };
-            }
-
+            var newRight = CoerceByType(node.Right, lhsType);
             if (!ReferenceEquals(newRight, node.Right))
                 return node.WithRight(newRight);
 
             return base.VisitAssignmentExpression(node);
         });
+
+    public override SyntaxNode VisitParameter(ParameterSyntax node)
+        => Rewrite(node, node =>
+        {
+            if (node.Default is null)
+                return base.VisitParameter(node);
+
+            var symbol = semantics.GetDeclaredSymbol(node);
+            if (symbol is null)
+                return base.VisitParameter(node);
+
+            var coerced = CoerceByType(node.Default.Value, symbol.Type);
+            if (!ReferenceEquals(coerced, node.Default.Value))
+                return node.WithDefault(node.Default.WithValue(coerced));
+
+            return base.VisitParameter(node);
+        });
+
+    private ExpressionSyntax CoerceByType(ExpressionSyntax expr, ITypeSymbol targetType)
+    {
+        if (targetType.TypeKind == TypeKind.Enum && targetType is INamedTypeSymbol enumType)
+            return CoerceToEnumMember(expr, enumType);
+
+        return targetType.SpecialType switch
+        {
+            SpecialType.System_Boolean => CoerceToBool(expr),
+            SpecialType.System_Decimal => CoerceNumericLiteral(expr,
+                v => v is double or int,
+                text => Literal(decimal.Parse(text))),
+            SpecialType.System_Single  => CoerceNumericLiteral(expr,
+                v => v is double or int,
+                text => Literal(float.Parse(text))),
+            SpecialType.System_Int32   => CoerceUIntToInt(expr),
+            SpecialType.System_UInt32  => CoerceIntToUInt(expr),
+            _ => expr
+        };
+    }
 
     private static ExpressionSyntax CoerceToBool(ExpressionSyntax expr)
     {
