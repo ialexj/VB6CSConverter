@@ -929,12 +929,16 @@ public sealed class TypeLibraryInspector
             candidates.Add(path);
         }
 
-        AddCandidate(primaryPath);
-
+        // 1. Registry-registered paths: may include a resource-ID suffix ("path.ocx\2") that
+        //    points to a different embedded type library than the raw file load would give.
         foreach (var path in EnumerateRegisteredTypeLibPaths(guid, major, minor, lcid)) {
             AddCandidate(path);
         }
 
+        // 2. Primary path (the file declared in the VBP / passed by the caller).
+        AddCandidate(primaryPath);
+
+        // 3. Remaining sibling type-lib files.
         foreach (var path in EnumerateSiblingTypeLibFiles(primaryPath)) {
             AddCandidate(path);
         }
@@ -978,7 +982,7 @@ public sealed class TypeLibraryInspector
         string stem = Path.GetFileNameWithoutExtension(primaryPath);
         if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(stem)) yield break;
 
-        foreach (var ext in new[] { ".tlb", ".olb", ".oca", ".ocx", ".dll" }) {
+        foreach (var ext in new[] { ".tlb", ".olb", ".ocx", ".oca", ".dll" }) {
             yield return Path.Combine(directory, stem + ext);
         }
     }

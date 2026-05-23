@@ -78,7 +78,7 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
 
         try {
             var parse = Parse(input, className);
-            
+
             var cu = CompilationUnitConverter.GetCompilationUnit(
                 parse.Start.module(), nsName, className,
                 isStatic: type == VisualBasicFileType.Module,

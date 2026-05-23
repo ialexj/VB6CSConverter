@@ -27,7 +27,7 @@ public static class ClassConverter
             foreach (var member in body.moduleBodyElement()) {
                 if (member.propertyGetStmt() is PropertyGetStmtContext propGet) {
                     // Implement IEnumerable
-                    if (propGet.ambiguousIdentifier()?.GetText() == "NewEnum" 
+                    if (propGet.ambiguousIdentifier()?.GetText() == "NewEnum"
                         && propGet.asTypeClause()?.type()?.GetText() == "IUnknown") {
 
                         ExpressionSyntax bodyExpression = ThrowExpression(ObjectCreationExpression(IdentifierName("System.NotImplementedException"), ArgumentList(), default));
@@ -38,7 +38,7 @@ public static class ClassConverter
 
                         c = c.AddBaseListTypes(SimpleBaseType(ParseName("System.Collections.IEnumerable")));
                         c = c.AddMembers(
-                            MethodDeclaration(ParseName("System.Collections.IEnumerator"), "GetEnumerator") 
+                            MethodDeclaration(ParseName("System.Collections.IEnumerator"), "GetEnumerator")
                                 .WithModifiers(Modifiers(isPublic: true, isStatic: false))
                                 .WithExpressionBody(ArrowExpressionClause(bodyExpression))
                                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))
@@ -78,7 +78,7 @@ public static class ClassConverter
                 FieldDeclaration(default,
                     Modifiers(isPublic: true, isStatic: true, isReadOnly: true),
                     VariableDeclaration(
-                        IdentifierName(ctx.Name), Identifier("_Instance"), 
+                        IdentifierName(ctx.Name), Identifier("_Instance"),
                         ImplicitObjectCreationExpression())
                 )
                 .WithLeadingTrivia(TriviaList(Trivia(
@@ -108,7 +108,7 @@ public static class ClassConverter
             );
         }
 
-        
+
 
         return c;
     }
@@ -215,8 +215,8 @@ public static class ClassConverter
                 yield return GetExtern(declare, ctx.UseDynamic);
             }
             else if (e.propertyAccessor() is IPropertyContext prop) {
-                if (prop is PropertyGetStmtContext getter 
-                    && prop.ambiguousIdentifier().GetText() == "NewEnum" 
+                if (prop is PropertyGetStmtContext getter
+                    && prop.ambiguousIdentifier().GetText() == "NewEnum"
                     && getter.asTypeClause().type().GetText() == "IUnknown") {
                     yield break;
                 }
@@ -272,7 +272,7 @@ public static class ClassConverter
         => DeclarationConverter.GetVariableDeclarations(var, options: options).Select(v => FieldDeclaration(v)
             .WithModifiers(GetModifiers(var.visibility(), isStatic)));
 
-    
+
     public static StructDeclarationSyntax GetStruct(TypeStmtContext type, bool useDynamic = true)
     {
         using var _ = new TraceMethod(type);
@@ -303,7 +303,7 @@ public static class ClassConverter
                 SeparatedList(
                     e.enumerationStmt_Constant().Select(c => {
                         var m = EnumMemberDeclaration(GetIdentifier(c.ambiguousIdentifier()));
-                        
+
                         if (c.valueStmt() is ValueStmtContext v) {
                             m = m.WithEqualsValue(EqualsValueClause(GetValue(v, default)));
                         }
@@ -402,8 +402,8 @@ public static class ClassConverter
             .FirstOrDefault();
 
         MemberDeclarationSyntax member;
-        if (attr != null 
-            && attr.implicitCallStmt_InStmt().GetText().EndsWith("VB_UserMemId") 
+        if (attr != null
+            && attr.implicitCallStmt_InStmt().GetText().EndsWith("VB_UserMemId")
             && attr.literal().Length == 1 && attr.literal()[0].INTEGERLITERAL() is ITerminalNode l && l.Symbol.Text == "0") {
 
             member = IndexerDeclaration(type)
@@ -425,7 +425,7 @@ public static class ClassConverter
                     SingletonList(AccessorDeclaration(kind)
                         .WithBody(body))));
         }
-        
+
 
         member = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(member);
         member = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(member);

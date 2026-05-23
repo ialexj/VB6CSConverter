@@ -16,7 +16,7 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
     public override SyntaxNode VisitVariableDeclaration(VariableDeclarationSyntax node)
     {
         var declarator = node.Variables.First();
-        
+
         if (varTypes.TryGetValue(declarator, out var typeSymbol)) {
             return node.WithType(typeSymbol);
         }
@@ -59,8 +59,8 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
 
                         if (node.Parent is AssignmentExpressionSyntax assignment) {
                             var rightType = sem.GetTypeInfo(assignment.Right);
-                            if (rightType.Type != null 
-                                && rightType.Type.SpecialType != SpecialType.System_Object 
+                            if (rightType.Type != null
+                                && rightType.Type.SpecialType != SpecialType.System_Object
                                 && rightType.Type.TypeKind != TypeKind.Dynamic
                                 && rightType.Type.ToString() != "Microsoft.VisualBasic.VariantType"
                                 && !SymbolEqualityComparer.Default.Equals(type, rightType.Type)) {

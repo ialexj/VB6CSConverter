@@ -30,7 +30,7 @@ public static class StatementConverter
             return Block();
         }
     }
-        
+
 
     public static IEnumerable<StatementSyntax> GetMethodStatements(IEnumerable<BlockStmtContext> statements, CallContext ctx)
     {
@@ -414,7 +414,7 @@ public static class StatementConverter
         }
     }
 
-    
+
 
 
     public static StatementSyntax GetRedim(RedimStmtContext redim, CallContext ctx)
@@ -459,7 +459,7 @@ public static class StatementConverter
     public static StatementSyntax GetOpen(OpenStmtContext open, CallContext ctx)
     {
         var file = GetValue(open.valueStmt(0), ctx);
-        var name = GetValue(open.valueStmt(1), ctx);       
+        var name = GetValue(open.valueStmt(1), ctx);
 
         var variable = name switch {
             IdentifierNameSyntax n => n,
@@ -579,7 +579,7 @@ public static class StatementConverter
                     ArgumentList(value)));
         }
     }
-    
+
     public static StatementSyntax GetClose(CloseStmtContext close, CallContext ctx)
     {
         var value = GetValue(close.valueStmt(0), ctx);
@@ -647,5 +647,5 @@ public static class StatementConverter
         );
     }
 
-    
+
 }

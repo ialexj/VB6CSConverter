@@ -81,7 +81,7 @@ public sealed class ClassTests
         End Sub
         """,
         """
-        public static void Test(string arg1, int arg2, object another)
+        public static void Test(string arg1, int arg2, dynamic another)
         {
         }
         """

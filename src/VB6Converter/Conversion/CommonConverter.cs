@@ -39,9 +39,9 @@ public static class CommonConverter
                 ? (useDynamic ? IdentifierName("dynamic") : PredefinedType(Token(SyntaxKind.ObjectKeyword)))
                 : PredefinedType(Token(SyntaxKind.VoidKeyword));
         }
-        
+
         var type = asType.type().ToTypeSyntax(useDynamic);
-        
+
         if (asType.fieldLength() is FieldLengthContext length) {
             type = type.WithAdditionalAnnotations(new SyntaxAnnotation("FixedLength", length.INTEGERLITERAL().Symbol.Text));
         }

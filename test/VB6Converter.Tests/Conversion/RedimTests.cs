@@ -30,7 +30,7 @@ public class RedimTests
         ReDim arr(10)
         """,
         """
-        arr = new object[10];
+        arr = new dynamic[10];
         """);
 
     [TestMethod]

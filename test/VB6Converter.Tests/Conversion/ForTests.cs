@@ -99,7 +99,7 @@ public class ForTests
         Next
         """,
         """
-        object v = default;
+        dynamic v = default;
         foreach (var v in values)
         {
             UseValue(v);

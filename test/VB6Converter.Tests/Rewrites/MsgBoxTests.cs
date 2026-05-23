@@ -37,7 +37,7 @@ namespace VB6Converter.Tests;
             End Function
             """,
             """
-            public static object SqlStr(string s) => "'" + Strings.Replace((string)s, "'", "''") + "'";
+            public static dynamic SqlStr(string s) => "'" + Strings.Replace((string)s, "'", "''") + "'";
             """);
 
         [TestMethod]

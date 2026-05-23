@@ -92,13 +92,13 @@ public static class Program
                 await Task.Yield();
 
                 try {
-                    var models = TypeLibraryInspector.InspectAll(entry.Guid, entry.Major, entry.Minor, entry.Name, entry.Path, entry.IsTransitive);
-                    if (models.Count == 0) {
+                    var model = TypeLibraryInspector.Inspect(entry.Guid, entry.Major, entry.Minor, entry.Name, entry.Path, entry.IsTransitive);
+                    if (model == null) {
                         anyFailed = true;
                         return;
                     }
 
-                    foreach (var model in models) {
+                    {
                         var m = model;
 
                         // Optionally filter types

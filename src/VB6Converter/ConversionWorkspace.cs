@@ -192,6 +192,11 @@ public sealed class ConversionWorkspace : IDisposable
         ActiveTargets = list.AsReadOnly();
     }
 
+    public void AddToActiveTargets(IEnumerable<ConversionTarget> targets)
+    {
+        ActiveTargets = [.. ActiveTargets, .. targets];
+    }
+
     Document GetOrCreateDocument(ConversionTarget target)
     {
         lock (_ws) {

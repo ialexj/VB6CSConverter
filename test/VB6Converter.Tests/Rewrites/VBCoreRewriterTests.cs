@@ -228,7 +228,7 @@ public class VBCoreRewriterTests
         End Sub
         """,
         """
-        public static void Test(object x = default)
+        public static void Test(dynamic x = default)
         {
             if (x != default)
                 DoSomething();

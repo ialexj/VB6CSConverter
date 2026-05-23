@@ -89,13 +89,14 @@ public static class ReferenceStubGenerator
         ComQueryType type,
         string emittedTypeName,
         HashSet<(string TypeName, string FieldName)> cyclicFields,
-        bool filterComPlumbing)
+        bool filterComPlumbing,
+        bool useDynamic = true)
     {
         MemberDeclarationSyntax? decl = type.Kind switch {
             LibraryTypeKind.Enum                                              => GenerateEnum(type, emittedTypeName),
-            LibraryTypeKind.DispatchInterface or LibraryTypeKind.Interface     => GenerateInterface(library, type, emittedTypeName),
-            LibraryTypeKind.Class or LibraryTypeKind.Module                    => GenerateClass(library, type, emittedTypeName),
-            LibraryTypeKind.Struct                                            => GenerateStruct(type, emittedTypeName, cyclicFields),
+            LibraryTypeKind.DispatchInterface or LibraryTypeKind.Interface     => GenerateInterface(library, type, emittedTypeName, useDynamic),
+            LibraryTypeKind.Class or LibraryTypeKind.Module                    => GenerateClass(library, type, emittedTypeName, useDynamic),
+            LibraryTypeKind.Struct                                            => GenerateStruct(type, emittedTypeName, cyclicFields, useDynamic),
             _                                                                  => null,
         };
 
@@ -190,7 +191,10 @@ public static class ReferenceStubGenerator
             .GroupBy(m => m.Name)
             .ToList();
 
-        bool hasIndexer = false;
+        bool hasIndexer = propertyGroups.Any(g => {
+            var pg = g.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
+            return pg?.IsDefault == true && pg.Parameters.Count > 0;
+        });
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
             var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
@@ -218,9 +222,13 @@ public static class ReferenceStubGenerator
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
-                hasIndexer = true;
             }
             else {
+                // Skip any "Item" property when an indexer is already being emitted — C# does not
+                // allow both a named "Item" property and an indexer in the same type (CS0102).
+                if (hasIndexer && string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
                 var prop = PropertyDeclaration(MemberType(propType, useDynamic), Identifier(propertyName))
                     .WithAccessorList(AccessorList(List(accessors)));
@@ -246,10 +254,10 @@ public static class ReferenceStubGenerator
             if (inheritsIEnumerable && string.Equals(method.Name, "GetEnumerator", StringComparison.OrdinalIgnoreCase)) continue;
             string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
             string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
-            var parameters = BuildParameters(method.Parameters).ToArray();
+            var parameters = BuildParameters(method.Parameters, useDynamic).ToArray();
 
             var methodDecl = MethodDeclaration(
-                    ParseTypeName(method.ReturnType),
+                    MemberType(method.ReturnType, useDynamic),
                     Identifier(methodName))
                 .WithParameterList(ParameterList(SeparatedList(parameters)))
                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
@@ -257,7 +265,7 @@ public static class ReferenceStubGenerator
             memberDecls.Add(methodDecl);
         }
 
-        var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: true);
+        var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: true, useDynamic);
         if (forwardingIndexer != null) memberDecls.Add(forwardingIndexer);
 
         var decl = InterfaceDeclaration(Identifier(emittedTypeName))
@@ -330,7 +338,13 @@ public static class ReferenceStubGenerator
             .ToList();
 
         var handledPropertyNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-        bool hasIndexer = false;
+
+        // Pre-compute whether a C# indexer will be emitted so that any same-named "Item"
+        // property can be suppressed regardless of alphabetical ordering in the loop below.
+        bool hasIndexer = propertyGroups.Any(g => {
+            var pg = g.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
+            return pg?.IsDefault == true && pg.Parameters.Count > 0;
+        });
 
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
             if (exceptionDerived && ExceptionInheritedMembers.Contains(group.Key)) continue;
@@ -365,9 +379,15 @@ public static class ReferenceStubGenerator
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
-                hasIndexer = true;
             }
             else {
+                // Skip any "Item" property when an indexer is already being emitted — C# does not
+                // allow both a named "Item" property and an indexer in the same class (CS0102).
+                if (hasIndexer && string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase)) {
+                    handledPropertyNames.Add(group.Key);
+                    continue;
+                }
+
                 string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
                 var prop = PropertyDeclaration(MemberType(propType, useDynamic), Identifier(propertyName))
                     .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
