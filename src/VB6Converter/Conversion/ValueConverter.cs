@@ -167,7 +167,7 @@ public static class ValueConverter
                 ));
         }
         else if (lit.FILENUMBER() is ITerminalNode file) {
-            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(file.GetText().TrimStart('#')));
+            return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(int.Parse(file.GetText().TrimStart('#'))));
         }
         else if (lit.COLORLITERAL() is ITerminalNode color) {
 

@@ -11,104 +11,246 @@ namespace VB6Converter.Tests.Conversion;
 public class IOTests
 {
     [TestMethod]
-    public void OpenReadModeUsesReadAccessAndNoShare()
+    public void OpenReadModeUsesFileOpenWithInputMode()
     {
         var conversion = ConvertBody(
             """
-            Open "a.txt" For Input As f
+            Open "a.txt" For Input As #1
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("File.Open");
-        body.Should().Contain("FileAccess.Read");
-        body.Should().Contain("FileShare.None");
+        body.Should().Contain("FileOpen");
+        body.Should().Contain("OpenMode.Input");
     }
 
     [TestMethod]
-    public void OpenOutputModeUsesCurrentReadWriteMapping()
+    public void OpenOutputModeUsesFileOpenWithOutputMode()
     {
         var conversion = ConvertBody(
             """
-            Open "a.txt" For Output As f
+            Open "a.txt" For Output As #1
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("FileAccess.ReadWrite");
-        body.Should().Contain("FileShare.None");
+        body.Should().Contain("FileOpen");
+        body.Should().Contain("OpenMode.Output");
     }
-    // TODO: Regression baseline — VB6 "For Output" is write-only so should map to FileAccess.Write, not FileAccess.ReadWrite.
-    // StatementConverter Open-mode dispatch assigns ReadWrite for Output mode incorrectly.
 
     [TestMethod]
-    public void OpenInputSharedUsesReadWriteShare()
+    public void OpenAppendModeUsesFileOpenWithAppendMode()
     {
         var conversion = ConvertBody(
             """
-            Open "a.txt" For Input Shared As f
+            Open "a.txt" For Append As #1
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("FileAccess.Read");
-        body.Should().Contain("FileShare.ReadWrite");
+        body.Should().Contain("FileOpen");
+        body.Should().Contain("OpenMode.Append");
     }
 
     [TestMethod]
-    public void PrintSpcProducesTransformError()
+    public void OpenInputSharedUsesFileOpenWithSharedShare()
     {
         var conversion = ConvertBody(
             """
-            Print #f, SPC(3)
+            Open "a.txt" For Input Shared As #1
             """);
 
-        conversion.TransformErrors.Should().Contain(e => e.Message.Contains("Print SPC not supported"));
+        var body = GetBodyText(conversion);
+        body.Should().Contain("OpenMode.Input");
+        body.Should().Contain("OpenShare.Shared");
     }
 
     [TestMethod]
-    public void PrintTabProducesTransformError()
+    public void OpenWithAccessReadUsesOpenAccessRead()
     {
         var conversion = ConvertBody(
             """
-            Print #f, TAB(3)
+            Open "a.txt" For Input Access Read As #1
             """);
 
-        conversion.TransformErrors.Should().Contain(e => e.Message.Contains("Print TAB not supported"));
+        var body = GetBodyText(conversion);
+        body.Should().Contain("OpenAccess.Read");
     }
 
     [TestMethod]
-    public void CloseStatementCallsDispose()
+    public void PrintStatementUsesPrintLine()
     {
         var conversion = ConvertBody(
             """
-            Close #f
+            Print #1, x
             """);
 
-        GetBodyText(conversion).Should().Contain("Dispose");
+        GetBodyText(conversion).Should().Contain("PrintLine");
     }
 
     [TestMethod]
-    public void LineInputStatementUsesFileSystemLineInput()
+    public void PrintWithTrailingSemicolonUsesPrint()
     {
         var conversion = ConvertBody(
             """
-            Line Input #f, lineText
+            Print #1, x;
             """);
 
-        GetBodyText(conversion).Should().Contain("FileSystem.LineInput");
+        GetBodyText(conversion).Should().Contain("Print(");
+        GetBodyText(conversion).Should().NotContain("PrintLine");
     }
 
     [TestMethod]
-    public void WriteStatementUsesFileSystemWrite()
+    public void PrintSpcDoesNotProduceError()
     {
         var conversion = ConvertBody(
             """
-            Write #f, x
+            Print #1, SPC(3)
             """);
 
-        GetBodyText(conversion).Should().Contain("FileSystem.Write");
+        conversion.TransformErrors.Should().BeEmpty();
+        GetBodyText(conversion).Should().Contain("SPC(");
     }
 
     [TestMethod]
-    public void KillStatementUsesFileDelete()
+    public void PrintTabDoesNotProduceError()
+    {
+        var conversion = ConvertBody(
+            """
+            Print #1, TAB(5)
+            """);
+
+        conversion.TransformErrors.Should().BeEmpty();
+        GetBodyText(conversion).Should().Contain("TAB(");
+    }
+
+    [TestMethod]
+    public void CloseStatementUsesFileClose()
+    {
+        var conversion = ConvertBody(
+            """
+            Close #1
+            """);
+
+        GetBodyText(conversion).Should().Contain("FileClose");
+    }
+
+    [TestMethod]
+    public void CloseWithNoArgsUsesFileCloseWithNoArgs()
+    {
+        var conversion = ConvertBody(
+            """
+            Close
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("FileClose()");
+    }
+
+    [TestMethod]
+    public void CloseWithMultipleFileNumbersPassesAll()
+    {
+        var conversion = ConvertBody(
+            """
+            Dim f1 As Integer
+            Dim f2 As Integer
+            Close f1, f2
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("FileClose");
+        body.Should().Contain("f1");
+        body.Should().Contain("f2");
+    }
+
+    [TestMethod]
+    public void LineInputStatementAssignsReturnValue()
+    {
+        var conversion = ConvertBody(
+            """
+            Line Input #1, lineText
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("LineInput(");
+        body.Should().Contain("lineText");
+        body.Should().Contain("=");
+    }
+
+    [TestMethod]
+    public void WriteStatementPassesFileNumAndItems()
+    {
+        var conversion = ConvertBody(
+            """
+            Write #1, x, y
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Write(");
+        body.Should().Contain("1");
+    }
+
+    [TestMethod]
+    public void InputStatementUsesRefArguments()
+    {
+        var conversion = ConvertBody(
+            """
+            Input #1, x, y
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Input(");
+        body.Should().Contain("ref");
+    }
+
+    [TestMethod]
+    public void InputStatementProducesOneCallPerVariable()
+    {
+        var conversion = ConvertBody(
+            """
+            Input #1, x, y
+            """);
+
+        var method = conversion.Class.Members.OfType<MethodDeclarationSyntax>().Single();
+        method.Body!.Statements.Should().HaveCount(2);
+    }
+
+    [TestMethod]
+    public void PutStatementUsesFilePut()
+    {
+        var conversion = ConvertBody(
+            """
+            Put #1, , x
+            """);
+
+        GetBodyText(conversion).Should().Contain("FilePut(");
+    }
+
+    [TestMethod]
+    public void GetStatementUsesFileGet()
+    {
+        var conversion = ConvertBody(
+            """
+            Get #1, , x
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("FileGet(");
+        body.Should().Contain("ref");
+    }
+
+    [TestMethod]
+    public void SeekStatementUsesSeek()
+    {
+        var conversion = ConvertBody(
+            """
+            Seek #1, 100
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Seek(");
+        body.Should().Contain("100");
+    }
+
+    [TestMethod]
+    public void KillStatementUsesKill()
     {
         var conversion = ConvertBody(
             """
@@ -116,7 +258,7 @@ public class IOTests
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("File.Delete");
+        body.Should().Contain("Kill(");
     }
 
 

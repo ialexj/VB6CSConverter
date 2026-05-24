@@ -78,6 +78,16 @@ public static class StatementConverter
                     );
                 });
             }
+            else if (stmt.inputStmt() is InputStmtContext inputCtx) {
+                var fileNum = GetValue(inputCtx.valueStmt(0), ctx);
+                return inputCtx.valueStmt().Skip(1).Select(v =>
+                    (StatementSyntax)ExpressionStatement(
+                        InvocationExpression(
+                            IdentifierName("Input"),
+                            ArgumentList(
+                                Argument(fileNum),
+                                Argument(GetValue(v, ctx)).WithRefKindKeyword(Token(SyntaxKind.RefKeyword))))));
+            }
             else {
                 return [ GetMethodStatement(stmt, ctx) ];
             }
@@ -132,21 +142,57 @@ public static class StatementConverter
                 return GetClose(close, ctx);
             }
             else if (stmt.lineInputStmt() is LineInputStmtContext lineInput) {
-                return ExpressionStatement(InvocationExpression(
-                    ParseExpression("FileSystem.LineInput"),
-                    ArgumentList(
-                        GetValue(lineInput.valueStmt(0), ctx),
-                        GetValue(lineInput.valueStmt(1), ctx))));
+                var fileNum = GetValue(lineInput.valueStmt(0), ctx);
+                var variable = GetValue(lineInput.valueStmt(1), ctx);
+                return ExpressionStatement(
+                    AssignmentExpression(
+                        SyntaxKind.SimpleAssignmentExpression,
+                        variable,
+                        InvocationExpression(IdentifierName("LineInput"), ArgumentList(fileNum))));
             }
             else if (stmt.writeStmt() is WriteStmtContext writeStmt) {
-                // todo
-                return ExpressionStatement(InvocationExpression(
-                    ParseExpression("FileSystem.Write"),
-                    ArgumentList(
-                        Argument(GetValue(writeStmt.valueStmt(), ctx)))));
+                var fileNum = GetValue(writeStmt.valueStmt(), ctx);
+                var items = writeStmt.outputList()?.outputList_Expression()
+                    .Where(o => o.valueStmt() is not null)
+                    .Select(o => GetValue(o.valueStmt(), ctx))
+                    .ToArray() ?? [];
+                return ExpressionStatement(
+                    InvocationExpression(
+                        IdentifierName("Write"),
+                        ArgumentList(new[] { Argument(fileNum) }.Concat(items.Select(a => Argument(a))).ToArray())));
             }
-
-
+            else if (stmt.getStmt() is GetStmtContext getCtx) {
+                var getVals = getCtx.valueStmt();
+                var (getRecord, getVar) = getVals.Length == 3
+                    ? ((ExpressionSyntax)GetValue(getVals[1], ctx), GetValue(getVals[2], ctx))
+                    : (null, GetValue(getVals[1], ctx));
+                var getArgs = new List<ArgumentSyntax> {
+                    Argument(GetValue(getVals[0], ctx)),
+                    Argument(getVar).WithRefKindKeyword(Token(SyntaxKind.RefKeyword)),
+                };
+                if (getRecord is not null) getArgs.Add(Argument(getRecord));
+                return ExpressionStatement(
+                    InvocationExpression(IdentifierName("FileGet"), ArgumentList(getArgs.ToArray())));
+            }
+            else if (stmt.putStmt() is PutStmtContext putCtx) {
+                var putVals = putCtx.valueStmt();
+                var (putRecord, putVar) = putVals.Length == 3
+                    ? ((ExpressionSyntax)GetValue(putVals[1], ctx), GetValue(putVals[2], ctx))
+                    : (null, GetValue(putVals[1], ctx));
+                var putArgs = new List<ArgumentSyntax> {
+                    Argument(GetValue(putVals[0], ctx)),
+                    Argument(putVar),
+                };
+                if (putRecord is not null) putArgs.Add(Argument(putRecord));
+                return ExpressionStatement(
+                    InvocationExpression(IdentifierName("FilePut"), ArgumentList(putArgs.ToArray())));
+            }
+            else if (stmt.seekStmt() is SeekStmtContext seekCtx) {
+                return ExpressionStatement(
+                    InvocationExpression(IdentifierName("Seek"), ArgumentList(
+                        GetValue(seekCtx.valueStmt(0), ctx),
+                        GetValue(seekCtx.valueStmt(1), ctx))));
+            }
             else if (stmt.killStmt() is KillStmtContext kill) {
                 return GetKill(kill, ctx);
             }
@@ -458,114 +504,102 @@ public static class StatementConverter
 
     public static StatementSyntax GetOpen(OpenStmtContext open, CallContext ctx)
     {
-        var file = GetValue(open.valueStmt(0), ctx);
-        var name = GetValue(open.valueStmt(1), ctx);
+        var path = GetValue(open.valueStmt(0), ctx);
+        var fileNum = GetValue(open.valueStmt(1), ctx);
 
-        var variable = name switch {
-            IdentifierNameSyntax n => n,
-            LiteralExpressionSyntax l => IdentifierName(l.Token.ValueText.Trim('"', '#')),
-            _ => IdentifierName("_unknown")
-                .WithError(TransformError.Create(open.valueStmt(1), "Unknown open type"))
+        string GetMode()
+        {
+            if (open.APPEND() != null) return "OpenMode.Append";
+            if (open.BINARY() != null) return "OpenMode.Binary";
+            if (open.INPUT() != null) return "OpenMode.Input";
+            if (open.OUTPUT() != null) return "OpenMode.Output";
+            return "OpenMode.Random";
+        }
+
+        string GetAccess()
+        {
+            if (open.READ_WRITE() != null) return "OpenAccess.ReadWrite";
+            if (open.READ() != null) return "OpenAccess.Read";
+            if (open.WRITE() != null) return "OpenAccess.Write";
+            return null;
+        }
+
+        string GetShare()
+        {
+            if (open.LOCK_READ_WRITE() != null) return "OpenShare.LockReadWrite";
+            if (open.LOCK_WRITE() != null) return "OpenShare.LockWrite";
+            if (open.LOCK_READ() != null) return "OpenShare.LockRead";
+            if (open.SHARED() != null) return "OpenShare.Shared";
+            return null;
+        }
+
+        var args = new List<ArgumentSyntax> {
+            Argument(fileNum),
+            Argument(path),
+            Argument(ParseName(GetMode()))
         };
 
-        string GetFileAccess()
-        {
-            if (open.READ_WRITE() != null) {
-                return "FileAccess.ReadWrite";
-            }
-            else if (open.READ() != null) {
-                return "FileAccess.Read";
-            }
-            else if (open.WRITE() != null) {
-                return "FileAccess.Write";
-            }
-            else {
-                return "FileAccess.ReadWrite";
-            }
+        var access = GetAccess();
+        var share = GetShare();
+        if (access is not null || share is not null) {
+            args.Add(Argument(ParseName(access ?? "OpenAccess.Default")));
+            if (share is not null) args.Add(Argument(ParseName(share)));
         }
 
-        string GetFileShare()
-        {
-            if (open.LOCK_READ_WRITE() != null) {
-                return "FileShare.None";
-            }
-            else if (open.LOCK_WRITE() != null) {
-                return "FileShare.Read";
-            }
-            else if (open.LOCK_READ() != null) {
-                return "FileShare.Write";
-            }
-            else if (open.SHARED() != null) {
-                return "FileShare.ReadWrite";
-            }
-            else {
-                return "FileShare.None";
-            }
+        if (open.LEN() is not null && open.valueStmt().Length > 2) {
+            args.Add(Argument(GetValue(open.valueStmt(2), ctx))
+                .WithNameColon(NameColon(IdentifierName("RecordLength"))));
         }
 
-        return LocalDeclarationStatement(
-                VariableDeclaration(
-                    IdentifierName(
-                        Identifier(TriviaList(), SyntaxKind.VarKeyword, "var", "var", TriviaList())
-                    ),
-                    SingletonSeparatedList(
-                        VariableDeclarator(variable.Identifier)
-                            .WithInitializer(EqualsValueClause(
-                                ObjectCreationExpression(IdentifierName("StreamWriter"))
-                                    .WithArgumentList(ArgumentList(
-                                        InvocationExpression(
-                                            MemberAccessExpression(
-                                                SyntaxKind.SimpleMemberAccessExpression,
-                                                IdentifierName("File"), IdentifierName("Open")
-                                            )
-                                        )
-                                        .WithArgumentList(ArgumentList(
-                                            file,
-                                            ParseName("FileMode.Open"),
-                                            ParseName(GetFileAccess()),
-                                            ParseName(GetFileShare())
-                                        ))
-
-                            ))
-
-                    )
-                )
-            )))
-            .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.IO"));
+        return ExpressionStatement(
+            InvocationExpression(IdentifierName("FileOpen"), ArgumentList(args.ToArray())))
+            .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.VisualBasic"));
     }
 
     public static StatementSyntax GetPrint(PrintStmtContext print, CallContext ctx)
     {
         using var _ = new TraceMethod(print);
 
-        var target = GetValue(print.valueStmt(), ctx);
+        var fileNum = GetValue(print.valueStmt(), ctx);
+        var outputList = print.outputList();
 
-        var outputs = print.outputList().outputList_Expression().Select(o => {
+        ExpressionSyntax GetOutputExpression(OutputList_ExpressionContext o)
+        {
             if (o.SPC() is not null) {
-                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(""))
-                    .WithError(TransformError.Create(o, "Print SPC not supported."));
+                var spcArgs = o.argsCall();
+                if (spcArgs?.argCall().Length > 0) {
+                    return InvocationExpression(IdentifierName("SPC"),
+                        ArgumentList(GetValue(spcArgs.argCall(0).valueStmt(), ctx)));
+                }
+                return InvocationExpression(IdentifierName("SPC"), ArgumentList());
             }
             if (o.TAB() is not null) {
-                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(""))
-                    .WithError(TransformError.Create(o, "Print TAB not supported."));
+                var tabArgs = o.argsCall();
+                if (tabArgs?.argCall().Length > 0) {
+                    return InvocationExpression(IdentifierName("TAB"),
+                        ArgumentList(GetValue(tabArgs.argCall(0).valueStmt(), ctx)));
+                }
+                return InvocationExpression(IdentifierName("TAB"), ArgumentList());
             }
-
             if (o.valueStmt() is ValueStmtContext value) {
                 return GetValue(value, ctx);
             }
-            else {
-                return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(""))
-                    .WithError(TransformError.Create(o, "Print without value"));
-            }
-        }).ToArray();
+            return LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(""))
+                .WithError(TransformError.Create(o, "Print without value"));
+        }
 
-        var statements = outputs.Select(o => ExpressionStatement(
+        // Trailing semicolon suppresses newline → use Print; otherwise use PrintLine
+        var lastSep = outputList?.children?.OfType<ITerminalNode>()
+            .LastOrDefault(t => t.GetText() is ";" or ",");
+        var methodName = lastSep?.GetText() == ";" ? "Print" : "PrintLine";
+
+        var items = outputList?.outputList_Expression()
+            .Select(GetOutputExpression).ToArray() ?? [];
+
+        return ExpressionStatement(
             InvocationExpression(
-                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, target, IdentifierName("Write")))
-                    .WithArgumentList(ArgumentList(outputs))))
-            .ToArray();
-
-        return RoslynHelpers.GetBlock(statements, true);
+                IdentifierName(methodName),
+                ArgumentList(new[] { Argument(fileNum) }.Concat(items.Select(a => Argument(a))).ToArray())));
     }
 
     public static IEnumerable<StatementSyntax> GetErase(EraseStmtContext erase, CallContext ctx)
@@ -582,27 +616,16 @@ public static class StatementConverter
 
     public static StatementSyntax GetClose(CloseStmtContext close, CallContext ctx)
     {
-        var value = GetValue(close.valueStmt(0), ctx);
-
+        var fileNums = close.valueStmt().Select(v => GetValue(v, ctx)).ToArray();
         return ExpressionStatement(
-            InvocationExpression(
-                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
-                    value, IdentifierName("Dispose")),
-                ArgumentList()))
-            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+            InvocationExpression(IdentifierName("FileClose"), ArgumentList(fileNums)));
     }
 
     public static StatementSyntax GetKill(KillStmtContext kill, CallContext ctx)
     {
         var value = GetValue(kill.valueStmt(), ctx);
         return ExpressionStatement(
-            InvocationExpression(
-                QualifiedName(
-                    IdentifierName("File").WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.IO")),
-                    IdentifierName("Delete")
-                ),
-                ArgumentList(value)))
-            .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.IO"));
+            InvocationExpression(IdentifierName("Kill"), ArgumentList(value)));
     }
 
 

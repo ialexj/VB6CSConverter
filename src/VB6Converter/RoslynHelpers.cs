@@ -11,7 +11,7 @@ namespace VB6Converter;
 internal static class RoslynHelpers
 {
     public static CompilationUnitSyntax CompilationUnit(
-        ClassDeclarationSyntax cls, NameSyntax ns = null) 
+        ClassDeclarationSyntax cls, NameSyntax ns = null)
         => SyntaxFactory.CompilationUnit()
             .WithMembers(
                 SingletonList<MemberDeclarationSyntax>(
@@ -23,7 +23,7 @@ internal static class RoslynHelpers
 
     public static SyntaxTokenList Modifiers(
         bool isPublic = false, bool isInternal = false, bool isProtected = false,
-        bool isStatic = false, 
+        bool isStatic = false,
         bool isReadOnly = false, bool isPartial = false)
     {
         IEnumerable<SyntaxKind> GetKinds()
@@ -39,7 +39,7 @@ internal static class RoslynHelpers
         return TokenList(GetKinds().Select(Token));
     }
 
-    public static VariableDeclarationSyntax VariableDeclaration(TypeSyntax type, SyntaxToken name, ExpressionSyntax initializer = null) 
+    public static VariableDeclarationSyntax VariableDeclaration(TypeSyntax type, SyntaxToken name, ExpressionSyntax initializer = null)
         => SyntaxFactory.VariableDeclaration(type,
             SingletonSeparatedList(
                 VariableDeclarator(name, null,

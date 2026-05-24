@@ -282,11 +282,11 @@ public class ValueTests
 
 
     [TestMethod]
-    public void FileNumberLiteralBecomesString() => ValidateBodyMatches(
+    public void FileNumberLiteralBecomesInteger() => ValidateBodyMatches(
         """
         x = #1
         """,
         """
-        x = "1";
+        x = 1;
         """);
 }
