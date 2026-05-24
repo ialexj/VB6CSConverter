@@ -104,8 +104,8 @@ VB6 project (.vbp)
   ↓  _Diagnostics.txt written to output dir
 ```
 
-Files that already exist **and have `[GeneratedCode]`** are overwritten on re-run.  
-Files without `[GeneratedCode]` are skipped unless `--overwrite-user` is set.
+Files that already exist are overwritten on re-run.  
+(Previously files without `[GeneratedCode]` were skipped, but that attribute has been removed.)
 
 ---
 
@@ -144,7 +144,7 @@ These walk ANTLR contexts and emit Roslyn `SyntaxNode`s.
 | File | Converts |
 |---|---|
 | [CompilationUnitConverter.cs](src/VB6Converter/Conversion/CompilationUnitConverter.cs) | `ModuleContext` → `CompilationUnitSyntax`; applies initial rewriters; creates file-scoped namespace + class |
-| [ClassConverter.cs](src/VB6Converter/Conversion/ClassConverter.cs) | VB6 module/class/form → C# class with `[GeneratedCode]`; form controls → base class + fields |
+| [ClassConverter.cs](src/VB6Converter/Conversion/ClassConverter.cs) | VB6 module/class/form → C# class; form controls → base class + fields |
 | [StatementConverter.cs](src/VB6Converter/Conversion/StatementConverter.cs) | All block statements (If, For, While, Do, Select Case, GoTo, labels, …) |
 | [DeclarationConverter.cs](src/VB6Converter/Conversion/DeclarationConverter.cs) | `Const` / `Dim` / `Public` declarations including arrays |
 | [ValueConverter.cs](src/VB6Converter/Conversion/ValueConverter.cs) | Expressions and literals |
@@ -281,7 +281,6 @@ Root-level tests:
 
 - **File-scoped namespaces**: all files use `namespace Foo;` not `namespace Foo { … }`
 - **Record types for data**: `ParseError`, `ParseContext`, `VB6ToCSharpConversion`, `ConversionTarget` are records
-- **`[GeneratedCode]` attribute**: all converter-output classes carry `[System.CodeDom.Compiler.GeneratedCode("VB6Converter", "1.0")]`; used to decide what can be overwritten on re-run
 - **Rewriter base class**: every rewriter extends `LoggedRewriter` (not `CSharpSyntaxRewriter` directly); provides structured Serilog logging and error accumulation
 - **Error files**: parse/transform errors write a `.log` file alongside each `.cs` output; `.vb6` copy of the source is written when parse errors occur
 - **Global VB6 compat usings**: `_VB6Usings.cs` is generated in the output dir and provides `using static` for `FileSystem`, `Strings`, and other VB runtime members

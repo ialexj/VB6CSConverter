@@ -14,34 +14,6 @@ namespace ComStubGenerator;
 /// </summary>
 internal static class StubGenHelpers
 {
-    static readonly string Version = DateTime.Now.ToString("O");
-
-    static AttributeListSyntax GeneratedCodeAttributeList()
-        => AttributeList(SingletonSeparatedList(
-            Attribute(ParseName("System.CodeDom.Compiler.GeneratedCode"), AttributeArgumentList(
-                SeparatedList<AttributeArgumentSyntax>(
-                    new SyntaxNodeOrToken[] {
-                        AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("VB6Converter"))),
-                        Token(SyntaxKind.CommaToken),
-                        AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(Version)))
-                    }
-                )
-            ))
-            .WithLeadingTrivia(TriviaList(Whitespace(Environment.NewLine)))
-        ));
-
-    public static ClassDeclarationSyntax WithGeneratedCodeAttribute(this ClassDeclarationSyntax classSyntax)
-        => classSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
-
-    public static EnumDeclarationSyntax WithGeneratedCodeAttribute(this EnumDeclarationSyntax enumSyntax)
-        => enumSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
-
-    public static StructDeclarationSyntax WithGeneratedCodeAttribute(this StructDeclarationSyntax structSyntax)
-        => structSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
-
-    public static InterfaceDeclarationSyntax WithGeneratedCodeAttribute(this InterfaceDeclarationSyntax interfaceSyntax)
-        => interfaceSyntax.WithAttributeLists(SingletonList(GeneratedCodeAttributeList()));
-
     /// <summary>
     /// Builds <c>[System.Reflection.DefaultMember("<paramref name="memberName"/>")]</c>.
     /// Apply this to a type when its VB6 DISPID 0 member is a named property rather than

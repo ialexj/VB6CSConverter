@@ -72,7 +72,6 @@ public static class DesignerFileSplitter
 
         var designerClass = ClassDeclaration(cls.Identifier)
             .WithModifiers(cls.Modifiers)
-            .WithGeneratedCodeAttribute()
             .WithBaseList(cls.BaseList)
             .WithMembers(List(cleanedMembers));
 

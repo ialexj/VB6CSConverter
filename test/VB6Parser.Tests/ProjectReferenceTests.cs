@@ -30,7 +30,6 @@ public class ProjectReferenceTests
 
         var project = LoadFromLines(vbp);
 
-        project.References.Should().Contain(r => r.Guid == ImplicitVb6RuntimeGuid);
         var r = project.References.Single(r => r.Guid == new Guid("00020430-0000-0000-C000-000000000046"));
         r.Kind.Should().Be(ProjectReferenceKind.TypeLibrary);
         r.Guid.Should().Be(new Guid("00020430-0000-0000-C000-000000000046"));
@@ -125,8 +124,7 @@ public class ProjectReferenceTests
             var project = VisualBasicProject.Load(tempFile);
 
             project.Files.Should().HaveCount(2);
-            project.References.Should().HaveCount(3);
-            project.References.Should().Contain(r => r.Guid == ImplicitVb6RuntimeGuid);
+            project.References.Should().HaveCount(2);
             project.References.Should().Contain(r => r.Kind == ProjectReferenceKind.TypeLibrary
                 && r.Guid == new Guid("00020430-0000-0000-C000-000000000046"));
             project.References.Should().Contain(r => r.Kind == ProjectReferenceKind.ActiveX
@@ -186,9 +184,7 @@ public class ProjectReferenceTests
 
         var project = LoadFromLines(vbp);
 
-        project.References.Should().HaveCount(2);
-        project.References.Should().Contain(r => r.Guid == ImplicitVb6RuntimeGuid);
-        project.References.Should().Contain(r => r.Guid == ImplicitStdOleGuid);
+        project.References.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -198,9 +194,7 @@ public class ProjectReferenceTests
 
         var project = LoadFromLines(vbp);
 
-        project.References.Should().HaveCount(2);
-        project.References.Should().Contain(r => r.Guid == ImplicitVb6RuntimeGuid);
-        project.References.Should().Contain(r => r.Guid == ImplicitStdOleGuid);
+        project.References.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -214,10 +208,8 @@ public class ProjectReferenceTests
 
         var project = LoadFromLines(vbp);
 
-        // One explicit reference parsed + implicit VB6 runtime
-        project.References.Should().HaveCount(2);
+        project.References.Should().HaveCount(1);
         project.References.Should().Contain(r => r.Guid == new Guid("00020430-0000-0000-C000-000000000046"));
-        project.References.Should().Contain(r => r.Guid == ImplicitVb6RuntimeGuid);
     }
 
     [TestMethod]
@@ -234,11 +226,11 @@ public class ProjectReferenceTests
     static readonly Guid ImplicitStdOleGuid = new("00020430-0000-0000-C000-000000000046");
 
     [TestMethod]
-    public void ImplicitStdOle_AddedWhenAbsent()
+    public void EmptyProject_HasNoReferences()
     {
         var project = LoadFromLines(string.Empty);
 
-        project.References.Should().Contain(r => r.Guid == ImplicitStdOleGuid);
+        project.References.Should().BeEmpty();
     }
 
     [TestMethod]

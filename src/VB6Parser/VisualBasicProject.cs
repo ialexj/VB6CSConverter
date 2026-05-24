@@ -3,28 +3,6 @@ namespace VB6Parser;
 
 public class VisualBasicProject
 {
-    static readonly Guid ImplicitVb6RuntimeGuid = new("000204EF-0000-0000-C000-000000000046");
-    const int ImplicitVb6RuntimeMajor = 6;
-    const int ImplicitVb6RuntimeMinor = 0;
-    const int ImplicitVb6RuntimeLcid = 9;
-    const string ImplicitVb6RuntimeDescription = "Visual Basic For Applications";
-    const string ImplicitVb6RuntimeDeclaredPath = "MSVBVM60.DLL";
-
-    static readonly Guid ImplicitStdOleGuid = new("00020430-0000-0000-C000-000000000046");
-    const int ImplicitStdOleMajor = 2;
-    const int ImplicitStdOleMinor = 0;
-    const int ImplicitStdOleLcid = 0;
-    const string ImplicitStdOleDescription = "OLE Automation";
-    const string ImplicitStdOleDeclaredPath = "stdole2.tlb";
-
-    // "Visual Basic objects and procedures" — VB6.OLB; always implicitly referenced by the VB6 IDE.
-    static readonly Guid ImplicitVbObjectsGuid = new("FCFB3D2E-A0FA-1068-A738-08002B3371B5");
-    const int ImplicitVbObjectsMajor = 6;
-    const int ImplicitVbObjectsMinor = 0;
-    const int ImplicitVbObjectsLcid = 0;
-    const string ImplicitVbObjectsDescription = "Visual Basic objects and procedures";
-    const string ImplicitVbObjectsDeclaredPath = "VB6.OLB";
-
     public required string Name { get; init; }
 
     public List<VisualBasicProjectFile> Files { get; set; } = [];
@@ -114,74 +92,7 @@ public class VisualBasicProject
             }
         }
 
-        AddImplicitVb6RuntimeReference(project, basePath);
-        AddImplicitStdOleReference(project, basePath);
-        AddImplicitVbObjectsReference(project, basePath);
-
         return project;
-    }
-
-    static void AddImplicitVb6RuntimeReference(VisualBasicProject project, string basePath)
-    {
-        bool exists = project.References.Any(r =>
-            r.Guid == ImplicitVb6RuntimeGuid
-            && r.MajorVersion == ImplicitVb6RuntimeMajor
-            && r.MinorVersion == ImplicitVb6RuntimeMinor);
-
-        if (exists) {
-            return;
-        }
-
-        project.References.Add(new VisualBasicProjectReference(
-            ProjectReferenceKind.TypeLibrary,
-            ImplicitVb6RuntimeGuid,
-            ImplicitVb6RuntimeMajor,
-            ImplicitVb6RuntimeMinor,
-            ImplicitVb6RuntimeLcid,
-            ImplicitVb6RuntimeDescription,
-            ImplicitVb6RuntimeDeclaredPath));
-    }
-
-    static void AddImplicitStdOleReference(VisualBasicProject project, string basePath)
-    {
-        bool exists = project.References.Any(r =>
-            r.Guid == ImplicitStdOleGuid
-            && r.MajorVersion == ImplicitStdOleMajor
-            && r.MinorVersion == ImplicitStdOleMinor);
-
-        if (exists) {
-            return;
-        }
-
-        project.References.Add(new VisualBasicProjectReference(
-            ProjectReferenceKind.TypeLibrary,
-            ImplicitStdOleGuid,
-            ImplicitStdOleMajor,
-            ImplicitStdOleMinor,
-            ImplicitStdOleLcid,
-            ImplicitStdOleDescription,
-            ImplicitStdOleDeclaredPath));
-    }
-
-    static void AddImplicitVbObjectsReference(VisualBasicProject project, string basePath)
-    {
-        bool exists = project.References.Any(r =>
-            r.Guid == ImplicitVbObjectsGuid
-            && r.MajorVersion == ImplicitVbObjectsMajor
-            && r.MinorVersion == ImplicitVbObjectsMinor);
-
-        if (exists) {
-            return;
-        }
-
-        project.References.Add(new VisualBasicProjectReference(
-            ProjectReferenceKind.TypeLibrary,
-            ImplicitVbObjectsGuid,
-            ImplicitVbObjectsMajor,
-            ImplicitVbObjectsMinor,
-            ImplicitVbObjectsLcid,
-            ImplicitVbObjectsDescription,
-            ImplicitVbObjectsDeclaredPath));
     }
 
     /// <summary>

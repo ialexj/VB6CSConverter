@@ -62,14 +62,13 @@ public static class LargeFileSplitter
             ClassDeclarationSyntax chunkClass;
 
             if (i == 0) {
-                // First chunk: preserve BaseList and existing attributes (including [GeneratedCode])
+                // First chunk: preserve BaseList and existing attributes
                 chunkClass = cls.WithMembers(List(chunks[i]));
             }
             else {
                 // Subsequent chunks: fresh partial class declaration
                 chunkClass = ClassDeclaration(cls.Identifier)
                     .WithModifiers(cls.Modifiers)
-                    .WithGeneratedCodeAttribute()
                     .WithMembers(List(chunks[i]));
             }
 

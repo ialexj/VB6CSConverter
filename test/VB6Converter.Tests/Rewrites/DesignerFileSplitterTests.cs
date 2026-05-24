@@ -190,23 +190,6 @@ public class DesignerFileSplitterTests
     }
 
     [TestMethod]
-    public void DesignerClass_HasGeneratedCodeAttribute()
-    {
-        var vb = """
-            Begin VB.Form MyForm
-                Caption = "Test"
-            End
-            """;
-
-        var (_, designer) = ConvertAndSplit(vb);
-
-        var designerClass = designer!.DescendantNodes().OfType<ClassDeclarationSyntax>().Single();
-        designerClass.AttributeLists
-            .SelectMany(al => al.Attributes)
-            .Should().Contain(a => a.Name.ToString().Contains("GeneratedCode"));
-    }
-
-    [TestMethod]
     public void DesignerClass_ContainsControlField()
     {
         var vb = """

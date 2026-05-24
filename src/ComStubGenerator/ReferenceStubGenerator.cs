@@ -163,7 +163,6 @@ public static class ReferenceStubGenerator
 
         var decl = EnumDeclaration(Identifier(emittedTypeName))
             .WithModifiers(Modifiers(isPublic: true))
-            .WithGeneratedCodeAttribute()
             .WithMembers(SeparatedList(members));
 
         if (needsLong)
@@ -270,7 +269,6 @@ public static class ReferenceStubGenerator
 
         var decl = InterfaceDeclaration(Identifier(emittedTypeName))
             .WithModifiers(Modifiers(isPublic: true))
-            .WithGeneratedCodeAttribute()
             .WithMembers(List(memberDecls));
 
         var baseInterfaces = (type.ImplementedInterfaces ?? [])
@@ -290,13 +288,14 @@ public static class ReferenceStubGenerator
 
     // Members already provided by System.Exception — re-declaring them in a derived stub
     // class causes CS0114 (hides inherited member) or CS0108 (shadows) errors.
+    // COM exposes System.Exception via the dual interface _Exception.
     static readonly HashSet<string> ExceptionInheritedMembers = new(StringComparer.OrdinalIgnoreCase)
     {
         "HelpLink", "InnerException", "Message", "Source", "StackTrace", "TargetSite",
         "GetBaseException", "GetObjectData",
     };
 
-    // COM exposes System.Exception via the dual interface _Exception.
+    // Properties that are injected by the VB6 control extender
     static readonly (string Name, string CsType)[] VB6ControlExtenderProperties =
     [
         ("Left",            "int"),    ("Top",             "int"),
@@ -305,7 +304,7 @@ public static class ReferenceStubGenerator
         ("Visible",         "bool"),   ("Enabled",         "bool"),
         ("Name",            "string"), ("Tag",             "string"),
         ("_ExtentX",        "int"),    ("_ExtentY",        "int"),
-        ("_StockProps",     "int"),
+        ("_StockProps",     "int"),    ("_Version",        "int"),
         ("ToolTipText",     "string"),
         ("HelpContextID",   "int"),
         ("WhatsThisHelpID", "int"),
@@ -449,7 +448,6 @@ public static class ReferenceStubGenerator
 
         var decl = ClassDeclaration(Identifier(emittedTypeName))
             .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
-            .WithGeneratedCodeAttribute()
             .WithMembers(List(memberDecls));
 
         if (!isStatic) {
@@ -599,7 +597,6 @@ public static class ReferenceStubGenerator
 
         return StructDeclaration(Identifier(emittedTypeName))
             .WithModifiers(Modifiers(isPublic: true))
-            .WithGeneratedCodeAttribute()
             .WithMembers(List(fieldDecls));
     }
 

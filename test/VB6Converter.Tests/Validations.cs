@@ -14,10 +14,7 @@ public static class Validations
     {
         var cu = ConversionShouldSucceed(vb, name);
 
-        var normalizedClass = RemoveGeneratedCodeAttribute(cu.Class);
-
-
-        ValidateStringsMatch(cs, normalizedClass.NormalizeWhitespace().ToFullString());
+        ValidateStringsMatch(cs, cu.Class.NormalizeWhitespace().ToFullString());
     }
 
     public static void ValidateMemberMatches(string vb, string cs, [CallerMemberName] string? name = null)
@@ -101,27 +98,4 @@ public static class Validations
         actual.Should().Be(expected);
     }
 
-    static ClassDeclarationSyntax RemoveGeneratedCodeAttribute(ClassDeclarationSyntax classDeclaration)
-    {
-        var attributesToRemove = classDeclaration.AttributeLists
-            .SelectMany(list => list.Attributes)
-            .Where(IsGeneratedCodeAttribute)
-            .ToList();
-
-        if (attributesToRemove.Count == 0) {
-            return classDeclaration;
-        }
-
-        var updatedClass = classDeclaration.RemoveNodes(attributesToRemove, SyntaxRemoveOptions.KeepNoTrivia)!;
-        return updatedClass.WithAttributeLists(SyntaxFactory.List(updatedClass.AttributeLists.Where(list => list.Attributes.Count > 0)));
-    }
-
-    static bool IsGeneratedCodeAttribute(AttributeSyntax attribute)
-    {
-        var name = attribute.Name.ToString();
-        return name == "GeneratedCode"
-            || name == "GeneratedCodeAttribute"
-            || name.EndsWith(".GeneratedCode", StringComparison.Ordinal)
-            || name.EndsWith(".GeneratedCodeAttribute", StringComparison.Ordinal);
-    }
 }

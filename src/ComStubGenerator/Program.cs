@@ -78,12 +78,10 @@ public static class Program
 
         if (options.Project != null) {
             var vbProject = VisualBasicProject.Load(options.Project);
-            if (vbProject.References.Count == 0 && libFilters.Count == 0) {
-                AnsiConsole.MarkupLine("[grey]No COM references found in project.[/]");
-                return 0;
-            }
             foreach (var reference in vbProject.References)
                 libFilters.Add($"{reference.Guid:B},{reference.MajorVersion},{reference.MinorVersion}");
+            foreach (var implicitRef in VisualBasicImplicitReferences.All)
+                libFilters.Add($"{implicitRef.Guid:B},{implicitRef.MajorVersion},{implicitRef.MinorVersion}");
         }
 
         if (libFilters.Count == 0) {

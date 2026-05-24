@@ -17,7 +17,6 @@ public class LargeFileSplitterTests
     {
         var sb = new StringBuilder();
         sb.AppendLine("namespace TestNs;");
-        sb.AppendLine("[System.CodeDom.Compiler.GeneratedCode(\"VB6Converter\", \"1.0\")]");
         sb.AppendLine("public partial class TestClass");
         sb.AppendLine("{");
         for (int i = 0; i < methodCount; i++) {
@@ -96,20 +95,6 @@ public class LargeFileSplitterTests
             chunk.DescendantNodes().OfType<ClassDeclarationSyntax>()
                 .Should().ContainSingle()
                 .Which.Modifiers.Should().Contain(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword));
-        }
-    }
-
-    [TestMethod]
-    public void EachChunk_HasGeneratedCodeAttribute()
-    {
-        var cu = BuildSyntheticCU(methodCount: 20, linesEach: 10);
-        var result = LargeFileSplitter.Split(cu, maxLines: 50);
-
-        foreach (var chunk in result) {
-            var cls = chunk.DescendantNodes().OfType<ClassDeclarationSyntax>().Single();
-            cls.AttributeLists
-                .SelectMany(al => al.Attributes)
-                .Should().Contain(a => a.Name.ToString().Contains("GeneratedCode"));
         }
     }
 

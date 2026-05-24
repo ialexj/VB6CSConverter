@@ -50,9 +50,6 @@ public static class Program
         [Option("skip-diagnostics", Required = false, HelpText = "Skips the diagnostics step.")]
         public bool SkipDiagnostics { get; set; }
 
-        [Option("overwrite-user", Required = false, HelpText = "Overwrite files that don't have the GeneratedCode attribute.")]
-        public bool OverwriteNonGenerated { get; set; }
-
         [Option('n', "prefer-namespace", Required = false, HelpText = "Namespace prefixes to prefer when disambiguating ambiguous type references, in order of preference.")]
         public IEnumerable<string> PreferredNamespaces { get; set; } = [];
 
@@ -84,14 +81,14 @@ public static class Program
         var vbProject = VisualBasicProject.Load(options.Project);
 
         // ── Pre-conversion: generate COM reference stubs ────────────────────
-        if (!options.SkipReferenceStubs && vbProject.References.Count > 0) {
+        if (!options.SkipReferenceStubs) {
             var referenceDir = Path.Join(options.OutputDir, "_References");
             await GenerateReferenceStubs(options.Project, referenceDir, options.ExcludeReferences);
         }
         // ────────────────────────────────────────────────────────────────────
 
         // Open/Create C# project
-        using var ws = new ConversionWorkspace(options.OverwriteNonGenerated);
+        using var ws = new ConversionWorkspace();
         var projectBasePath = Path.GetDirectoryName(Path.GetFullPath(options.Project)) ?? Directory.GetCurrentDirectory();
         var allTargets = vbProject.Files.Select(f => ConversionTarget.Create(f, options.OutputDir, projectBasePath)).OrderBy(t => t.Name).ToArray();
         await ws.Open(allTargets, options.OutputDir, vbProject.Name);

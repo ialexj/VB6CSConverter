@@ -19,8 +19,7 @@ public static class ClassConverter
     public static ClassDeclarationSyntax GetClass(ModuleContext module, ClassContext ctx)
     {
         var c = ClassDeclaration(ctx.Name)
-            .WithModifiers(Modifiers(isPublic: true, isStatic: ctx.Static, isPartial: true))
-            .WithGeneratedCodeAttribute();
+            .WithModifiers(Modifiers(isPublic: true, isStatic: ctx.Static, isPartial: true));
 
         // Main body
         if (module.moduleBody() is ModuleBodyContext body) {

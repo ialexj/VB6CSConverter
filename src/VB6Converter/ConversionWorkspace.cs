@@ -20,12 +20,9 @@ public sealed class ConversionWorkspace : IDisposable
     static readonly object _msbuildLock = new();
 
     readonly MSBuildWorkspace _ws;
-    readonly bool _overwriteNonGenerated;
 
-    public ConversionWorkspace(bool overwriteNonGenerated)
+    public ConversionWorkspace()
     {
-        _overwriteNonGenerated = overwriteNonGenerated;
-
         EnsureMsBuildRegistered();
 
         _ws = MSBuildWorkspace.Create();
@@ -144,24 +141,6 @@ public sealed class ConversionWorkspace : IDisposable
         var doc = GetOrCreateDocument(target);
         var st  = await doc.GetSyntaxTreeAsync(cancel);
         var cu  = st.GetCompilationUnitRoot(cancel);
-
-        if (!_overwriteNonGenerated) {
-            // If there's a class, check if it has the GeneratedCode attribute
-            var cls = cu.DescendantNodes(n => n is not ClassDeclarationSyntax)
-                .OfType<ClassDeclarationSyntax>()
-                .FirstOrDefault();
-
-            if (cls is not null) {
-                var attribute = cls.AttributeLists
-                    .SelectMany(a => a.Attributes)
-                    .FirstOrDefault(a => a.Name.ToString() == "System.CodeDom.Compiler.GeneratedCode");
-
-                if (attribute is null) {
-                    log.Debug("{file} skipped because it is not generated code");
-                    return false;
-                }
-            }
-        }
 
         var newcu = await task(cu);
 
