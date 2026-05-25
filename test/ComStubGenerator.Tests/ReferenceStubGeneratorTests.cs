@@ -690,6 +690,184 @@ public class ReferenceStubGeneratorTests
     }
 
     // ──────────────────────────────────────────────────────────────────────
+    // Parameterized non-default properties → methods
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_ParameterizedNonDefaultProperty_Interface_EmitsMethod()
+    {
+        // XArray.Count(nDim As Integer) As Long is a read-only parameterized property.
+        // C# has no parameterized non-indexer properties, so it must be emitted as a method.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Count", LibraryMemberKind.PropertyGet, "int",
+                        [new("nDim", "short", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            // Must be a method, not a property
+            source.Should().Contain("Count(", "parameterized property must be emitted as a method");
+            source.Should().NotContain("int Count {", "parameterized property must NOT be emitted as a plain property");
+            source.Should().NotContain("this[", "non-default parameterized property must NOT become an indexer");
+            // No setter → no SetCount
+            source.Should().NotContain("SetCount", "read-only property must not emit a SetCount method");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ParameterizedNonDefaultProperty_Class_EmitsMethod()
+    {
+        // Same as the interface case, but for a class type (must include throw body).
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.Class,
+                Members: [
+                    new("Count", LibraryMemberKind.PropertyGet, "int",
+                        [new("nDim", "short", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("Count(", "parameterized property must be emitted as a method");
+            source.Should().Contain("NotImplementedException", "class method stub must have a throw body");
+            source.Should().NotContain("int Count {", "parameterized property must NOT be emitted as a plain property");
+            source.Should().NotContain("this[", "non-default parameterized property must NOT become an indexer");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ParameterizedNonDefaultProperty_WithSetter_Interface_EmitsGetAndSetMethods()
+    {
+        // A read-write parameterized property must emit both a getter method and a
+        // Set{Name} method so ParameterizedPropertyRewriter can rewrite assignment call sites.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "object",
+                        [new("nDim", "short", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                    new("Item", LibraryMemberKind.PropertySet, "void",
+                        [new("nDim", "short", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("Item(", "getter method must be emitted");
+            source.Should().Contain("SetItem(", "setter must be emitted as SetItem for ParameterizedPropertyRewriter");
+            source.Should().NotContain("object Item {", "must NOT be a plain property");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ParameterizedNonDefaultProperty_WithSetter_Class_EmitsGetAndSetMethods()
+    {
+        // Same read-write test for a class type.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.Class,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "object",
+                        [new("nDim", "short", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                    new("Item", LibraryMemberKind.PropertySet, "void",
+                        [new("nDim", "short", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("Item(", "getter method must be emitted");
+            source.Should().Contain("SetItem(", "setter must be emitted as SetItem");
+            source.Should().Contain("NotImplementedException", "class methods must have throw bodies");
+            source.Should().NotContain("object Item {", "must NOT be a plain property");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // ParamArray → params
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_MethodWithParamArray_Interface_EmitsParamsKeyword()
+    {
+        // VB6: Sub ReDim(ParamArray ppIndices() As Variant)
+        // COM: cParamsOpt == -1, last param type is object[] with IsParamArray = true
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("ReDim", LibraryMemberKind.Method, "void",
+                        [new("ppIndices", "object[]", IsOptional: false, IsOut: false, IsParamArray: true)]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("params object[] ppIndices", "ParamArray must emit params modifier");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_MethodWithParamArray_Class_EmitsParamsKeyword()
+    {
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.Class,
+                Members: [
+                    new("ReDim", LibraryMemberKind.Method, "void",
+                        [new("ppIndices", "object[]", IsOptional: false, IsOut: false, IsParamArray: true)]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("params object[] ppIndices", "ParamArray must emit params modifier");
+            source.Should().Contain("NotImplementedException", "class method stub must have a throw body");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
     // Alias (TKIND_ALIAS) — CollectAliases / Generate behaviour
     // ──────────────────────────────────────────────────────────────────────
 

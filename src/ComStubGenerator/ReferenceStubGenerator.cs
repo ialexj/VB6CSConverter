@@ -222,6 +222,25 @@ public static class ReferenceStubGenerator
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
             }
+            else if (getter?.Parameters.Count > 0) {
+                // C# has no parameterized non-indexer properties.  Emit the getter as a plain
+                // method and the setter (if any) as Set{Name} so that ParameterizedPropertyRewriter
+                // can rewrite call-site assignments to obj.SetFoo(k, v).
+                string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+                var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true).ToArray();
+                memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
+                    .WithParameterList(ParameterList(SeparatedList(getParams)))
+                    .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+
+                if (setter != null) {
+                    var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true)
+                        .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                        .ToArray();
+                    memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier("Set" + getName))
+                        .WithParameterList(ParameterList(SeparatedList(setParams)))
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+                }
+            }
             else {
                 // Skip any "Item" property when an indexer is already being emitted — C# does not
                 // allow both a named "Item" property and an indexer in the same type (CS0102).
@@ -378,6 +397,29 @@ public static class ReferenceStubGenerator
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
+            }
+            else if (getter?.Parameters.Count > 0) {
+                // C# has no parameterized non-indexer properties.  Emit the getter as a plain
+                // method and the setter (if any) as Set{Name} so that ParameterizedPropertyRewriter
+                // can rewrite call-site assignments to obj.SetFoo(k, v).
+                string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+                var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true).ToArray();
+                memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
+                    .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
+                    .WithParameterList(ParameterList(SeparatedList(getParams)))
+                    .WithExpressionBody(ThrowNotImplementedExprBody())
+                    .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+
+                if (setter != null) {
+                    var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true)
+                        .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                        .ToArray();
+                    memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier("Set" + getName))
+                        .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
+                        .WithParameterList(ParameterList(SeparatedList(setParams)))
+                        .WithExpressionBody(ThrowNotImplementedExprBody())
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+                }
             }
             else {
                 // Skip any "Item" property when an indexer is already being emitted — C# does not
@@ -767,10 +809,14 @@ public static class ReferenceStubGenerator
         // make the parameter optional.  See docs/com.md for the known caveats.
         // C# also does not allow default values on indexer parameters, so stripDefaults
         // suppresses all defaults when building indexer parameter lists.
-        bool makeOptional = !stripDefaults && (p.IsOptional || forceOptional);
+        // `params` parameters cannot have defaults, so IsParamArray suppresses makeOptional too.
+        bool makeOptional = !stripDefaults && !p.IsParamArray && (p.IsOptional || forceOptional);
         bool useRef = p.IsOut && !makeOptional;
         var syntax = Parameter(Identifier(MakeSafeIdentifier(p.Name)))
         .WithType(useRef ? ParseTypeName("ref " + p.Type) : MemberType(p.Type, useDynamic));
+        if (p.IsParamArray) {
+            syntax = syntax.WithModifiers(TokenList(Token(SyntaxKind.ParamsKeyword)));
+        }
         if (makeOptional) {
             syntax = syntax.WithDefault(
                 EqualsValueClause(
