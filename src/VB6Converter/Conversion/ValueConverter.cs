@@ -167,7 +167,11 @@ public static class ValueConverter
                 ));
         }
         else if (lit.FILENUMBER() is ITerminalNode file) {
-            return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(int.Parse(file.GetText().TrimStart('#'))));
+            var fileText = file.GetText().TrimStart('#');
+            if (int.TryParse(fileText, out int fileNum))
+                return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(fileNum));
+            else
+                return IdentifierName(fileText);
         }
         else if (lit.COLORLITERAL() is ITerminalNode color) {
 
@@ -263,7 +267,7 @@ public static class ValueConverter
                         SyntaxKind.NullLiteralExpression))));
 
 
-        
+
 
         if (oper is VsPowContext pow) {
             return InvocationExpression(ParseName("Math.Pow"), ArgumentList(values));
