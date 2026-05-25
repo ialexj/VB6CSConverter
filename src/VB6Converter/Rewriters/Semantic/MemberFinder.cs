@@ -11,8 +11,8 @@ public class MemberFinder(SemanticModel sem) : LoggedRewriter
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
         => Log.Rewrite(this, node, node => {
             var type = sem.GetTypeInfo(node.Expression).ConvertedType;
-            if (type is null 
-                || type.Name == string.Empty 
+            if (type is null
+                || type.Name == string.Empty
                 || type.Name == "var"
                 || type.SpecialType != SpecialType.None
                 || type.ToString().StartsWith("System")) {
@@ -29,5 +29,26 @@ public class MemberFinder(SemanticModel sem) : LoggedRewriter
             }
 
             return node; // don't recurse
+        });
+
+    public override SyntaxNode VisitArgument(ArgumentSyntax node)
+        => Log.Rewrite(this, node, node => {
+            if (node.NameColon is null)
+                return base.VisitArgument(node);
+
+            if (node.Parent is not ArgumentListSyntax list
+                || list.Parent is not InvocationExpressionSyntax invocation)
+                return base.VisitArgument(node);
+
+            var symbolInfo = sem.GetSymbolInfo(invocation);
+            if ((symbolInfo.Symbol ?? symbolInfo.CandidateSymbols.FirstOrDefault()) is not IMethodSymbol method)
+                return base.VisitArgument(node);
+
+            var passedName = node.NameColon.Name.Identifier.Text;
+            var param = method.Parameters.FirstOrDefault(p => string.Equals(p.Name, passedName, StringComparison.OrdinalIgnoreCase));
+            if (param is not null && param.Name != passedName)
+                return base.VisitArgument(node.WithNameColon(node.NameColon.WithName(SyntaxFactory.IdentifierName(param.Name))));
+
+            return base.VisitArgument(node);
         });
 }
