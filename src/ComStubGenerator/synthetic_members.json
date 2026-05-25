@@ -1,0 +1,19 @@
+[
+  // VB.Form — ClientHeight/Left/Top/Width are VB6 IDE design-time persistence properties
+  // written to .frm files to record the form's client-area size and position (in twips).
+  // They are NOT present in any COM type library (VB6.OLB _Form interface has no Client* members);
+  // injecting them here prevents compile errors when InitializeComponent assigns these values.
+  {
+    "Targets": [ "VB.Form" ],
+    "Members": [
+      { "Name": "ClientHeight", "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
+      { "Name": "ClientHeight", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+      { "Name": "ClientLeft",   "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
+      { "Name": "ClientLeft",   "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+      { "Name": "ClientTop",    "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
+      { "Name": "ClientTop",    "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+      { "Name": "ClientWidth",  "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
+      { "Name": "ClientWidth",  "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] }
+    ]
+  }
+]

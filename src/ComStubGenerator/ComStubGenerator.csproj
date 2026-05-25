@@ -22,6 +22,10 @@
     <ProjectReference Include="..\VB6Parser\VB6Parser.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="synthetic_members.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- Build ComQuery x86 into comquery\x86\ -->
   <Target Name="BuildComQueryX86" AfterTargets="Build">
     <MSBuild Projects="$(MSBuildThisFileDirectory)..\ComQuery\ComQuery.csproj"

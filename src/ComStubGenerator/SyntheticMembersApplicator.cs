@@ -29,7 +29,12 @@ public static class SyntheticMembersApplicator
         if (syntheticSets.Count == 0) return merged;
 
         // Build a mutable index by GUID so we can patch libraries incrementally.
-        var libsByGuid = merged.ToDictionary(l => l.Guid);
+        // Duplicate GUIDs can occur when a type library exposes the same GUID under
+        // multiple registrations (e.g. fallback .oca path alongside the primary .ocx);
+        // keep the last entry so we still process all libraries.
+        var libsByGuid = new Dictionary<Guid, ComQueryLibrary>();
+        foreach (var lib in merged)
+            libsByGuid[lib.Guid] = lib;
 
         foreach (var set in syntheticSets) {
             if (set.Members == null || set.Members.Count == 0) continue;
