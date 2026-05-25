@@ -92,13 +92,13 @@ public static class Program
                 await Task.Yield();
 
                 try {
-                    var model = TypeLibraryInspector.Inspect(entry.Guid, entry.Major, entry.Minor, entry.Name, entry.Path, entry.IsTransitive);
-                    if (model == null) {
+                    var models = TypeLibraryInspector.InspectAll(entry.Guid, entry.Major, entry.Minor, entry.Name, entry.Path, entry.IsTransitive);
+                    if (models.Count == 0) {
                         anyFailed = true;
                         return;
                     }
 
-                    {
+                    foreach (var model in models) {
                         var m = model;
 
                         // Optionally filter types
@@ -110,7 +110,7 @@ public static class Program
 
                         results.Add(m);
 
-                        // Enqueue transitive dependencies (shared across all libraries from this entry)
+                        // Enqueue transitive dependencies
                         if (m.DiscoveredDependencies != null) {
                             foreach (var dep in m.DiscoveredDependencies.Where(d => !seenGuids.ContainsKey(d.Guid))) {
                                 var depPath = TypeLibraryInspector.ResolveTypeLibPath(dep.Guid, dep.Major, dep.Minor);

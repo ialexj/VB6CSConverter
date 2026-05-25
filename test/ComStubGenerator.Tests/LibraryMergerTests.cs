@@ -122,7 +122,7 @@ public class LibraryMergerTests
     public void Merge_X86OnlyMember_IncludedInResult()
     {
         var x86Lib = MakeLib(GuidA, "T1", new ComQueryMember("X86OnlyProp", LibraryMemberKind.PropertyGet, "bool", []));
-        var x64Lib = new ComQueryLibrary("LibA", GuidA, 1, 0,
+        var x64Lib = new ComQueryLibrary("Lib", GuidA, 1, 0,
             Types: [new ComQueryType("T1", LibraryTypeKind.Interface, [])]);
 
         var merged = LibraryMerger.Merge([x86Lib], [x64Lib]);
@@ -133,13 +133,38 @@ public class LibraryMergerTests
     [TestMethod]
     public void Merge_X64OnlyMember_IncludedInResult()
     {
-        var x86Lib = new ComQueryLibrary("LibA", GuidA, 1, 0,
+        var x86Lib = new ComQueryLibrary("Lib", GuidA, 1, 0,
             Types: [new ComQueryType("T1", LibraryTypeKind.Interface, [])]);
         var x64Lib = MakeLib(GuidA, "T1", new ComQueryMember("X64OnlyProp", LibraryMemberKind.PropertyGet, "bool", []));
 
         var merged = LibraryMerger.Merge([x86Lib], [x64Lib]);
         merged[0].Types![0].Members.Should().Contain(m => m.Name == "X64OnlyProp",
             "x64-only members must be included in the union");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // OCA + OCX: same GUID, different names must both survive the merge
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Merge_SameGuidDifferentNames_BothPreserved()
+    {
+        // An OCX and its companion OCA share the same GUID but carry different library
+        // names (e.g. "ActiveBarLibrary" vs "ActiveBarLibraryCtl").  Both must survive
+        // the merge rather than one silently overwriting the other.
+        var x86Oca = new ComQueryLibrary("ActiveBarLibraryCtl", GuidA, 1, 0);
+        var x86Ocx = new ComQueryLibrary("ActiveBarLibrary",    GuidA, 1, 0);
+        var x64Oca = new ComQueryLibrary("ActiveBarLibraryCtl", GuidA, 1, 0);
+        var x64Ocx = new ComQueryLibrary("ActiveBarLibrary",    GuidA, 1, 0);
+
+        var merged = LibraryMerger.Merge([x86Oca, x86Ocx], [x64Oca, x64Ocx]);
+
+        merged.Should().HaveCount(2,
+            "OCA and OCX libraries with the same GUID but different names must both be preserved");
+        merged.Should().Contain(l => l.Name == "ActiveBarLibraryCtl",
+            "VB6-facing OCA library must be present");
+        merged.Should().Contain(l => l.Name == "ActiveBarLibrary",
+            "automation OCX library must be present");
     }
 
     // ──────────────────────────────────────────────────────────────────────

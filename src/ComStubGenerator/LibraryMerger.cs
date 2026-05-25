@@ -30,18 +30,19 @@ public static class LibraryMerger
         IEnumerable<ComQueryLibrary> x86Libs,
         IEnumerable<ComQueryLibrary> x64Libs)
     {
-        var byGuid = new Dictionary<Guid, (ComQueryLibrary? X86, ComQueryLibrary? X64)>();
+        var byKey = new Dictionary<(Guid Guid, string Name), (ComQueryLibrary? X86, ComQueryLibrary? X64)>(
+            GuidNameComparer.Instance);
 
         foreach (var lib in x86Libs) {
-            byGuid[lib.Guid] = (lib, null);
+            byKey[(lib.Guid, lib.Name)] = (lib, null);
         }
         foreach (var lib in x64Libs) {
-            byGuid.TryGetValue(lib.Guid, out var existing);
-            byGuid[lib.Guid] = (existing.X86, lib);
+            byKey.TryGetValue((lib.Guid, lib.Name), out var existing);
+            byKey[(lib.Guid, lib.Name)] = (existing.X86, lib);
         }
 
-        var result = new List<ComQueryLibrary>(byGuid.Count);
-        foreach (var (guid, (x86, x64)) in byGuid) {
+        var result = new List<ComQueryLibrary>(byKey.Count);
+        foreach (var (_, (x86, x64)) in byKey) {
             if (x86 == null) {
                 result.Add(x64!);
             }
@@ -54,6 +55,15 @@ public static class LibraryMerger
         }
 
         return result;
+    }
+
+    sealed class GuidNameComparer : IEqualityComparer<(Guid Guid, string Name)>
+    {
+        public static readonly GuidNameComparer Instance = new();
+        public bool Equals((Guid Guid, string Name) x, (Guid Guid, string Name) y) =>
+            x.Guid == y.Guid && string.Equals(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode((Guid Guid, string Name) obj) =>
+            HashCode.Combine(obj.Guid, StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Name));
     }
 
     static ComQueryLibrary MergeLibrary(ComQueryLibrary x86, ComQueryLibrary x64)

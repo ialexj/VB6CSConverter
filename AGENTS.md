@@ -9,10 +9,10 @@ See [README.md](README.md) for the motivation and high-level "How" overview.
 
 | Project | Type | Role |
 |---|---|---|
+| `ComQuery` | Console App | Inspects COM/type-library registrations in the Windows registry (headless, outputs JSON) |
+| `ComStubGenerator` | Console App | Generates C# stub files from COM type libraries (used before conversion) |
 | `VB6Parser` | Library | ANTLR4-based VB6 parser; grammar + preprocessing |
 | `VB6Converter` | Console App | Conversion orchestrator; Roslyn AST generation + rewriting |
-| `ComStubGenerator` | Console App | Generates C# stub files from COM type libraries (used before conversion) |
-| `ComQuery` | Console App | Inspects COM/type-library registrations in the Windows registry |
 | `VB6Converter.Tests` | MSTest | Conversion integration and unit tests |
 | `VB6Parser.Tests` | MSTest | Parser-level unit tests |
 | `ComStubGenerator.Tests` | MSTest | Stub generator unit tests |

@@ -556,6 +556,140 @@ public class ReferenceStubGeneratorTests
     }
 
     // ──────────────────────────────────────────────────────────────────────
+    // Three-hop default-property chain (e.g. Recordset → Fields → Field → Value)
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_DefaultPropertyForwardsThroughCollection_ThreeHop_ResolvesTerminalType()
+    {
+        // Models the full DAO chain: rs!SomeColumn → rs.Fields["SomeColumn"].Value
+        //   Recordset.Fields (DISPID 0, no params)      → Fields
+        //   Fields.Item(object) (DISPID 0, with param)  → Field
+        //   Field.Value (DISPID 0, no params)            → object
+        // The forwarding indexer on Recordset must return dynamic (object), not DAO.Field.
+        var library = MakeLibrary("DAO",
+            new ComQueryType("Recordset", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "DAO.Fields", [], IsDefault: true),
+                ],
+                EnumValues: []),
+            new ComQueryType("Fields", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "DAO.Field",
+                        [new("Index", "object", false, false)], IsDefault: true),
+                ],
+                EnumValues: []),
+            new ComQueryType("Field", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object", [], IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var recordsetSource = written
+                .Select(File.ReadAllText)
+                .First(s => s.Contains("interface Recordset"));
+
+            recordsetSource.Should().Contain("this[",
+                "a forwarding indexer must be emitted for the three-hop DISPID 0 chain");
+            recordsetSource.Should().NotContain("DAO.Field this[",
+                "the forwarding indexer must not use DAO.Field as its return type");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyForwardsThroughCollection_ThreeHop_ClassType_ResolvesTerminalType()
+    {
+        // Same three-hop chain but for a class (not interface) outer type.
+        var library = MakeLibrary("DAO",
+            new ComQueryType("Recordset", LibraryTypeKind.Class,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "DAO.Fields", [], IsDefault: true),
+                ],
+                EnumValues: []),
+            new ComQueryType("Fields", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "DAO.Field",
+                        [new("Index", "object", false, false)], IsDefault: true),
+                ],
+                EnumValues: []),
+            new ComQueryType("Field", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object", [], IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var recordsetSource = written
+                .Select(File.ReadAllText)
+                .First(s => s.Contains("class Recordset"));
+
+            recordsetSource.Should().Contain("this[",
+                "a forwarding indexer must be emitted for a class type too");
+            recordsetSource.Should().NotContain("DAO.Field this[",
+                "the forwarding indexer must not use DAO.Field as its return type");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyForwardsThroughCollection_ThreeHop_WithSetter_EmitsReadWriteIndexer()
+    {
+        // When the terminal type's no-param default property has a setter (Field.Value { get; set; }),
+        // the forwarding indexer on Recordset must also expose a set accessor.
+        // COM property setters always carry the value-to-assign as their only parameter.
+        var library = MakeLibrary("DAO",
+            new ComQueryType("Recordset", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "DAO.Fields", [], IsDefault: true),
+                ],
+                EnumValues: []),
+            new ComQueryType("Fields", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "DAO.Field",
+                        [new("Index", "object", false, false)], IsDefault: true),
+                ],
+                EnumValues: []),
+            new ComQueryType("Field", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object", [], IsDefault: true),
+                    // COM emits the value-to-assign as the sole parameter of a plain PROPPUT
+                    new("Value", LibraryMemberKind.PropertySet, "void",   [new("value", "object", false, false)], IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var recordsetSource = written
+                .Select(File.ReadAllText)
+                .First(s => s.Contains("interface Recordset"));
+
+            recordsetSource.Should().Contain("this[",
+                "a forwarding indexer must be emitted");
+            recordsetSource.Should().NotContain("DAO.Field this[",
+                "the forwarding indexer must not return DAO.Field");
+            recordsetSource.Should().Contain("set",
+                "the forwarding indexer must have a set accessor when the terminal default property has a setter");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
     // Alias (TKIND_ALIAS) — CollectAliases / Generate behaviour
     // ──────────────────────────────────────────────────────────────────────
 
