@@ -38,7 +38,8 @@ public record ComQueryParam(
     string Name,
     string Type,
     bool IsOptional,
-    bool IsOut);
+    bool IsOut,
+    bool IsParamArray = false);
 
 /// <summary>One method, property getter/setter, or struct field on a COM type.</summary>
 public record ComQueryMember(

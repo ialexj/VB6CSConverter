@@ -70,6 +70,34 @@ public sealed class TypeLibraryInspector
     }
 
     /// <summary>
+    /// Loads the type library at <paramref name="path"/> and returns a single
+    /// <see cref="ComQueryLibrary"/>, or <see langword="null"/> if the file
+    /// cannot be loaded or parsed.
+    /// </summary>
+    public static ComQueryLibrary? Inspect(Guid guid, int major, int minor, string name, string path, bool isTransitive = false)
+    {
+        if (!TryLoadTypeLibWithFallback(guid, major, minor, 0, path,
+                                        out var typeLib, out string loadedFromPath, out int hr)) {
+            Log.Warning($"TypeLibraryInspector: unable to load type library for {path}; last HRESULT 0x{hr:X8} ({DescribeLoadTypeLibFailure(hr)})");
+            return null;
+        }
+
+        if (!string.Equals(path, loadedFromPath, StringComparison.OrdinalIgnoreCase))
+            Log.Information($"TypeLibraryInspector: using fallback type library path {loadedFromPath} for {path}");
+
+        try {
+            return InspectTypeLib(typeLib, guid, major, minor, isTransitive, loadedFromPath, name);
+        }
+        catch (Exception ex) {
+            Log.Warning($"TypeLibraryInspector: InspectTypeLib failed for {loadedFromPath}", ex);
+            return null;
+        }
+        finally {
+            Marshal.ReleaseComObject(typeLib);
+        }
+    }
+
+    /// <summary>
     /// Loads all type libraries associated with <paramref name="path"/> and returns every
     /// distinct <see cref="ComQueryLibrary"/> that can be built from them.
     /// <para>
@@ -731,6 +759,14 @@ public sealed class TypeLibraryInspector
                         parameters.Add(new ComQueryParam(paramName, paramType, isOptional, isOut));
                     }
                     catch { /* skip parameter */ }
+                }
+
+                // cParamsOpt == -1 indicates the last parameter is a ParamArray (VB6 variadic).
+                // The type is already resolved as an array (VT_SAFEARRAY → "type[]").
+                if (funcDesc.cParamsOpt == -1 && parameters.Count > 0) {
+                    int last = parameters.Count - 1;
+                    var lp = parameters[last];
+                    parameters[last] = lp with { IsParamArray = true };
                 }
 
                 // DISPID_NEWENUM (-4): suppress _NewEnum and substitute GetEnumerator so that

@@ -36,7 +36,8 @@ public record ComQueryParam(
     string Name,
     string Type,
     bool IsOptional,
-    bool IsOut);
+    bool IsOut,
+    bool IsParamArray = false);
 
 public record ComQueryMember(
     string Name,

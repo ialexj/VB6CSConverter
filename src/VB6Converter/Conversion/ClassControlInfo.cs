@@ -24,16 +24,16 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
             ? IdentifierName("_" + Name.Identifier.Text + "_" + literal.Token.Text)
             : Name;
 
-    public LiteralExpressionSyntax GetArrayIndex()
+    public LiteralExpressionSyntax? GetArrayIndex()
         => Properties.FirstOrDefault(p => p.name is IdentifierNameSyntax id && id.Identifier.Text == "Index")
             .value as LiteralExpressionSyntax;
 
-    public FieldDeclarationSyntax GetField() 
+    public FieldDeclarationSyntax GetField()
         => FieldDeclaration(
             default,
             Modifiers(isInternal: true),
             VariableDeclaration(
-                Type, GetIndexedName().Identifier, 
+                Type, GetIndexedName().Identifier,
                 ImplicitObjectCreationExpression()
             )
         );
@@ -42,7 +42,7 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
         => new[] { this }.Concat(Children.SelectMany(c => c.FlattenControls()));
 
 
-    public IEnumerable<FieldDeclarationSyntax> GetFields() 
+    public IEnumerable<FieldDeclarationSyntax> GetFields()
         => FlattenControls().Select(c => c.GetField());
 
     public IEnumerable<StatementSyntax> GetAssignments()
@@ -81,7 +81,7 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
     {
         var arrayChildren = FlattenControls()
             .Where(c => c.GetArrayIndex() != null)
-            .Select(c => new { Control = c, Index = (int)c.GetArrayIndex().Token.Value })
+            .Select(c => new { Control = c, Index = (int)c.GetArrayIndex()!.Token!.Value })
             .GroupBy(c => c.Control.Name.Identifier.Text, v => v,
                 (k, v) => new { Name = k, Controls = v.ToDictionary(k => k.Index, v => v.Control) });
 
@@ -98,7 +98,7 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
                     )));
 
             var variable = FieldDeclaration(
-                default, 
+                default,
                 Modifiers(isInternal: true),
                 VariableDeclaration(arrayType, first.Name.Identifier, ArrayCreationExpression(
                     arrayType.WithRankSpecifiers(SingletonList(
