@@ -2,6 +2,7 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Options;
 using Serilog;
+using System.Text.Json;
 using Serilog.Core;
 using Serilog.Sinks.Spectre;
 using System;
@@ -27,7 +28,7 @@ internal static class Log
 
         Rewriting = new LoggerConfiguration()
             .MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose)
-            .WriteTo.File(Path.Combine(outputDir, "_Rewriting.log"), outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{file}] {rewriter} {Message:lj}{NewLine}")
+            .WriteTo.File(Path.Combine(outputDir, "_Rewriting.log"), outputTemplate: "{Message:lj}{NewLine}")
             .CreateLogger();
     }
 
@@ -51,8 +52,9 @@ internal static class Log
 
     public static SyntaxNode Rewrite<T>(object rewriter, T node, Func<T, SyntaxNode> change, Func<SyntaxNode, object> value = null) where T : SyntaxNode
     {
+        var file = Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath);
         var log = Rewriting
-            .ForContext("file", Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath))
+            .ForContext("file", file)
             .ForContext("rewriter", rewriter.GetType().Name)
             .ForContext("node", node);
 
@@ -64,7 +66,7 @@ internal static class Log
                 var newValue = value?.Invoke(@new) ?? @new;
 
                 if (!RoslynHelpers.IsEquivalentSyntax(oldValue, newValue)) {
-                    log.ForContext("node", oldValue).ForContext("changed", newValue).Verbose("{node} --> {changed}");
+                    log.Verbose("{json:l}", JsonSerializer.Serialize(new { file, from = oldValue?.ToString(), to = newValue?.ToString() }));
                 }
             }
 
@@ -74,7 +76,7 @@ internal static class Log
             log.ForContext("error", ex.Message)
                 .ForContext("method", ex.TargetSite.Name)
                 .Error("Failed to rewrite {node} ({method}): {error:nq}");
-            
+
             throw;
         }
     }
