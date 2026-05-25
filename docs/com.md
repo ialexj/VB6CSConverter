@@ -423,8 +423,23 @@ read from `TYPEATTR.cVars` in a second pass after function inspection.
 Each `VAR_DISPATCH` VARDESC:
 
 - Yields a `PropertyGet` member.
-- Yields a `PropertySet` member unless `VARFLAG_FREADONLY` (0x1) is set.
+- Always yields a `PropertySet` member, regardless of `VARFLAG_FREADONLY` (0x1).
 - Carries its DISPID for disambiguation and its type resolved via `ResolveType`.
+
+#### `VARFLAG_FREADONLY` is ignored for stub generation
+
+`VARFLAG_FREADONLY` marks properties that cannot be assigned via `IDispatch` at runtime in VB6
+code — for example, `TextBox.MultiLine` and `CommandButton.Style` are design-time-only in VB6
+(attempting `txt.MultiLine = True` in code is a compile error).  However, VB6's form designer
+sets these properties through `IPersistPropertyBag`, a persistence interface that is completely
+separate from `IDispatch`.  The flag restricts `IDispatch::Invoke(DISPATCH_PROPERTYPUT)` only;
+it has no effect on persistence-based initialisation.
+
+The VB6Converter generates `InitializeComponent()` by converting every property entry in the
+`.frm` file into a C# assignment statement.  The corresponding WinForms properties are always
+writable at runtime, so emitting a read-only stub would cause those assignments to fail to
+compile.  The inspector therefore ignores `VARFLAG_FREADONLY` and emits a setter unconditionally
+for every `VAR_DISPATCH` property.
 
 Without this second pass, any dispinterface that uses the `properties:` section syntax —
 such as `stdole.Font` and many VB6 data-access interfaces — would appear to have no members.

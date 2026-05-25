@@ -597,8 +597,6 @@ public sealed class TypeLibraryInspector
     // Dispatch interface VAR_DISPATCH properties
     // ──────────────────────────────────────────────────────────────────────
 
-    const short VARFLAG_FREADONLY = 0x1;
-
     static List<ComQueryMember> InspectDispatchVarProperties(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo typeInfo,
@@ -625,11 +623,16 @@ public sealed class TypeLibraryInspector
 
                 members.Add(new ComQueryMember(memberName, LibraryMemberKind.PropertyGet, propType, [], DispId: varDesc.memid, Description: memberDescription));
 
-                bool isReadOnly = (varDesc.wVarFlags & VARFLAG_FREADONLY) != 0;
-                if (!isReadOnly) {
-                    members.Add(new ComQueryMember(memberName, LibraryMemberKind.PropertySet, "void",
-                        [new ComQueryParam("value", propType, false, false)], DispId: varDesc.memid, Description: memberDescription));
-                }
+                // VARFLAG_FREADONLY marks properties that cannot be set via IDispatch at
+                // runtime in VB6 code (e.g. TextBox.MultiLine, CommandButton.Style).  However,
+                // the VB6 designer sets these through IPersistPropertyBag — a persistence
+                // interface that bypasses IDispatch entirely — so the flag does not truly mean
+                // the property is immutable.  In the converted C# project the equivalent
+                // WinForms property is always settable, and the VB6Converter emits assignments
+                // for these properties inside InitializeComponent().  We therefore ignore the
+                // flag and always emit a setter so that generated stubs compile.
+                members.Add(new ComQueryMember(memberName, LibraryMemberKind.PropertySet, "void",
+                    [new ComQueryParam("value", propType, false, false)], DispId: varDesc.memid, Description: memberDescription));
             }
             catch { /* skip this property */ }
             finally {
