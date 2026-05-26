@@ -107,10 +107,23 @@ public static class Program
 
         if (targetsThatNeedTranform.Length > 0) {
             if (!options.SkipTransform) {
+                // ── Pre-conversion: extract FRX binary resources ─────────────────────
+                var conversionOptions = ConversionOptions.Default;
+                var frxTargets = targetsThatNeedTranform
+                    .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
+                    .ToArray();
+                if (frxTargets.Length > 0) {
+                    AnsiConsole.MarkupLine("[grey]Extracting FRX resources...[/]");
+                    var resourcesDir = Path.Combine(options.OutputDir, "_Resources");
+                    var frxExtractor = FrxExtractor.Extract(frxTargets, resourcesDir);
+                    conversionOptions = conversionOptions with { FrxExtractor = frxExtractor };
+                }
+                // ────────────────────────────────────────────────────────────────────
+
                 await RunOperations("Converting VB6 to C#", targetsThatNeedTranform, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
                         var conversion = VB6ToCSharpConversion.ConvertFile(
-                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type);
+                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions);
 
                         var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
                         return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));

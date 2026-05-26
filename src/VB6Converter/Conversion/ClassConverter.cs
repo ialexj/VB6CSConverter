@@ -66,7 +66,7 @@ public static class ClassConverter
 
         // Control properties
         if (module.controlProperties() is ControlPropertiesContext controlCtx) {
-            var root = GetControl(controlCtx);
+            var root = GetControl(controlCtx, ctx.Options?.FrxExtractor, ctx.SourceDirectory);
             root.Name = IdentifierName("this");
 
             // Base class
@@ -112,30 +112,69 @@ public static class ClassConverter
         return c;
     }
 
-    public static ClassControlInfo GetControl(ControlPropertiesContext control)
+    public static ClassControlInfo GetControl(ControlPropertiesContext control, FrxExtractor frxExtractor = null, string sourceDirectory = null)
     {
         var name = GetIdentifierName(control.cp_ControlIdentifier().ambiguousIdentifier());
         var type = control.cp_ControlType().complexType().ToTypeSyntax();
 
-        var properties = GetProperties(control.cp_Properties()).ToArray();
+        var stringBlobs = new List<(string propertyName, string[] items)>();
+        var properties = GetProperties(control.cp_Properties(), stringBlobs: stringBlobs).ToArray();
 
         var children = control.cp_Properties().Select(c => c.controlProperties())
             .OfType<ControlPropertiesContext>()
-            .Select(GetControl)
+            .Select(c => GetControl(c, frxExtractor, sourceDirectory))
             .ToArray();
 
         return new ClassControlInfo(type, name) {
             Properties = properties,
+            StringBlobProperties = stringBlobs,
             Children = children
         };
 
-        IEnumerable<(NameSyntax name, ExpressionSyntax value)> GetProperties(IEnumerable<Cp_PropertiesContext> properties, NameSyntax parent = null)
+        IEnumerable<(NameSyntax name, ExpressionSyntax value)> GetProperties(IEnumerable<Cp_PropertiesContext> properties, NameSyntax parent = null, List<(string, string[])> stringBlobs = null)
         {
             NameSyntax GetFullName(NameSyntax expr) => parent is not null ? parent.ToName().AppendName(expr.ToName()) : expr;
 
             foreach (var prop in properties) {
                 if (prop.cp_SingleProperty() is Cp_SinglePropertyContext single) {
-                    var name = GetFullName(GetCallIdentifierExpression(single.implicitCallStmt_InStmt(), default).ToName());
+                    var propName = GetFullName(GetCallIdentifierExpression(single.implicitCallStmt_InStmt(), default).ToName());
+
+                    // FRX binary resource reference
+                    if (single.FRX_OFFSET() is { } frxToken
+                        && single.cp_PropertyValue()?.literal() is LiteralContext frxLiteral
+                        && frxExtractor is not null) {
+
+                        var frxFilename = GetLiteral(frxLiteral) is LiteralExpressionSyntax lit
+                            ? lit.Token.ValueText
+                            : null;
+                        var hexOffset = frxToken.GetText().TrimStart(':');
+
+                        if (frxFilename is not null) {
+                            var entry = frxExtractor.GetResource(frxFilename, hexOffset);
+                            if (entry is not null) {
+                                if (entry.Format == FrxFormat.StringBlob) {
+                                    // Collect string blobs separately; not a simple assignment
+                                    var rawName = (propName is IdentifierNameSyntax id) ? id.Identifier.Text
+                                        : propName.ToFullString().Trim();
+                                    stringBlobs?.Add((rawName, entry.Strings ?? []));
+                                    continue;
+                                }
+                                else if (entry.ResourceFilePath is not null) {
+                                    var resourceExpr = BuildResourceExpression(entry.Format, entry.ResourceFilePath);
+                                    if (resourceExpr is not null) {
+                                        yield return (propName, resourceExpr);
+                                        continue;
+                                    }
+                                }
+                                // Unknown / OLE / no path → fall through to TODO
+                            }
+                        }
+
+                        // Could not resolve — emit a TODO marker
+                        yield return (propName, ParseExpression("default")
+                            .WithError(TransformError.Create(single, $"Unresolved FRX resource: {frxFilename}:{hexOffset}")));
+                        continue;
+                    }
 
                     ExpressionSyntax valueSyntax;
                     if (single.cp_PropertyValue() is Cp_PropertyValueContext valueCtx) {
@@ -155,18 +194,39 @@ public static class ClassConverter
                             .WithError(TransformError.Create(single, "Property without value"));
                     }
 
-                    yield return (name, valueSyntax);
+                    yield return (propName, valueSyntax);
                 }
                 else if (prop.cp_NestedProperty() is Cp_NestedPropertyContext nested) {
                     var name = GetFullName(GetIdentifierName(nested.ambiguousIdentifier()));
 
-                    foreach (var np in GetProperties(nested.cp_Properties(), name)) {
+                    foreach (var np in GetProperties(nested.cp_Properties(), name, stringBlobs)) {
                         yield return np;
                     }
                 }
             }
         }
     }
+
+    private static ExpressionSyntax BuildResourceExpression(FrxFormat format, string relativePath)
+    {
+        // Normalise to backslash for Windows path literals
+        var path = relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar);
+        var pathLiteral = LiteralExpression(SyntaxKind.StringLiteralExpression, Verbatim(path));
+
+        return format switch {
+            FrxFormat.Ico => ObjectCreationExpression(ParseTypeName("System.Drawing.Icon"))
+                .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(pathLiteral)))),
+            FrxFormat.Cur => ObjectCreationExpression(ParseTypeName("System.Windows.Forms.Cursor"))
+                .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(pathLiteral)))),
+            FrxFormat.Bmp or FrxFormat.Gif or FrxFormat.Jpeg or FrxFormat.Wmf or FrxFormat.Emf =>
+                ObjectCreationExpression(ParseTypeName("System.Drawing.Bitmap"))
+                    .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(pathLiteral)))),
+            _ => null,
+        };
+    }
+
+    private static SyntaxToken Verbatim(string value)
+        => Token(default, SyntaxKind.StringLiteralToken, $"@\"{value}\"", value, default);
 
     public static IEnumerable<MemberDeclarationSyntax> GetMembers(ModuleBodyElementContext e, ClassContext ctx)
     {

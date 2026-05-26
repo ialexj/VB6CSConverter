@@ -9,7 +9,7 @@ namespace VB6Converter.Conversion;
 
 public readonly record struct CallContext(ImplicitCallStmt_InStmtContext With = null, ConversionOptions Options = null) { }
 
-public readonly record struct ClassContext(string Name, bool Static, ConversionOptions Options = null)
+public readonly record struct ClassContext(string Name, bool Static, ConversionOptions Options = null, string SourceDirectory = null)
 {
     public bool UseDynamic => Options?.UseDynamic ?? true;
 }

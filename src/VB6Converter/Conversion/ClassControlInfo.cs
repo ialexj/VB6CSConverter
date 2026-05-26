@@ -17,6 +17,12 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
 
     public IEnumerable<(NameSyntax name, ExpressionSyntax value)> Properties { get; set; } = [];
 
+    /// <summary>
+    /// String-blob properties extracted from FRX resources (e.g. ListBox.List).
+    /// Each entry carries the VB6 property name and the string items to add.
+    /// </summary>
+    public IReadOnlyList<(string PropertyName, string[] Items)> StringBlobProperties { get; set; } = [];
+
     public IEnumerable<ClassControlInfo> Children { get; set; } = [];
 
     public IdentifierNameSyntax GetIndexedName()
@@ -68,6 +74,36 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
             }
 
             yield return stmt;
+        }
+
+        foreach (var (propertyName, items) in StringBlobProperties) {
+            if (items.Length == 0) continue;
+
+            // Map known VB6 collection property names to WinForms equivalents
+            if (string.Equals(propertyName, "List", StringComparison.OrdinalIgnoreCase)) {
+                NameSyntax controlName = GetIndexedName();
+                foreach (var item in items) {
+                    yield return ExpressionStatement(
+                        InvocationExpression(
+                            MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                MemberAccessExpression(
+                                    SyntaxKind.SimpleMemberAccessExpression,
+                                    controlName,
+                                    IdentifierName("Items")),
+                                IdentifierName("Add")),
+                            ArgumentList(SingletonSeparatedList(
+                                Argument(LiteralExpression(
+                                    SyntaxKind.StringLiteralExpression,
+                                    Literal(item)))))));
+                }
+            }
+            else {
+                // Other string blob properties — emit a TODO comment
+                yield return ExpressionStatement(
+                    ParseExpression("default")
+                        .WithLeadingTrivia(Comment($"// TODO: string blob property '{propertyName}' ({items.Length} items) — manual conversion required")));
+            }
         }
 
         foreach (var child in Children) {
