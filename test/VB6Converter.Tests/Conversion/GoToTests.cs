@@ -18,7 +18,7 @@ public class GoToTests
         Exit Sub
         """,
         """
-        goto Label1;
+        return;
         Label1:
             return;
         """);
