@@ -48,10 +48,9 @@ public static class ComQueryClient
         };
 
         var libList = libArgs.ToList();
-        if (libList.Count > 0) {
+        foreach (var lib in libList) {
             psi.ArgumentList.Add("--lib");
-            foreach (var lib in libList)
-                psi.ArgumentList.Add(lib);
+            psi.ArgumentList.Add(lib);
         }
 
         using var process = Process.Start(psi)!;

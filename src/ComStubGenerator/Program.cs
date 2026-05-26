@@ -1,8 +1,8 @@
 #nullable enable
-using CommandLine;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;
+using System.CommandLine;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -14,45 +14,68 @@ public static class Program
 {
     public class CommandLineOptions
     {
-        [Option('p', "project", Required = false, HelpText = "Path to the VB6 project file (.vbp). Mutually exclusive with --lib.")]
         public string? Project { get; set; }
-
-        [Option("lib", Required = false, HelpText = "Library to generate stubs for (name, GUID, or path). Repeatable. Mutually exclusive with --project.")]
-        public IEnumerable<string> Libs { get; set; } = [];
-
-        [Option('o', "output", Required = true, HelpText = "Output directory for generated stub files.")]
+        public string[] Libs { get; set; } = [];
         public string OutputDir { get; set; } = null!;
-
-        [Option("arch", Required = false, Default = "both",
-            HelpText = "Architecture(s) to query: x86, x64, or both.")]
         public string Arch { get; set; } = "both";
-
-        [Option("include-com-plumbing", Required = false, Default = false,
-            HelpText = "Include COM infrastructure members (IUnknown, IDispatch, AddRef, Release, etc.) in generated stubs.")]
         public bool IncludeComPlumbing { get; set; }
-
-        [Option("synthetic-member-path", Required = false,
-            HelpText = "Path to a JSON file providing synthetic members to inject into COM types. " +
-                       "Defaults to synthetic_members.json in the executable folder.")]
         public string? SyntheticMemberPath { get; set; }
-
-        [Option("exclude-references", Required = false,
-            HelpText = "Library names to suppress stub generation for.")]
-        public IEnumerable<string> ExcludeReferences { get; set; } = [];
-
-        [Option("use-object", Required = false, Default = false,
-            HelpText = "Emit 'object' instead of 'dynamic' for untyped, Object, and Variant COM members.")]
+        public string[] ExcludeReferences { get; set; } = [];
         public bool UseObject { get; set; }
     }
 
     public static async Task<int> Main(string[] args)
     {
-        var parsed = Parser.Default.ParseArguments<CommandLineOptions>(args);
-        if (parsed.Errors.Any()) {
-            return 2;
-        }
+        var projectOpt = new Option<string?>("--project", ["-p"]) {
+            Description = "Path to the VB6 project file (.vbp). Mutually exclusive with --lib.",
+        };
+        var libsOpt = new Option<string[]>("--lib", []) {
+            Description = "Library to generate stubs for (name, GUID, or path). Repeatable. Mutually exclusive with --project.",
+        };
+        var outputOpt = new Option<string>("--output", ["-o"]) {
+            Description = "Output directory for generated stub files.",
+            Required = true,
+        };
+        var archOpt = new Option<string>("--arch", []) {
+            Description = "Architecture(s) to query: x86, x64, or both.",
+            DefaultValueFactory = _ => "both",
+        };
+        var includePlumbingOpt = new Option<bool>("--include-com-plumbing", []) {
+            Description = "Include COM infrastructure members (IUnknown, IDispatch, AddRef, Release, etc.) in generated stubs.",
+        };
+        var syntheticPathOpt = new Option<string?>("--synthetic-member-path", []) {
+            Description = "Path to a JSON file providing synthetic members to inject into COM types. " +
+                          "Defaults to synthetic_members.json in the executable folder.",
+        };
+        var excludeRefsOpt = new Option<string[]>("--exclude-references", []) {
+            Description = "Library names to suppress stub generation for.",
+        };
+        var useObjectOpt = new Option<bool>("--use-object", []) {
+            Description = "Emit 'object' instead of 'dynamic' for untyped, Object, and Variant COM members.",
+        };
 
-        return await Run(parsed.Value);
+        var rootCommand = new RootCommand("Generate C# stubs for COM type libraries referenced by a VB6 project.");
+        rootCommand.Add(projectOpt);
+        rootCommand.Add(libsOpt);
+        rootCommand.Add(outputOpt);
+        rootCommand.Add(archOpt);
+        rootCommand.Add(includePlumbingOpt);
+        rootCommand.Add(syntheticPathOpt);
+        rootCommand.Add(excludeRefsOpt);
+        rootCommand.Add(useObjectOpt);
+
+        rootCommand.SetAction(async (ParseResult result) => await Run(new CommandLineOptions {
+            Project = result.GetValue(projectOpt),
+            Libs = result.GetValue(libsOpt) ?? [],
+            OutputDir = result.GetValue(outputOpt)!,
+            Arch = result.GetValue(archOpt) ?? "both",
+            IncludeComPlumbing = result.GetValue(includePlumbingOpt),
+            SyntheticMemberPath = result.GetValue(syntheticPathOpt),
+            ExcludeReferences = result.GetValue(excludeRefsOpt) ?? [],
+            UseObject = result.GetValue(useObjectOpt),
+        }));
+
+        return await rootCommand.Parse(args).InvokeAsync();
     }
 
     static async Task<int> Run(CommandLineOptions options)

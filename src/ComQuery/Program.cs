@@ -1,6 +1,6 @@
 #nullable enable
-using CommandLine;
 using System;
+using System.CommandLine;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -15,11 +15,8 @@ public static class Program
 {
     public class CommandLineOptions
     {
-        [Option("lib", Required = false, HelpText = "Library to query (name, GUID in {braces}, or file path), optionally followed by ,major,minor for exact version. Repeatable. Includes type information.")]
-        public IEnumerable<string> Libs { get; set; } = [];
-
-        [Option("type", Required = false, HelpText = "Filter to types matching name or GUID within queried libraries. Repeatable.")]
-        public IEnumerable<string> Types { get; set; } = [];
+        public string[] Libs { get; set; } = [];
+        public string[] Types { get; set; } = [];
     }
 
     static readonly JsonSerializerOptions JsonOptions = new() {
@@ -43,16 +40,30 @@ public static class Program
             return 0;
         }
 
-        var parsed = Parser.Default.ParseArguments<CommandLineOptions>(args);
-        if (parsed.Errors.Any()) return 2;
+        var libsOpt = new Option<string[]>("--lib", []) {
+            Description = "Library to query (name, GUID in {braces}, or file path), optionally followed by ,major,minor for exact version. Repeatable. Includes type information.",
+        };
+        var typesOpt = new Option<string[]>("--type", []) {
+            Description = "Filter to types matching name or GUID within queried libraries. Repeatable.",
+        };
 
-        if (!OperatingSystem.IsWindows()) {
-            Console.Error.WriteLine("[WARN] COM type library inspection is only supported on Windows.");
-            Console.WriteLine("[]");
-            return 0;
-        }
+        var rootCommand = new RootCommand("Query COM type libraries.");
+        rootCommand.Add(libsOpt);
+        rootCommand.Add(typesOpt);
 
-        return await Run(parsed.Value);
+        rootCommand.SetAction(async (ParseResult result) => {
+            if (!OperatingSystem.IsWindows()) {
+                Console.Error.WriteLine("[WARN] COM type library inspection is only supported on Windows.");
+                Console.WriteLine("[]");
+                return 0;
+            }
+            return await Run(new CommandLineOptions {
+                Libs = result.GetValue(libsOpt) ?? [],
+                Types = result.GetValue(typesOpt) ?? [],
+            });
+        });
+
+        return await rootCommand.Parse(args).InvokeAsync();
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]

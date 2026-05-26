@@ -1,4 +1,3 @@
-using CommandLine;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -6,6 +5,7 @@ using Spectre.Console;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.CommandLine;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -23,54 +23,102 @@ public static class Program
 {
     public class CommandLineOptions
     {
-        [Option('p', "project", Required = true, HelpText = "Path to the VB6 project file.")]
-        public string Project { get; set; }
-
-        [Option('o', "output", Required = true, HelpText = "Output directory for the converted files.")]
-        public string OutputDir { get; set; }
-
-        [Option('u', "update", Required = false, HelpText = "Files to update if already converted.")]
-        public IEnumerable<string> Update { get; set; } = [];
-
-        [Option('f', "filter", Required = false, HelpText = "Only process the specified files.")]
-        public IEnumerable<string> Filter { get; set; } = [];
-
-        [Option("show-output", Required = false, HelpText = "Print the converted file to the console.")]
-        public bool Show { get; set; } = false;
-
-        [Option("skip-stubs", Required = false, HelpText = "Skips pre-semantic COM reference stub generation (enabled by default).")]
+        public string Project { get; set; } = null!;
+        public string OutputDir { get; set; } = null!;
+        public string[] Update { get; set; } = [];
+        public string[] Filter { get; set; } = [];
+        public bool Show { get; set; }
         public bool SkipReferenceStubs { get; set; }
-
-        [Option("skip-transform", Required = false, HelpText = "Skips the transformation step and attempts to build with existing files.")]
         public bool SkipTransform { get; set; }
-
-        [Option("skip-fixup", Required = false, HelpText = "Skips the fixup step.")]
         public bool SkipFixup { get; set; }
-
-        [Option("skip-diagnostics", Required = false, HelpText = "Skips the diagnostics step.")]
         public bool SkipDiagnostics { get; set; }
-
-        [Option('n', "prefer-namespace", Required = false, HelpText = "Namespace prefixes to prefer when disambiguating ambiguous type references, in order of preference.")]
-        public IEnumerable<string> PreferredNamespaces { get; set; } = [];
-
-        [Option("exclude-references", Required = false, HelpText = "COM library names to suppress stub generation for.")]
-        public IEnumerable<string> ExcludeReferences { get; set; } = [];
-
-        [Option("pause", Required = false, HelpText = "Pause for user input after each diagnostics collection. Press any key to continue, Ctrl-C to stop.")]
+        public string[] PreferredNamespaces { get; set; } = [];
+        public string[] ExcludeReferences { get; set; } = [];
         public bool Pause { get; set; }
-
-        [Option("split-lines", Default = 5000, HelpText = "Maximum lines per generated .cs file before splitting into numbered partial classes (0 = disabled). Designer files are never split.")]
         public int SplitLines { get; set; } = 5000;
     }
 
-    public static Task Main(string[] args)
+    public static Task<int> Main(string[] args)
     {
-        var parsed = Parser.Default.ParseArguments<CommandLineOptions>(args);
-        if (parsed.Errors.Any()) {
-            return Task.CompletedTask;
-        }
+        var projectOpt = new Option<string>("--project", ["-p"]) {
+            Description = "Path to the VB6 project file.",
+            Required = true,
+        };
+        var outputOpt = new Option<string>("--output", ["-o"]) {
+            Description = "Output directory for the converted files.",
+            Required = true,
+        };
+        var updateOpt = new Option<string[]>("--update", ["-u"]) {
+            Description = "Files to update if already converted.",
+        };
+        var filterOpt = new Option<string[]>("--filter", ["-f"]) {
+            Description = "Only process the specified files.",
+        };
+        var showOpt = new Option<bool>("--show-output", []) {
+            Description = "Print the converted file to the console.",
+        };
+        var skipStubsOpt = new Option<bool>("--skip-stubs", []) {
+            Description = "Skips COM reference stub generation.",
+        };
+        var skipTransformOpt = new Option<bool>("--skip-transform", []) {
+            Description = "Skips the transformation step and attempts to build with existing files.",
+        };
+        var skipFixupOpt = new Option<bool>("--skip-fixup", []) {
+            Description = "Skips the fixup step.",
+        };
+        var skipDiagnosticsOpt = new Option<bool>("--skip-diagnostics", []) {
+            Description = "Skips the diagnostics step.",
+        };
+        var preferNamespacesOpt = new Option<string[]>("--prefer-namespace", ["-n"]) {
+            Description = "Namespace prefixes to prefer when disambiguating ambiguous type references, in order of preference.",
+        };
+        var excludeRefsOpt = new Option<string[]>("--exclude-references", ["-xr"]) {
+            Description = "COM library names to suppress stub generation for.",
+        };
+        var pauseOpt = new Option<bool>("--pause", []) {
+            Description = "Pause for user input after each diagnostics collection. Press any key to continue, Ctrl-C to stop.",
+        };
+        var splitLinesOpt = new Option<int>("--split-lines", []) {
+            Description = "Maximum lines per generated .cs file before splitting into numbered partial classes (0 = disabled). Designer files are never split.",
+            DefaultValueFactory = _ => 5000,
+        };
 
-        return Run(parsed.Value);
+        var rootCommand = new RootCommand("Convert VB6 projects to C#.") {
+            projectOpt,
+            outputOpt,
+            updateOpt,
+            filterOpt,
+            showOpt,
+            skipStubsOpt,
+            skipTransformOpt,
+            skipFixupOpt,
+            skipDiagnosticsOpt,
+            preferNamespacesOpt,
+            excludeRefsOpt,
+            pauseOpt,
+            splitLinesOpt
+        };
+
+        rootCommand.SetAction(async (ParseResult result) => {
+            await Run(new CommandLineOptions {
+                Project = result.GetValue(projectOpt)!,
+                OutputDir = result.GetValue(outputOpt)!,
+                Update = result.GetValue(updateOpt) ?? [],
+                Filter = result.GetValue(filterOpt) ?? [],
+                Show = result.GetValue(showOpt),
+                SkipReferenceStubs = result.GetValue(skipStubsOpt),
+                SkipTransform = result.GetValue(skipTransformOpt),
+                SkipFixup = result.GetValue(skipFixupOpt),
+                SkipDiagnostics = result.GetValue(skipDiagnosticsOpt),
+                PreferredNamespaces = result.GetValue(preferNamespacesOpt) ?? [],
+                ExcludeReferences = result.GetValue(excludeRefsOpt) ?? [],
+                Pause = result.GetValue(pauseOpt),
+                SplitLines = result.GetValue(splitLinesOpt),
+            });
+            return 0;
+        });
+
+        return rootCommand.Parse(args).InvokeAsync();
     }
 
     static async Task Run(CommandLineOptions options)
