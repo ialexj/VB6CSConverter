@@ -88,7 +88,7 @@ public record class TransformError(string Message, string Source, string ErrorTr
             errorLine = syntax.Start.Line;
             errorCol = syntax.Start.Column;
         }
-        
+
         return new TransformError(message, errorNode, errorTree, errorLine, errorCol);
     }
 };

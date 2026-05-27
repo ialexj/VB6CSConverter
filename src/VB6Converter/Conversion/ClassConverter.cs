@@ -376,8 +376,9 @@ public static class ClassConverter
                 .WithParameterList(GetMethodParameters(methodCtx.argList(), ctx.UseDynamic))
                 .WithBody(body);
 
-            method = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(method);
             method = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(method);
+            method = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(method);
+            method = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(method);
         }
 
         return method;
@@ -399,8 +400,9 @@ public static class ClassConverter
                 .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
                 .WithParameterList(parameters)
                 .WithBody(body);
-            getter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(getter);
             getter = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(getter);
+            getter = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(getter);
+            getter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(getter);
             var getTrivia = getter.GetLeadingTrivia().Insert(0, Comment("// VB6 multi-value property getter"));
             return getter.WithLeadingTrivia(getTrivia);
         }
@@ -411,6 +413,7 @@ public static class ClassConverter
                 .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
                 .WithParameterList(parameters)
                 .WithBody(body);
+            setter = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(setter);
             setter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(setter);
             var setTrivia = setter.GetLeadingTrivia().Insert(0, Comment("// VB6 multi-value property setter"));
             return setter.WithLeadingTrivia(setTrivia);
@@ -468,6 +471,7 @@ public static class ClassConverter
         }
 
 
+        member = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(member);
         member = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(member);
         member = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(member);
         return member;

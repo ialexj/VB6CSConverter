@@ -216,7 +216,7 @@ public static class ReferenceStubGenerator
             // A default member (DISPID 0) with parameters becomes a C# indexer (this[...])
             // so that bang-operator conversions like rs!MyField → rs["MyField"] compile correctly.
             if (getter?.IsDefault == true && getter.Parameters.Count > 0) {
-                var indexerParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true).ToArray();
+                var indexerParams = BuildParameters(getter.Parameters, useDynamic, skipFirstDefault: true).ToArray();
                 var indexer = IndexerDeclaration(MemberType(propType, useDynamic))
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
@@ -391,7 +391,7 @@ public static class ReferenceStubGenerator
             // A default member (DISPID 0) with parameters becomes a C# indexer (this[...])
             // so that bang-operator conversions like rs!MyField → rs["MyField"] compile correctly.
             if (getter?.IsDefault == true && getter.Parameters.Count > 0) {
-                var indexerParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true).ToArray();
+                var indexerParams = BuildParameters(getter.Parameters, useDynamic, skipFirstDefault: true).ToArray();
                 var indexer = IndexerDeclaration(MemberType(propType, useDynamic))
                     .WithModifiers(Modifiers(isPublic: true, isStatic: false))
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
@@ -552,7 +552,7 @@ public static class ReferenceStubGenerator
         if (innerIndexer == null) return null;
 
         string propName  = MakeSafeIdentifier(noParamDefault.Name);
-        var indexerParams   = BuildParameters(innerIndexer.Parameters, useDynamic, stripDefaults: true).ToArray();
+        var indexerParams   = BuildParameters(innerIndexer.Parameters, useDynamic, skipFirstDefault: true).ToArray();
 
         // Recursively follow the no-param default property chain on the item type.
         // e.g. Fields["key"] returns Field, and Field.Value (no-param DISPID 0) returns object,
@@ -793,12 +793,26 @@ public static class ReferenceStubGenerator
     // C# requires that once a parameter has a default value, all subsequent parameters must
     // also have defaults.  Walk the list and force-optionalize any required `ref` param that
     // follows an optional one.  See docs/com.md for the known caveats.
-    static IEnumerable<ParameterSyntax> BuildParameters(IReadOnlyList<ComQueryParam> ps, bool useDynamic = true, bool stripDefaults = false)
+    static IEnumerable<ParameterSyntax> BuildParameters(
+        IReadOnlyList<ComQueryParam> ps,
+        bool useDynamic = true,
+        bool stripDefaults = false,
+        bool skipFirstDefault = false)
     {
         bool seenOptional = false;
-        foreach (var p in ps) {
-            if (p.IsOptional) seenOptional = true;
-            yield return BuildParameter(p, useDynamic, forceOptional: !stripDefaults && seenOptional && !p.IsOptional, stripDefaults: stripDefaults);
+        for (int i = 0; i < ps.Count; i++) {
+            var p = ps[i];
+            bool stripDefaultForCurrent = stripDefaults || (skipFirstDefault && i == 0);
+
+            if (p.IsOptional && !stripDefaultForCurrent) {
+                seenOptional = true;
+            }
+
+            yield return BuildParameter(
+                p,
+                useDynamic,
+                forceOptional: !stripDefaultForCurrent && seenOptional && !p.IsOptional,
+                stripDefaults: stripDefaultForCurrent);
         }
     }
 
@@ -807,8 +821,8 @@ public static class ReferenceStubGenerator
         // C# does not allow `ref` parameters to have default values, and does not allow
         // required parameters to follow optional ones.  In both cases we drop `ref` and
         // make the parameter optional.  See docs/com.md for the known caveats.
-        // C# also does not allow default values on indexer parameters, so stripDefaults
-        // suppresses all defaults when building indexer parameter lists.
+        // Indexers suppress defaults only for their first parameter to avoid over-optional
+        // leading arguments while preserving trailing COM optional defaults.
         // `params` parameters cannot have defaults, so IsParamArray suppresses makeOptional too.
         bool makeOptional = !stripDefaults && !p.IsParamArray && (p.IsOptional || forceOptional);
         bool useRef = p.IsOut && !makeOptional;

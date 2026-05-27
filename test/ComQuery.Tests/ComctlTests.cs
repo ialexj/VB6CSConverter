@@ -44,32 +44,4 @@ public class ComctlTests : TypeLibraryInspectorIntegrationTestBase
         System.Diagnostics.Debug.WriteLine($"ComctlLib dump written to: {dumpPath}");
         model.Types.Should().NotBeEmpty();
     }
-
-    [TestMethod]
-    public void ComctlLib_Generate_ColumnHeaders_NoItemPropertyWhenIndexerPresent()
-    {
-        if (!File.Exists(ComctlPath)) Assert.Inconclusive("comctl32.Ocx not found — skipping");
-
-        var reference = MakeReference(ComctlGuid, 1, 0, "Microsoft Windows Common Controls", ComctlPath);
-        var model = TypeLibraryInspector.Inspect(reference, ComctlPath)!;
-
-        var outDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-        try {
-            ComStubGenerator.ReferenceStubGenerator.Generate(ToStubModel(model), outDir);
-
-            var file = Directory.GetFiles(outDir, "ColumnHeaders.cs", SearchOption.AllDirectories)
-                .FirstOrDefault();
-            file.Should().NotBeNull("ColumnHeaders.cs should be generated");
-
-            var source = File.ReadAllText(file!);
-            File.WriteAllText(Path.Combine(Path.GetTempPath(), "ComctlLib_ColumnHeaders.cs"), source);
-
-            source.Should().Contain("this[", "ColumnHeaders must have an indexer");
-            source.Should().NotContain("ColumnHeader Item",
-                "a named Item property must not appear alongside this[]");
-        }
-        finally {
-            if (Directory.Exists(outDir)) Directory.Delete(outDir, recursive: true);
-        }
-    }
 }

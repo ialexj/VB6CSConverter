@@ -68,6 +68,40 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
     }
 
     [TestMethod]
+    public void Generate_DefaultIndexer_SkipsOnlyFirstOptionalDefault()
+    {
+        // XArray-style default member where all args are optional: keep trailing defaults,
+        // but suppress only the first default value on the emitted indexer.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArrayObject", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("XArray", LibraryMemberKind.PropertyGet, "object",
+                        [
+                            new("Index", "object", IsOptional: true, IsOut: false),
+                            new("Dimension", "short", IsOptional: true, IsOut: false),
+                            new("Flags", "int", IsOptional: true, IsOut: false),
+                        ],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[", "the default parameterized property must emit an indexer");
+            source.Should().Contain("Index", "the first indexer parameter must be emitted");
+            source.Should().NotContain("Index = default", "the first optional default must be suppressed");
+            source.Should().Contain("short Dimension = default", "trailing optional defaults must be preserved");
+            source.Should().Contain("int Flags = default", "trailing optional defaults must be preserved");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void Generate_IndexerAndDuplicateItemMethod_DispatchInterface_ItemMethodIsSkipped()
     {
         // COM collection types (e.g. ComCtlLib.Panels) often define Item as both a PropertyGet
