@@ -54,7 +54,9 @@ public static class CompilationUnitConverter
             "Microsoft.VisualBasic.ControlChars",
             "Microsoft.VisualBasic.Conversion",
             "Microsoft.VisualBasic.DateAndTime",
-            "Microsoft.VisualBasic.Interaction"
+            "Microsoft.VisualBasic.Interaction",
+            "Microsoft.VisualBasic.Information",
+            "VB6",
         };
 
         var usings = common
@@ -62,7 +64,33 @@ public static class CompilationUnitConverter
             .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
             .WithStaticKeyword(Token(SyntaxKind.StaticKeyword)));
 
+        var vb6Class = ClassDeclaration("VB6")
+            .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword)))
+            .WithMembers(List<MemberDeclarationSyntax>([
+                FieldDeclaration(
+                        VariableDeclaration(ParseTypeName("Microsoft.VisualBasic.ErrObject"))
+                            .WithVariables(SingletonSeparatedList(
+                                VariableDeclarator("Err")
+                                    .WithInitializer(EqualsValueClause(
+                                        InvocationExpression(
+                                            MemberAccessExpression(
+                                                SyntaxKind.SimpleMemberAccessExpression,
+                                                ParseName("Microsoft.VisualBasic.Information"),
+                                                IdentifierName("Err"))))))))
+                    .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword), Token(SyntaxKind.ReadOnlyKeyword))),
+                FieldDeclaration(
+                        VariableDeclaration(PredefinedType(Token(SyntaxKind.IntKeyword)))
+                            .WithVariables(SingletonSeparatedList(
+                                VariableDeclarator("Erl")
+                                    .WithInitializer(EqualsValueClause(
+                                        InvocationExpression(
+                                            MemberAccessExpression(
+                                                SyntaxKind.SimpleMemberAccessExpression,
+                                                ParseName("Microsoft.VisualBasic.Information"),
+                                                IdentifierName("Erl"))))))))
+                    .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword), Token(SyntaxKind.ReadOnlyKeyword)))
+            ]));
 
-        return CompilationUnit([], List(usings), [], []);
+        return CompilationUnit([], List(usings), [], SingletonList<MemberDeclarationSyntax>(vb6Class));
     }
 }
