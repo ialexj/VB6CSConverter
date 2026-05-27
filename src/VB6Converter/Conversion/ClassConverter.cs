@@ -4,9 +4,11 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using VB6Converter.Rewriters;
 using VB6Parser;
+using VB6Parser.Frx;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Converter.Conversion.CommonConverter;
 using static VB6Converter.Conversion.ValueConverter;
@@ -66,7 +68,7 @@ public static class ClassConverter
 
         // Control properties
         if (module.controlProperties() is ControlPropertiesContext controlCtx) {
-            var root = GetControl(controlCtx, ctx.Options?.FrxExtractor, ctx.SourceDirectory);
+            var root = GetControl(controlCtx, ctx.SourceDirectory, ctx.OutputDirectory);
             root.Name = IdentifierName("this");
 
             // Base class
@@ -112,26 +114,25 @@ public static class ClassConverter
         return c;
     }
 
-    public static ClassControlInfo GetControl(ControlPropertiesContext control, FrxExtractor frxExtractor = null, string sourceDirectory = null)
+    public static ClassControlInfo GetControl(ControlPropertiesContext control, string sourceDirectory = null, string outputDirectory = null)
     {
         var name = GetIdentifierName(control.cp_ControlIdentifier().ambiguousIdentifier());
         var type = control.cp_ControlType().complexType().ToTypeSyntax();
 
-        var stringBlobs = new List<(string propertyName, string[] items)>();
-        var properties = GetProperties(control.cp_Properties(), stringBlobs: stringBlobs).ToArray();
+        var frxOffsetMap = FrxOffsetScanner.BuildOffsetMap(control, sourceDirectory);
+        var properties = GetProperties(control.cp_Properties()).ToArray();
 
         var children = control.cp_Properties().Select(c => c.controlProperties())
             .OfType<ControlPropertiesContext>()
-            .Select(c => GetControl(c, frxExtractor, sourceDirectory))
+            .Select(c => GetControl(c, sourceDirectory, outputDirectory))
             .ToArray();
 
         return new ClassControlInfo(type, name) {
             Properties = properties,
-            StringBlobProperties = stringBlobs,
             Children = children
         };
 
-        IEnumerable<(NameSyntax name, ExpressionSyntax value)> GetProperties(IEnumerable<Cp_PropertiesContext> properties, NameSyntax parent = null, List<(string, string[])> stringBlobs = null)
+        IEnumerable<(NameSyntax name, ExpressionSyntax value)> GetProperties(IEnumerable<Cp_PropertiesContext> properties, NameSyntax parent = null)
         {
             NameSyntax GetFullName(NameSyntax expr) => parent is not null ? parent.ToName().AppendName(expr.ToName()) : expr;
 
@@ -141,32 +142,34 @@ public static class ClassConverter
 
                     // FRX binary resource reference
                     if (single.FRX_OFFSET() is { } frxToken
-                        && single.cp_PropertyValue()?.literal() is LiteralContext frxLiteral
-                        && frxExtractor is not null) {
+                        && single.cp_PropertyValue()?.literal() is LiteralContext frxLiteral) {
 
                         var frxFilename = GetLiteral(frxLiteral) is LiteralExpressionSyntax lit
                             ? lit.Token.ValueText
                             : null;
                         var hexOffset = frxToken.GetText().TrimStart(':');
 
-                        if (frxFilename is not null) {
-                            var entry = frxExtractor.GetResource(frxFilename, hexOffset);
-                            if (entry is not null) {
-                                if (entry.Format == FrxFormat.StringBlob) {
-                                    // Collect string blobs separately; not a simple assignment
-                                    var rawName = (propName is IdentifierNameSyntax id) ? id.Identifier.Text
-                                        : propName.ToFullString().Trim();
-                                    stringBlobs?.Add((rawName, entry.Strings ?? []));
-                                    continue;
+                        if (frxFilename is not null
+                            && sourceDirectory is not null
+                            && outputDirectory is not null
+                            && int.TryParse(hexOffset, System.Globalization.NumberStyles.HexNumber, null, out var offsetInt)
+                            && frxOffsetMap.TryGetValue((frxFilename, offsetInt), out var byteLength)) {
+
+                            var frxPath = Path.Combine(sourceDirectory, frxFilename);
+                            string resolvedResourcePath = null;
+                            if (File.Exists(frxPath)) {
+                                try {
+                                    var item = FrxReader.Read(frxPath, offsetInt, byteLength);
+                                    var formName = Path.GetFileNameWithoutExtension(frxFilename);
+                                    resolvedResourcePath = FrxResourceExporter.Export(item, formName, outputDirectory);
                                 }
-                                else if (entry.ResourceFilePath is not null) {
-                                    var resourceExpr = BuildResourceExpression(entry.Format, entry.ResourceFilePath);
-                                    if (resourceExpr is not null) {
-                                        yield return (propName, resourceExpr);
-                                        continue;
-                                    }
+                                catch {
+                                    // Fall through to unresolved path below
                                 }
-                                // Unknown / OLE / no path → fall through to TODO
+                            }
+                            if (resolvedResourcePath is not null) {
+                                yield return (propName, ParseExpression("default").WithFrxResource(resolvedResourcePath));
+                                continue;
                             }
                         }
 
@@ -199,34 +202,13 @@ public static class ClassConverter
                 else if (prop.cp_NestedProperty() is Cp_NestedPropertyContext nested) {
                     var name = GetFullName(GetIdentifierName(nested.ambiguousIdentifier()));
 
-                    foreach (var np in GetProperties(nested.cp_Properties(), name, stringBlobs)) {
+                    foreach (var np in GetProperties(nested.cp_Properties(), name)) {
                         yield return np;
                     }
                 }
             }
         }
     }
-
-    private static ExpressionSyntax BuildResourceExpression(FrxFormat format, string relativePath)
-    {
-        // Normalise to backslash for Windows path literals
-        var path = relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar);
-        var pathLiteral = LiteralExpression(SyntaxKind.StringLiteralExpression, Verbatim(path));
-
-        return format switch {
-            FrxFormat.Ico => ObjectCreationExpression(ParseTypeName("System.Drawing.Icon"))
-                .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(pathLiteral)))),
-            FrxFormat.Cur => ObjectCreationExpression(ParseTypeName("System.Windows.Forms.Cursor"))
-                .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(pathLiteral)))),
-            FrxFormat.Bmp or FrxFormat.Gif or FrxFormat.Jpeg or FrxFormat.Wmf or FrxFormat.Emf =>
-                ObjectCreationExpression(ParseTypeName("System.Drawing.Bitmap"))
-                    .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument(pathLiteral)))),
-            _ => null,
-        };
-    }
-
-    private static SyntaxToken Verbatim(string value)
-        => Token(default, SyntaxKind.StringLiteralToken, $"@\"{value}\"", value, default);
 
     public static IEnumerable<MemberDeclarationSyntax> GetMembers(ModuleBodyElementContext e, ClassContext ctx)
     {

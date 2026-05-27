@@ -17,12 +17,6 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
 
     public IEnumerable<(NameSyntax name, ExpressionSyntax value)> Properties { get; set; } = [];
 
-    /// <summary>
-    /// String-blob properties extracted from FRX resources (e.g. ListBox.List).
-    /// Each entry carries the VB6 property name and the string items to add.
-    /// </summary>
-    public IReadOnlyList<(string PropertyName, string[] Items)> StringBlobProperties { get; set; } = [];
-
     public IEnumerable<ClassControlInfo> Children { get; set; } = [];
 
     public IdentifierNameSyntax GetIndexedName()
@@ -64,6 +58,42 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
                 name = QualifiedName(name, segment);
             }
 
+            // FRX resource reference — emit `Name = default; // Resource: path`
+            if (prop.value.HasFrxResource()) {
+                var resourcePath = prop.value.GetFrxResource();
+                var semicolonWithComment = Token(
+                    TriviaList(),
+                    SyntaxKind.SemicolonToken,
+                    TriviaList(Comment($" // Resource: {resourcePath}")));
+                var assignStmt = ExpressionStatement(
+                        AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, name, ParseExpression("default")))
+                    .WithSemicolonToken(semicolonWithComment);
+                if (isFirst) {
+                    assignStmt = assignStmt.WithLeadingTrivia(TriviaList(LineFeed));
+                    isFirst = false;
+                }
+                yield return assignStmt;
+                continue;
+            }
+
+            // When the value carries a transform error, comment out the whole assignment
+            // rather than emitting broken syntax like `LHS = // ERROR\ndefault;`.
+            if (prop.value.HasAnnotations("Error")) {
+                var errorMsg = prop.value.GetAnnotations("Error").First().Data;
+                var semicolon = Token(
+                    TriviaList(LineFeed, Comment($"// {name} = /* {errorMsg} */")),
+                    SyntaxKind.SemicolonToken,
+                    TriviaList());
+                yield return EmptyStatement(semicolon)
+                    .WithAdditionalAnnotations(prop.value.GetAnnotations("Error")
+                        .Concat(prop.value.GetAnnotations("ErrorSource"))
+                        .Concat(prop.value.GetAnnotations("ErrorTree"))
+                        .Concat(prop.value.GetAnnotations("ErrorLine"))
+                        .Concat(prop.value.GetAnnotations("ErrorCol")));
+                isFirst = false;
+                continue;
+            }
+
             var stmt = ExpressionStatement(
                 AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
                     name, prop.value));
@@ -74,36 +104,6 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
             }
 
             yield return stmt;
-        }
-
-        foreach (var (propertyName, items) in StringBlobProperties) {
-            if (items.Length == 0) continue;
-
-            // Map known VB6 collection property names to WinForms equivalents
-            if (string.Equals(propertyName, "List", StringComparison.OrdinalIgnoreCase)) {
-                NameSyntax controlName = GetIndexedName();
-                foreach (var item in items) {
-                    yield return ExpressionStatement(
-                        InvocationExpression(
-                            MemberAccessExpression(
-                                SyntaxKind.SimpleMemberAccessExpression,
-                                MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    controlName,
-                                    IdentifierName("Items")),
-                                IdentifierName("Add")),
-                            ArgumentList(SingletonSeparatedList(
-                                Argument(LiteralExpression(
-                                    SyntaxKind.StringLiteralExpression,
-                                    Literal(item)))))));
-                }
-            }
-            else {
-                // Other string blob properties — emit a TODO comment
-                yield return ExpressionStatement(
-                    ParseExpression("default")
-                        .WithLeadingTrivia(Comment($"// TODO: string blob property '{propertyName}' ({items.Length} items) — manual conversion required")));
-            }
         }
 
         foreach (var child in Children) {

@@ -155,17 +155,8 @@ public static class Program
 
         if (targetsThatNeedTranform.Length > 0) {
             if (!options.SkipTransform) {
-                // ── Pre-conversion: extract FRX binary resources ─────────────────────
                 var conversionOptions = ConversionOptions.Default;
-                var frxTargets = targetsThatNeedTranform
-                    .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
-                    .ToArray();
-                if (frxTargets.Length > 0) {
-                    AnsiConsole.MarkupLine("[grey]Extracting FRX resources...[/]");
-                    var resourcesDir = Path.Combine(options.OutputDir, "_Resources");
-                    var frxExtractor = FrxExtractor.Extract(frxTargets, resourcesDir);
-                    conversionOptions = conversionOptions with { FrxExtractor = frxExtractor };
-                }
+
                 // ────────────────────────────────────────────────────────────────────
 
                 await RunOperations("Converting VB6 to C#", targetsThatNeedTranform, (t, ctx, cancel) =>
@@ -403,9 +394,10 @@ public static class Program
 
         var excludeList = excludeReferences.ToList();
         if (excludeList.Count > 0) {
-            psi.ArgumentList.Add("--exclude-references");
-            foreach (var name in excludeList)
+            foreach (var name in excludeList) {
+                psi.ArgumentList.Add("--exclude-references");
                 psi.ArgumentList.Add(name);
+            }
         }
 
         using var process = Process.Start(psi)!;

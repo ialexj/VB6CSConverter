@@ -1,254 +1,240 @@
 using AwesomeAssertions;
 using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.IO;
+using System.Text;
+using VB6Parser.Frx;
 
 namespace VB6Parser.Tests;
 
 [TestClass]
 public class FrxReaderTests
 {
-    // ── helpers ────────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// <summary>Builds a Variant A (12-byte header) blob.</summary>
-    private static byte[] VariantA(byte[] payload)
+    private static string WriteTempFile(byte[] data)
     {
-        uint dwSizeImage = (uint)payload.Length;
-        uint dwSizeImageEx = dwSizeImage + 8;
-
-        var bytes = new List<byte>();
-        bytes.AddRange(BitConverter.GetBytes(dwSizeImageEx)); // +0
-        bytes.AddRange(BitConverter.GetBytes(0x0000746Cu));   // +4  key
-        bytes.AddRange(BitConverter.GetBytes(dwSizeImage));    // +8
-        bytes.AddRange(payload);
-        return bytes.ToArray();
+        var path = Path.GetTempFileName();
+        File.WriteAllBytes(path, data);
+        return path;
     }
 
-    /// <summary>Builds a Variant B (28-byte header) blob.</summary>
-    private static byte[] VariantB(byte[] payload)
-    {
-        uint dwSizeImage = (uint)payload.Length;
-        uint dwSizeImageEx = dwSizeImage + 24;
+    private static byte[] Int32Le(int value) => BitConverter.GetBytes(value);
+    private static byte[] Int16Le(short value) => BitConverter.GetBytes(value);
 
-        var bytes = new List<byte>();
-        bytes.AddRange(BitConverter.GetBytes(dwSizeImageEx)); // +0
-        bytes.AddRange(BitConverter.GetBytes(0x0000746Cu));   // +4  key
-        bytes.AddRange(new byte[16]);                          // +8  extra metadata
-        bytes.AddRange(BitConverter.GetBytes(dwSizeImage));    // +24
-        bytes.AddRange(payload);
-        return bytes.ToArray();
-    }
-
-    /// <summary>Builds a Variant C (4-byte length-prefix) blob.</summary>
-    private static byte[] VariantC(byte[] payload)
-    {
-        var bytes = new List<byte>();
-        bytes.AddRange(BitConverter.GetBytes((uint)payload.Length));
-        bytes.AddRange(payload);
-        return bytes.ToArray();
-    }
-
-    private static byte[] BmpMagic() => [0x42, 0x4D, 0x00, 0x00];
-    private static byte[] GifMagic() => [0x47, 0x49, 0x46, 0x38];
-    private static byte[] JpegMagic() => [0xFF, 0xD8, 0xFF, 0xE0];
-    private static byte[] IcoMagic()  => [0x00, 0x00, 0x01, 0x00];
-    private static byte[] CurMagic()  => [0x00, 0x00, 0x02, 0x00];
-    private static byte[] WmfMagic()  => [0xD7, 0xCD, 0xC6, 0x9A];
-
-    private static byte[] EmfMagic()
-    {
-        // EMF signature " EMF" appears at byte offset 40 in the blob
-        var bytes = new byte[44];
-        bytes[40] = 0x20; bytes[41] = 0x45; bytes[42] = 0x4D; bytes[43] = 0x46;
-        return bytes;
-    }
-
-    // ── FrxReader.Read ─────────────────────────────────────────────────────
+    // ── BinaryBlob: zero-length payload ──────────────────────────────────────
 
     [TestMethod]
-    public void Read_VariantA_Bmp_ReturnsCorrectBlob()
+    public void Read_ZeroLengthBinaryBlob()
     {
-        var payload = BmpMagic().Concat(new byte[100]).ToArray();
-        var data = VariantA(payload);
-
-        var blob = FrxReader.Read(data, "0000");
-
-        blob.Should().NotBeNull();
-        blob!.Format.Should().Be(FrxFormat.Bmp);
-        blob.Data.Length.Should().Be(payload.Length);
-        blob.Offset.Should().Be(0);
+        // byteLength == 4, payloadLen == 0 → BinaryBlob with empty RawPayload
+        var data = Int32Le(0);
+        var path = WriteTempFile(data);
+        try {
+            var item = FrxReader.Read(path, 0, 4);
+            item.Should().BeOfType<FrxBinaryBlob>();
+            var blob = (FrxBinaryBlob)item;
+            blob.DataLength.Should().Be(0);
+            blob.Payload.Should().BeOfType<FrxRawPayload>();
+            blob.Payload.GetData().Should().BeEmpty();
+        }
+        finally { File.Delete(path); }
     }
 
+    // ── BinaryBlob: ImagePayload without CLSID ────────────────────────────────
+
     [TestMethod]
-    public void Read_VariantB_Bmp_ReturnsCorrectBlob()
+    public void Read_ImagePayload_NoCLSID()
     {
-        var payload = BmpMagic().Concat(new byte[50]).ToArray();
-        var data = VariantB(payload);
+        // Build the ICO example from frx.md:
+        //   payloadLen = 3782  (byteLength = 3786)
+        //   magic 6C 74 00 00
+        //   imageLen = 3774   (3786 − 12 = 3774)
+        //   image data (ICO header: 00 00 01 00 …)
+        var imageData = new byte[3774];
+        imageData[0] = 0x00; imageData[1] = 0x00;
+        imageData[2] = 0x01; imageData[3] = 0x00; // ICO magic
 
-        var blob = FrxReader.Read(data, "0000");
+        var buf = new MemoryStream();
+        buf.Write(Int32Le(3782));               // payloadLen
+        buf.Write([0x6C, 0x74, 0x00, 0x00]);    // image magic
+        buf.Write(Int32Le(3774));               // imageLen
+        buf.Write(imageData);
 
-        blob.Should().NotBeNull();
-        blob!.Format.Should().Be(FrxFormat.Bmp);
-        blob.Data.Length.Should().Be(payload.Length);
+        var path = WriteTempFile(buf.ToArray());
+        try {
+            var item = FrxReader.Read(path, 0, 3786);
+            item.Should().BeOfType<FrxBinaryBlob>();
+            var blob = (FrxBinaryBlob)item;
+            blob.Payload.Should().BeOfType<FrxImagePayload>();
+            var img = (FrxImagePayload)blob.Payload;
+            img.ClsId.Should().BeNull();
+            img.ImageLength.Should().Be(3774);
+            img.ImageBytes.Length.Should().Be(3774);
+            img.ImageBytes[0..4].Should().Equal([0x00, 0x00, 0x01, 0x00]);
+        }
+        finally { File.Delete(path); }
     }
 
+    // ── BinaryBlob: ImagePayload with CLSID ──────────────────────────────────
+
     [TestMethod]
-    public void Read_VariantC_StringBlob_SplitsOnNull()
+    public void Read_ImagePayload_WithCLSID()
     {
-        var strings = new byte[] { (byte)'a', (byte)'b', 0x00, (byte)'c', (byte)'d', 0x00 };
-        var data = VariantC(strings);
+        // CLSID {0BE35204-8F91-11CE-9DE3-00AA004BB851} (OLE StdPicture)
+        // Bytes (little-endian): 04 52 E3 0B 91 8F CE 11 9D E3 00 AA 00 4B B8 51
+        var clsidBytes = new byte[] {
+            0x04, 0x52, 0xE3, 0x0B, 0x91, 0x8F, 0xCE, 0x11,
+            0x9D, 0xE3, 0x00, 0xAA, 0x00, 0x4B, 0xB8, 0x51
+        };
 
-        var blob = FrxReader.Read(data, "0000");
+        var imageData = new byte[100];
+        imageData[0] = 0x42; imageData[1] = 0x4D; // BMP magic
 
-        blob.Should().NotBeNull();
-        blob!.Format.Should().Be(FrxFormat.StringBlob);
-        blob.Strings.Should().BeEquivalentTo(["ab", "cd"]);
+        // byteLength = 4 + 16 + 4 + 4 + 100 = 128
+        // payloadLen = 128 − 4 = 124
+        // imageLen   = 128 − 28 = 100
+        var buf = new MemoryStream();
+        buf.Write(Int32Le(124));                // payloadLen
+        buf.Write(clsidBytes);                  // CLSID (16 bytes)
+        buf.Write([0x6C, 0x74, 0x00, 0x00]);    // image magic
+        buf.Write(Int32Le(100));                // imageLen
+        buf.Write(imageData);
+
+        var path = WriteTempFile(buf.ToArray());
+        try {
+            var item = FrxReader.Read(path, 0, 128);
+            item.Should().BeOfType<FrxBinaryBlob>();
+            var blob = (FrxBinaryBlob)item;
+            blob.Payload.Should().BeOfType<FrxImagePayload>();
+            var img = (FrxImagePayload)blob.Payload;
+            img.ClsId.Should().NotBeNull();
+            img.ClsId!.Value.Should().Be(new Guid(clsidBytes));
+            img.ImageLength.Should().Be(100);
+            img.ImageBytes[0..2].Should().Equal([0x42, 0x4D]);
+        }
+        finally { File.Delete(path); }
     }
 
+    // ── BinaryBlob: bad imageLength falls back to RawPayload ─────────────────
+
     [TestMethod]
-    public void Read_VariantC_EmptyBlob_ReturnsEmptyStringBlob()
+    public void Read_ImagePayload_BadImageLength_FallsBackToRaw()
     {
-        var data = VariantC([]);
+        // payloadLen matches, magic present, but imageLen is wrong
+        var buf = new MemoryStream();
+        buf.Write(Int32Le(12));               // payloadLen = byteLength − 4 = 12 ✓
+        buf.Write([0x6C, 0x74, 0x00, 0x00]); // magic
+        buf.Write(Int32Le(999));              // imageLen = 999 ≠ 16 − 12 = 4 → invalid
 
-        var blob = FrxReader.Read(data, "0000");
-
-        blob.Should().NotBeNull();
-        blob!.Format.Should().Be(FrxFormat.StringBlob);
-        blob.Strings.Should().BeEmpty();
+        var path = WriteTempFile(buf.ToArray());
+        try {
+            var item = FrxReader.Read(path, 0, 16);
+            item.Should().BeOfType<FrxBinaryBlob>();
+            var blob = (FrxBinaryBlob)item;
+            blob.Payload.Should().BeOfType<FrxRawPayload>();
+        }
+        finally { File.Delete(path); }
     }
 
+    // ── StringList: empty (count == 0) ───────────────────────────────────────
+
     [TestMethod]
-    public void Read_IcoMagic_DetectedAsIco()
+    public void Read_StringList_Empty()
     {
-        var payload = IcoMagic().Concat(new byte[20]).ToArray();
-        var blob = FrxReader.Read(VariantA(payload), "0000");
-        blob!.Format.Should().Be(FrxFormat.Ico);
+        // byteLength == 2, count == 0
+        var data = Int16Le(0);
+        var path = WriteTempFile(data);
+        try {
+            var item = FrxReader.Read(path, 0, 2);
+            item.Should().BeOfType<FrxStringList>();
+            var list = (FrxStringList)item;
+            list.Strings.Should().BeEmpty();
+        }
+        finally { File.Delete(path); }
     }
 
+    // ── StringList: 3 items "1", "22", "333" ─────────────────────────────────
+
     [TestMethod]
-    public void Read_CurMagic_DetectedAsCur()
+    public void Read_StringList_ThreeItems()
     {
-        var payload = CurMagic().Concat(new byte[20]).ToArray();
-        var blob = FrxReader.Read(VariantA(payload), "0000");
-        blob!.Format.Should().Be(FrxFormat.Cur);
+        // From frx.md ItemData example:
+        //   03 00  count=3
+        //   03 00  maxItemLength=3
+        //   01 00  31                 "1"
+        //   02 00  32 32              "22"
+        //   03 00  33 33 33           "333"
+        var data = new byte[] {
+            0x03, 0x00,
+            0x03, 0x00,
+            0x01, 0x00, 0x31,
+            0x02, 0x00, 0x32, 0x32,
+            0x03, 0x00, 0x33, 0x33, 0x33
+        };
+        var path = WriteTempFile(data);
+        try {
+            var item = FrxReader.Read(path, 0, data.Length);
+            item.Should().BeOfType<FrxStringList>();
+            var list = (FrxStringList)item;
+            list.Strings.Should().HaveCount(3);
+            list.Strings[0].Should().Be("1");
+            list.Strings[1].Should().Be("22");
+            list.Strings[2].Should().Be("333");
+        }
+        finally { File.Delete(path); }
     }
 
+    // ── StringList: 3 items with varying length from frx.md ─────────────────
+
     [TestMethod]
-    public void Read_GifMagic_DetectedAsGif()
+    public void Read_StringList_VaryingLength()
     {
-        var payload = GifMagic().Concat(new byte[20]).ToArray();
-        var blob = FrxReader.Read(VariantA(payload), "0000");
-        blob!.Format.Should().Be(FrxFormat.Gif);
+        // List property example: "XXXX", "YYYYYY", "ZZZZZZZZ"
+        var data = new byte[] {
+            0x03, 0x00,  // count = 3
+            0x08, 0x00,  // maxItemLength = 8
+            0x04, 0x00, 0x58, 0x58, 0x58, 0x58,                    // "XXXX"
+            0x06, 0x00, 0x59, 0x59, 0x59, 0x59, 0x59, 0x59,        // "YYYYYY"
+            0x08, 0x00, 0x5A, 0x5A, 0x5A, 0x5A, 0x5A, 0x5A, 0x5A, 0x5A  // "ZZZZZZZZ"
+        };
+        var path = WriteTempFile(data);
+        try {
+            var item = FrxReader.Read(path, 0, data.Length);
+            item.Should().BeOfType<FrxStringList>();
+            var list = (FrxStringList)item;
+            list.Strings.Should().Equal(["XXXX", "YYYYYY", "ZZZZZZZZ"]);
+        }
+        finally { File.Delete(path); }
     }
 
+    // ── FrxRawItem fallback ───────────────────────────────────────────────────
+
     [TestMethod]
-    public void Read_JpegMagic_DetectedAsJpeg()
+    public void Read_UnrecognisedData_FallsBackToRawItem()
     {
-        var payload = JpegMagic().Concat(new byte[20]).ToArray();
-        var blob = FrxReader.Read(VariantA(payload), "0000");
-        blob!.Format.Should().Be(FrxFormat.Jpeg);
+        // Bindings magic: C6 FA 01 00 — payloadLen check fails, StringList parse fails
+        var data = new byte[] { 0xC6, 0xFA, 0x01, 0x00, 0x09, 0x00, 0x00, 0x00, 0x0B };
+        var path = WriteTempFile(data);
+        try {
+            var item = FrxReader.Read(path, 0, data.Length);
+            item.Should().BeOfType<FrxRawItem>();
+            ((FrxRawItem)item).Data.Should().Equal(data);
+        }
+        finally { File.Delete(path); }
     }
 
-    [TestMethod]
-    public void Read_WmfMagic_DetectedAsWmf()
-    {
-        var payload = WmfMagic().Concat(new byte[20]).ToArray();
-        var blob = FrxReader.Read(VariantA(payload), "0000");
-        blob!.Format.Should().Be(FrxFormat.Wmf);
-    }
+    // ── Read from non-zero offset ─────────────────────────────────────────────
 
     [TestMethod]
-    public void Read_EmfMagic_DetectedAsEmf()
+    public void Read_NonZeroOffset()
     {
-        var payload = EmfMagic();
-        var blob = FrxReader.Read(VariantA(payload), "0000");
-        blob!.Format.Should().Be(FrxFormat.Emf);
-    }
-
-    [TestMethod]
-    public void Read_NullData_ReturnsNull()
-    {
-        var blob = FrxReader.Read([], "0000");
-        blob.Should().BeNull();
-    }
-
-    [TestMethod]
-    public void Read_OffsetBeyondEnd_ReturnsNull()
-    {
-        var data = VariantA(BmpMagic());
-        var blob = FrxReader.Read(data, "FFFF");
-        blob.Should().BeNull();
-    }
-
-    [TestMethod]
-    public void Read_HexOffset_ParsedCorrectly()
-    {
-        // First blob at 0x0000; write a second at the offset after it
-        var payload = BmpMagic().Concat(new byte[4]).ToArray();
-        var first = VariantA(payload);
-        // second blob at offset = first.Length
-        var secondPayload = IcoMagic().Concat(new byte[4]).ToArray();
-        var second = VariantA(secondPayload);
-
-        var combined = first.Concat(second).ToArray();
-        var hex = first.Length.ToString("X4");
-
-        var blob = FrxReader.Read(combined, hex);
-        blob.Should().NotBeNull();
-        blob!.Format.Should().Be(FrxFormat.Ico);
-    }
-
-    // ── FrxReader.ReadAll ─────────────────────────────────────────────────
-
-    [TestMethod]
-    public void ReadAll_TwoBlobs_ReturnsBothWithCorrectOffsets()
-    {
-        var payload1 = BmpMagic().Concat(new byte[8]).ToArray();
-        var payload2 = IcoMagic().Concat(new byte[8]).ToArray();
-        var data = VariantA(payload1).Concat(VariantA(payload2)).ToArray();
-
-        var blobs = FrxReader.ReadAll(data).ToArray();
-
-        blobs.Length.Should().Be(2);
-        blobs[0].Format.Should().Be(FrxFormat.Bmp);
-        blobs[0].Offset.Should().Be(0);
-        blobs[1].Format.Should().Be(FrxFormat.Ico);
-        blobs[1].Offset.Should().Be(VariantA(payload1).Length);
-    }
-
-    [TestMethod]
-    public void ReadAll_MixedVariantAAndC_YieldsAllBlobs()
-    {
-        var imgPayload = BmpMagic().Concat(new byte[4]).ToArray();
-        var strPayload = new byte[] { (byte)'x', (byte)'y', 0x00 };
-
-        var data = VariantA(imgPayload).Concat(VariantC(strPayload)).ToArray();
-        var blobs = FrxReader.ReadAll(data).ToArray();
-
-        blobs.Length.Should().Be(2);
-        blobs[0].Format.Should().Be(FrxFormat.Bmp);
-        blobs[1].Format.Should().Be(FrxFormat.StringBlob);
-        blobs[1].Strings.Should().BeEquivalentTo(["xy"]);
-    }
-
-    [TestMethod]
-    public void ReadAll_EmptyData_ReturnsEmpty()
-    {
-        var blobs = FrxReader.ReadAll([]).ToArray();
-        blobs.Should().BeEmpty();
-    }
-
-    // ── FrxReader.GetExtension ─────────────────────────────────────────────
-
-    [TestMethod]
-    public void GetExtension_KnownFormats_ReturnCorrectExtensions()
-    {
-        FrxReader.GetExtension(FrxFormat.Bmp).Should().Be("bmp");
-        FrxReader.GetExtension(FrxFormat.Gif).Should().Be("gif");
-        FrxReader.GetExtension(FrxFormat.Jpeg).Should().Be("jpg");
-        FrxReader.GetExtension(FrxFormat.Ico).Should().Be("ico");
-        FrxReader.GetExtension(FrxFormat.Cur).Should().Be("cur");
-        FrxReader.GetExtension(FrxFormat.Wmf).Should().Be("wmf");
-        FrxReader.GetExtension(FrxFormat.Emf).Should().Be("emf");
+        // Prepend 8 garbage bytes, then a 2-byte empty StringList at offset 8
+        var data = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00 };
+        var path = WriteTempFile(data);
+        try {
+            var item = FrxReader.Read(path, 8, 2);
+            item.Should().BeOfType<FrxStringList>();
+        }
+        finally { File.Delete(path); }
     }
 }

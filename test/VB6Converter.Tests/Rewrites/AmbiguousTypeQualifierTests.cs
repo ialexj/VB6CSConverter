@@ -151,6 +151,238 @@ public class AmbiguousTypeQualifierTests
         CheckQualification(cs, expected, preferredNamespaces: ["A"]);
     }
 
+    // ── contextual type: assignment LHS ──────────────────────────────────────
+
+    [TestMethod]
+    public void ContextualType_AssignmentRhs_MatchesLhs()
+    {
+        // x is A.Widget; assignment RHS has ambiguous Widget → pick A.Widget
+        var cs = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                void M() {
+                    A.Widget x = null;
+                    x = new Widget();
+                }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                void M() {
+                    A.Widget x = null;
+                    x = new A.Widget();
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: []);
+    }
+
+    // ── contextual type: variable declaration initializer ────────────────────
+
+    [TestMethod]
+    public void ContextualType_DeclaredType_InferredFromInitializer()
+    {
+        // Widget x = GetWidget() where GetWidget() returns A.Widget → declared type picks A.Widget
+        var cs = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                static A.Widget GetWidget() => null;
+                void M() {
+                    Widget x = GetWidget();
+                }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                static A.Widget GetWidget() => null;
+                void M() {
+                    A.Widget x = GetWidget();
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: []);
+    }
+
+    [TestMethod]
+    public void ContextualType_Initializer_InferredFromDeclaredType()
+    {
+        // A.Widget x = new Widget() — Widget in the initializer picks A.Widget
+        var cs = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                void M() {
+                    A.Widget x = new Widget();
+                }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                void M() {
+                    A.Widget x = new A.Widget();
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: []);
+    }
+
+    // ── contextual type: return statement ────────────────────────────────────
+
+    [TestMethod]
+    public void ContextualType_ReturnStatement()
+    {
+        // Method declared to return A.Widget; body returns new Widget() → A.Widget
+        var cs = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                A.Widget GetWidget() { return new Widget(); }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                A.Widget GetWidget() { return new A.Widget(); }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: []);
+    }
+
+    // ── contextual type: method argument ─────────────────────────────────────
+
+    [TestMethod]
+    public void ContextualType_MethodArgument()
+    {
+        // UseWidget(A.Widget) is called with new Widget() → Widget picks A.Widget
+        var cs = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                static void UseWidget(A.Widget w) {}
+                void M() { UseWidget(new Widget()); }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                static void UseWidget(A.Widget w) {}
+                void M() { UseWidget(new A.Widget()); }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: []);
+    }
+
+    // ── contextual type: no candidate match falls through ────────────────────
+
+    [TestMethod]
+    public void ContextualType_NoMatch_FallsThrough_ToPreferredNamespace()
+    {
+        // Initializer returns object (no match); user-preferred namespace B wins
+        var cs = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                static object GetWidget() => null;
+                void M() {
+                    Widget x = (Widget)GetWidget();
+                }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                static object GetWidget() => null;
+                void M() {
+                    B.Widget x = (B.Widget)GetWidget();
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: ["B"]);
+    }
+
+    // ── contextual type: beats user preference ───────────────────────────────
+
+    [TestMethod]
+    public void ContextualType_BeatsUserPreference()
+    {
+        // User prefers B, but assignment LHS is A.Widget → context wins
+        var cs = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                void M() {
+                    A.Widget x = null;
+                    x = new Widget();
+                }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { class Widget {} }
+            namespace B { class Widget {} }
+            class Test {
+                void M() {
+                    A.Widget x = null;
+                    x = new A.Widget();
+                }
+            }
+            """;
+
+        // Even though user prefers B, context (x is A.Widget) takes priority
+        CheckQualification(cs, expected, preferredNamespaces: ["B"]);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private static string RewriteCode(string cs, IEnumerable<string> preferredNamespaces)

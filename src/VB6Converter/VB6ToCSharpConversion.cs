@@ -23,8 +23,9 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
     {
         using var reader = OpenFile(input);
         var sourceDirectory = Path.GetDirectoryName(input);
+        var outputDirectory = Path.GetDirectoryName(output);
 
-        var conversion = Convert(reader, className, nsName, type, options, sourceDirectory);
+        var conversion = Convert(reader, className, nsName, type, options, sourceDirectory, outputDirectory);
 
         var outputDir = Path.GetDirectoryName(output);
         if (!string.IsNullOrWhiteSpace(outputDir)) {
@@ -71,7 +72,7 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
         return Convert(reader, className, nsName, type, options);
     }
 
-    public static VB6ToCSharpConversion Convert(TextReader input, string className, string nsName, VisualBasicFileType type, ConversionOptions options = null, string sourceDirectory = null)
+    public static VB6ToCSharpConversion Convert(TextReader input, string className, string nsName, VisualBasicFileType type, ConversionOptions options = null, string sourceDirectory = null, string outputDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(input);
 
@@ -84,7 +85,8 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
                 parse.Start.module(), nsName, className,
                 isStatic: type == VisualBasicFileType.Module,
                 options: options,
-                sourceDirectory: sourceDirectory);
+                sourceDirectory: sourceDirectory,
+                outputDirectory: outputDirectory);
 
             var transformErrors = cu.GetTransformErrors().ToArray();
             foreach (var error in transformErrors) {

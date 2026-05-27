@@ -56,6 +56,19 @@ public static class TransformErrors
         return token.WithLeadingTrivia(Comment($"/* ERROR: {error.Message} */"))
             .WithAdditionalAnnotations(GetErrorAnnotations(error));
     }
+
+    // ── FRX resource annotations ──────────────────────────────────────────────
+
+    private const string FrxResourceAnnotationKind = "FrxResource";
+
+    public static T WithFrxResource<T>(this T node, string resourcePath) where T : SyntaxNode
+        => node.WithAdditionalAnnotations(new SyntaxAnnotation(FrxResourceAnnotationKind, resourcePath));
+
+    public static bool HasFrxResource(this SyntaxNode node)
+        => node.HasAnnotations(FrxResourceAnnotationKind);
+
+    public static string GetFrxResource(this SyntaxNode node)
+        => node.GetAnnotations(FrxResourceAnnotationKind).FirstOrDefault()?.Data;
 }
 
 public record class TransformError(string Message, string Source, string ErrorTree, int Line, int Col)
