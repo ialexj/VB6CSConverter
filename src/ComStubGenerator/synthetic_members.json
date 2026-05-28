@@ -6,6 +6,15 @@
   {
     "Targets": [ "VB.Form" ],
     "Members": [
+      // VB6.OLB exposes Form.Show but does not mark its two parameters optional.
+      // Inject the VB6-facing signature so generated stubs emit default values.
+      { "Name": "Show", "Kind": "Method", "ReturnType": "void", "Parameters": [
+        { "Name": "Modal", "Type": "object", "IsOptional": true, "IsOut": false },
+        { "Name": "OwnerForm", "Type": "object", "IsOptional": true, "IsOut": false }
+      ] },
+
+      { "Name": "Close", "Kind": "Method", "ReturnType": "void", "Parameters": [] },
+
       { "Name": "ClientHeight", "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
       { "Name": "ClientHeight", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
       { "Name": "ClientLeft",   "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },

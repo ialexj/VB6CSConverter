@@ -750,7 +750,9 @@ public sealed class TypeLibraryInspector
                         }
 
                         bool isOptional = (flags
-                            & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FOPT) != 0;
+                            & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FOPT) != 0
+                            || (flags
+                            & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FHASDEFAULT) != 0;
                         bool isOut = (flags
                             & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FOUT) != 0
                             && (flags

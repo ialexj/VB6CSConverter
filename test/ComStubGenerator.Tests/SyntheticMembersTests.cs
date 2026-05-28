@@ -290,6 +290,27 @@ public class SyntheticMembersTests
         }
     }
 
+    [TestMethod]
+    public void Loader_ShippedVbFormShowOverride_MarksParametersOptional()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "synthetic_members.json");
+        if (!File.Exists(path)) Assert.Inconclusive("synthetic_members.json not found in test output");
+
+        var sets = SyntheticMembersLoader.Load(path);
+        var vbFormSet = sets.SingleOrDefault(set => set.Targets.Any(target =>
+            string.Equals(target, "VB.Form", StringComparison.OrdinalIgnoreCase)));
+
+        vbFormSet.Should().NotBeNull("the shipped synthetic members must include VB.Form overrides");
+
+        var show = vbFormSet!.Members.Single(member =>
+            string.Equals(member.Name, "Show", StringComparison.OrdinalIgnoreCase)
+            && member.Kind == LibraryMemberKind.Method);
+
+        show.Parameters.Should().HaveCount(2);
+        show.Parameters.Should().OnlyContain(parameter => parameter.IsOptional,
+            "VB.Form.Show parameters must be optional so the stub generator emits defaults");
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // LibraryMerger.ApplySyntheticMembers
     // ──────────────────────────────────────────────────────────────────────

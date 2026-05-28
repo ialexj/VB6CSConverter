@@ -72,4 +72,5 @@ public class Vb6OlbTests : TypeLibraryInspectorIntegrationTestBase
             && (m.Kind == LibraryMemberKind.PropertyGet || m.Kind == LibraryMemberKind.PropertySet),
             "UserControl should expose ClientHeight");
     }
+
 }

@@ -175,9 +175,40 @@ public static class LibraryMerger
         bool x86IsObject = string.Equals(x86.ReturnType, "object", StringComparison.OrdinalIgnoreCase);
         bool x64IsObject = string.Equals(x64.ReturnType, "object", StringComparison.OrdinalIgnoreCase);
 
-        if (x86IsObject && !x64IsObject) return x64;
-        if (x64IsObject && !x86IsObject) return x86;
-        return x64;
+        var winner = x86IsObject && !x64IsObject
+            ? x64
+            : x64IsObject && !x86IsObject
+                ? x86
+                : x64;
+
+        var loser = ReferenceEquals(winner, x64) ? x86 : x64;
+        return winner with {
+            Parameters = MergeParameterMetadata(winner.Parameters, loser.Parameters),
+            IsDefault = winner.IsDefault || loser.IsDefault,
+            DispId = winner.DispId ?? loser.DispId,
+            Description = winner.Description ?? loser.Description,
+        };
+    }
+
+    static IReadOnlyList<ComQueryParam> MergeParameterMetadata(
+        IReadOnlyList<ComQueryParam> preferred,
+        IReadOnlyList<ComQueryParam> fallback)
+    {
+        if (preferred.Count == 0 || fallback.Count == 0 || preferred.Count != fallback.Count)
+            return preferred;
+
+        var merged = new ComQueryParam[preferred.Count];
+        for (int i = 0; i < preferred.Count; i++) {
+            var p = preferred[i];
+            var other = fallback[i];
+            merged[i] = p with {
+                IsOptional = p.IsOptional || other.IsOptional,
+                IsOut = p.IsOut || other.IsOut,
+                IsParamArray = p.IsParamArray || other.IsParamArray,
+            };
+        }
+
+        return merged;
     }
 
     static IReadOnlyList<ComQueryEnumVal>? MergeEnumValues(

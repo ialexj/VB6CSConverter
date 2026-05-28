@@ -114,6 +114,31 @@ public class LibraryMergerTests
         member.ReturnType.Should().Be("int", "when both are concrete and differ, x64 wins");
     }
 
+    [TestMethod]
+    public void Merge_MethodParameters_OptionalFlagsAreUnionedAcrossArchitectures()
+    {
+        // Regression: VB.Form.Show(Modal, OwnerForm) can report optional flags only on one
+        // architecture. Keep winner signature/type but union optional metadata by position.
+        var x86Lib = MakeLib(GuidB, "Form",
+            new ComQueryMember("Show", LibraryMemberKind.Method, "void", [
+                new("Modal", "object", IsOptional: true, IsOut: false),
+                new("OwnerForm", "object", IsOptional: true, IsOut: false),
+            ]));
+
+        var x64Lib = MakeLib(GuidB, "Form",
+            new ComQueryMember("Show", LibraryMemberKind.Method, "void", [
+                new("Modal", "object", IsOptional: false, IsOut: false),
+                new("OwnerForm", "object", IsOptional: false, IsOut: false),
+            ]));
+
+        var merged = LibraryMerger.Merge([x86Lib], [x64Lib]);
+        var show = merged[0].Types![0].Members!.Single(m =>
+            m.Kind == LibraryMemberKind.Method && m.Name == "Show");
+
+        show.Parameters[0].IsOptional.Should().BeTrue();
+        show.Parameters[1].IsOptional.Should().BeTrue();
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Member union (arch-only members are preserved)
     // ──────────────────────────────────────────────────────────────────────

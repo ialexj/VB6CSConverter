@@ -126,6 +126,46 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
+    public void Generate_MergedVbFormShow_EmitsOptionalDefaults()
+    {
+        var guid = new Guid("12345678-0000-0000-0000-000000000099");
+        var x86 = new ComQueryLibrary("VB", guid, 1, 0,
+            Types: [new ComQueryType("Form", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Show", LibraryMemberKind.Method, "void", [
+                        new("Modal", "object", IsOptional: true, IsOut: false),
+                        new("OwnerForm", "object", IsOptional: true, IsOut: false),
+                    ]),
+                ],
+                EnumValues: [])]);
+
+        var x64 = new ComQueryLibrary("VB", guid, 1, 0,
+            Types: [new ComQueryType("Form", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Show", LibraryMemberKind.Method, "void", [
+                        new("Modal", "object", IsOptional: false, IsOut: false),
+                        new("OwnerForm", "object", IsOptional: false, IsOut: false),
+                    ]),
+                ],
+                EnumValues: [])]);
+
+        var merged = LibraryMerger.Merge([x86], [x64]).Single();
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(merged, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("void Show(dynamic Modal = default, dynamic OwnerForm = default)");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void Generate_Interface_EmitsInterfaceDeclaration()
     {
         var library = MakeLibrary("TestLib",
