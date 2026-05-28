@@ -83,4 +83,20 @@ public class KeywordEscapeRewriterTests
         {
         }
         """);
+
+    [TestMethod]
+    public void ThisReceiver_IsNotEscaped() => ValidateBodyMatches(
+        """
+        With Me.ActiveControl
+            If (.Name = "mskPrescricaoO") Then
+                oUtils.ModificarValor mskPrescricaoO(.Index)
+            End If
+        End With
+        """,
+        """
+        if ((this.ActiveControl.Name == "mskPrescricaoO"))
+        {
+            oUtils.ModificarValor(mskPrescricaoO(this.ActiveControl.Index));
+        }
+        """);
 }

@@ -53,6 +53,12 @@ public class KeywordEscapeRewriter : LoggedRewriter
                 return base.VisitIdentifierName(node);
             }
 
+            // `this` may be represented as an IdentifierName in generated trees;
+            // never rewrite it to `@this`.
+            if (node.Identifier.ValueText == "this") {
+                return base.VisitIdentifierName(node);
+            }
+
             if (!node.Identifier.IsVerbatimIdentifier() && IsKeyword(node.Identifier.ValueText)) {
                 return base.VisitIdentifierName(node.WithIdentifier(Escape(node.Identifier)));
             }
