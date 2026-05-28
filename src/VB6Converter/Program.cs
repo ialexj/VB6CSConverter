@@ -299,6 +299,7 @@ public static class Program
 
                 await RunRewriter(true, "Coercing Literals", async (t, sm) => new LiteralCoercionRewriter(sm));
                 await RunRewriter(true, "Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
+                await RunRewriter(true, "Casting Enums to Numbers", async (t, sm) => new EnumToNumberCastRewriter(sm));
 
                 //await RunRewriter(true, "Rewriting DAO", async (t, sm) => new DAORewriter(sm));
 
