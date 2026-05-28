@@ -7,7 +7,7 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter.Rewriters.Forms;
 
-public class CursorRewriter : CSharpSyntaxRewriter
+public class CursorRewriter : LoggedRewriter
 {
     static readonly Dictionary<string, string> cursors = new(StringComparer.InvariantCultureIgnoreCase) {
         ["vbDefault"] = "Default",
@@ -30,7 +30,7 @@ public class CursorRewriter : CSharpSyntaxRewriter
     };
 
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (node.Expression is IdentifierNameSyntax lname) {
                 var ids = (lname.Identifier.Text, node.Name.Identifier.Text);
                 if (ids == ("Screen", "MousePointer")) {
@@ -45,7 +45,7 @@ public class CursorRewriter : CSharpSyntaxRewriter
         });
 
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (cursors.TryGetValue(node.Identifier.Text, out var cursor)) {
                 if (cursor != string.Empty) {
                     return MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,

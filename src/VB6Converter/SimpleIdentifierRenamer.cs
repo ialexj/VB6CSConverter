@@ -1,11 +1,12 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using VB6Converter.Rewriters;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter;
 
-class SimpleIdentifierRenamer(string from, string to) : CSharpSyntaxRewriter
+class SimpleIdentifierRenamer(string from, string to) : LoggedRewriter
 {
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
     {

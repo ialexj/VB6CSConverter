@@ -9,7 +9,7 @@ namespace VB6Converter.Rewriters.Semantic;
 public class MemberFinder(SemanticModel sem) : LoggedRewriter
 {
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             var type = sem.GetTypeInfo(node.Expression).ConvertedType;
             if (type is null
                 || type.Name == string.Empty
@@ -32,7 +32,7 @@ public class MemberFinder(SemanticModel sem) : LoggedRewriter
         });
 
     public override SyntaxNode VisitArgument(ArgumentSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (node.NameColon is null)
                 return base.VisitArgument(node);
 

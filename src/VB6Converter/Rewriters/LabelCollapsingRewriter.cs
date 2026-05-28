@@ -59,7 +59,7 @@ public class LabelCollapsingRewriter : LoggedRewriter
 
             // Collect all statements starting from the label's attached statement
             var statements = new List<StatementSyntax> { labeled.Statement };
-            
+
             // Add all statements after this label in the block
             for (int j = i + 1; j < body.Statements.Count; j++) {
                 statements.Add(body.Statements[j]);
@@ -100,7 +100,7 @@ public class LabelCollapsingRewriter : LoggedRewriter
     /// <summary>
     /// Inner rewriter that replaces goto statements with their mapped return statements.
     /// </summary>
-    private class GotoReplacer : CSharpSyntaxRewriter
+    private class GotoReplacer : LoggedRewriter
     {
         private readonly Dictionary<string, ReturnStatementSyntax> _map;
 
@@ -119,7 +119,7 @@ public class LabelCollapsingRewriter : LoggedRewriter
             // Check if the label expression is an identifier that's in our map
             if (node.Expression is IdentifierNameSyntax idName
                 && _map.TryGetValue(idName.Identifier.Text, out var replacementReturn)) {
-                
+
                 // Replace with the mapped return, preserving trivia from the original goto
                 return replacementReturn.WithTriviaFrom(node);
             }

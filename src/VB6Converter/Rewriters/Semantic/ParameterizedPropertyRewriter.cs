@@ -16,7 +16,7 @@ namespace VB6Converter.Rewriters.Semantic;
 public class ParameterizedPropertyRewriter(SemanticModel model) : LoggedRewriter
 {
     public override SyntaxNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
-        => Log.Rewrite(this, node, node =>
+        => Rewrite(node, node =>
         {
             if (node.Left is not ElementAccessExpressionSyntax ea)
                 return base.VisitAssignmentExpression(node);

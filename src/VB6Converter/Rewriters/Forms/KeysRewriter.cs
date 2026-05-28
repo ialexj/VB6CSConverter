@@ -9,9 +9,9 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter.Rewriters.Forms;
 
-public class KeysRewriter : CSharpSyntaxRewriter
+public class KeysRewriter : LoggedRewriter
 {
-    static MemberAccessExpressionSyntax Key(string enumValue) 
+    static MemberAccessExpressionSyntax Key(string enumValue)
         => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("Keys"), IdentifierName(enumValue))
         .WithUsingForms();
 
@@ -124,7 +124,7 @@ public class KeysRewriter : CSharpSyntaxRewriter
     };
 
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (_keys.TryGetValue(node.Identifier.Text, out var key)) {
                 return key;
             }

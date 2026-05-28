@@ -11,7 +11,7 @@ using static VB6Converter.RoslynHelpers;
 
 namespace VB6Converter.Rewriters.Forms;
 
-public class MsgBoxRewriter : CSharpSyntaxRewriter
+public class MsgBoxRewriter : LoggedRewriter
 {
     static readonly Dictionary<string, string> _results = new(StringComparer.InvariantCultureIgnoreCase) {
         { "vbOK",     "DialogResult.OK" },
@@ -38,7 +38,7 @@ public class MsgBoxRewriter : CSharpSyntaxRewriter
     }
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (node.Expression is IdentifierNameSyntax name && string.Equals(name.Identifier.Text, "MsgBox", StringComparison.InvariantCultureIgnoreCase)) {
                 return ConvertMsgBox(node);
             }

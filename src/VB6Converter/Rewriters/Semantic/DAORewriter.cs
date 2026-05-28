@@ -36,7 +36,7 @@ public class DAORewriter(SemanticModel semantics) : LoggedRewriter
     ];
 
     public override SyntaxNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             // Run other rewrites first
 
             if (node.Left is MemberAccessExpressionSyntax macc) {
@@ -63,7 +63,7 @@ public class DAORewriter(SemanticModel semantics) : LoggedRewriter
         });
 
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             var type = semantics.GetTypeInfo(node.Expression);
 
             if (type.ConvertedType is not null && type.ConvertedType.Name == "Recordset") {
@@ -73,7 +73,7 @@ public class DAORewriter(SemanticModel semantics) : LoggedRewriter
         });
 
     public override SyntaxNode VisitElementAccessExpression(ElementAccessExpressionSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             var type = semantics.GetTypeInfo(node.Expression);
 
             if (type.ConvertedType is ITypeSymbol t && t.ContainingNamespace?.ToString() == DaoNamespace) {
@@ -90,7 +90,7 @@ public class DAORewriter(SemanticModel semantics) : LoggedRewriter
                         IdentifierName("Value"))
                         .WithAdditionalAnnotations(new SyntaxAnnotation("FieldAccess"));
                 }
-                
+
             }
             else if (node.Expression is MemberAccessExpressionSyntax ma) {
                 var parentType = semantics.GetTypeInfo(ma.Expression);
@@ -110,7 +110,7 @@ public class DAORewriter(SemanticModel semantics) : LoggedRewriter
         });
 
     public override SyntaxNode VisitQualifiedName(QualifiedNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (node.Left is SimpleNameSyntax name && name.Identifier.Text == "DAO") {
                 return node.Right;
             }
@@ -119,7 +119,7 @@ public class DAORewriter(SemanticModel semantics) : LoggedRewriter
         });
 
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (node.FirstAncestorOrSelf<TypeSyntax>() is TypeSyntax type) {
                 if (node.Identifier.Text.Equals("Recordset", StringComparison.CurrentCultureIgnoreCase)) {
                     return node.WithUsingDAO();

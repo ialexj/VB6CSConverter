@@ -27,13 +27,13 @@ public class AmbiguousTypeQualifier(SemanticModel sem, IEnumerable<string> prefe
     readonly IReadOnlyList<string> _preferredNamespaces = preferredNamespaces?.ToList() ?? [];
 
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             var resolved = TryResolveAmbiguous(node);
             return resolved ?? base.VisitIdentifierName(node);
         });
 
     public override SyntaxNode VisitQualifiedName(QualifiedNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             var resolved = TryResolveAmbiguous(node);
             if (resolved != null) {
                 return resolved;

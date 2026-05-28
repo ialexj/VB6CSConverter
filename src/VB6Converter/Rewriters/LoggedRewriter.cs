@@ -4,6 +4,7 @@ using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Text.Json;
 
 namespace VB6Converter.Rewriters;
 public class LoggedRewriter() : CSharpSyntaxRewriter
@@ -28,8 +29,9 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
 
     protected SyntaxNode Rewrite<T>(T node, Func<T, SyntaxNode> change, Func<SyntaxNode, object> value = null) where T : SyntaxNode
     {
-        var log = Log.Rewriting
-            .ForContext("file", _file ?? Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath))
+        var file = Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath);
+        var log = Log.GetRewritingLogger(node.SyntaxTree.FilePath)
+            .ForContext("file", file)
             .ForContext("rewriter", GetType().Name)
             .ForContext("node", node);
 
@@ -38,10 +40,23 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
 
             if (log.IsEnabled(Serilog.Events.LogEventLevel.Verbose)) {
                 var oldValue = value?.Invoke(node) ?? node;
+                if (oldValue is SyntaxNode oldNode) {
+                    oldValue = oldNode.NormalizeWhitespace();
+                }
+
                 var newValue = value?.Invoke(@new) ?? @new;
+                if (newValue is SyntaxNode newNode) {
+                    newValue = newNode.NormalizeWhitespace();
+                }
 
                 if (!RoslynHelpers.IsEquivalentSyntax(oldValue, newValue)) {
-                    log.ForContext("node", oldValue).ForContext("changed", newValue).Verbose("{node} --> {changed}");
+                    log.Verbose("{json:l}", JsonSerializer.Serialize(new {
+                        rewriter = GetType().Name,
+                        file = file,
+                        line = node.GetLocation()?.GetLineSpan().StartLinePosition.Line,
+                        from = oldValue?.ToString(),
+                        to   = newValue?.ToString()
+                    }));
                 }
             }
 

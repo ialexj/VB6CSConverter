@@ -298,8 +298,9 @@ public static class Program
                 });
 
                 await RunRewriter(true, "Coercing Literals", async (t, sm) => new LiteralCoercionRewriter(sm));
-                await RunRewriter(true, "Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
                 await RunRewriter(true, "Casting Enums to Numbers", async (t, sm) => new EnumToNumberCastRewriter(sm));
+                await RunRewriter(true, "Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
+                await RunRewriter(true, "Applying Type Conversions", async (t, sm) => new TypeConversionRewriter(sm));
 
                 //await RunRewriter(true, "Rewriting DAO", async (t, sm) => new DAORewriter(sm));
 
@@ -316,6 +317,8 @@ public static class Program
             await CollectDiagnostics(ws, options.OutputDir);
             PauseIfRequested(options.Pause);
         }
+
+        Log.CloseRewritingLoggers();
     }
 
     static void PauseIfRequested(bool pause)
@@ -346,8 +349,6 @@ public static class Program
 
     static async Task<Compilation> CollectDiagnostics(ConversionWorkspace ws, string outputDir)
     {
-        AnsiConsole.MarkupLine("[yellow]Collecting diagnostics...[/]");
-
         var compilation = await GetCompilation(ws);
         AnsiConsole.Status()
             .Start("Collecting Diagnostics...", ctx => {
@@ -360,8 +361,8 @@ public static class Program
                 if (errorCount > 0) {
                     AnsiConsole.MarkupLineInterpolated($"[red]Errors: {errorCount}[/]");
                 }
-            });
 
+            });
         return compilation;
     }
 

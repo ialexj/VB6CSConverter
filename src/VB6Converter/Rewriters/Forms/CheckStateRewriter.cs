@@ -7,7 +7,7 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter.Rewriters.Forms;
 
-public class CheckStateRewriter : CSharpSyntaxRewriter
+public class CheckStateRewriter : LoggedRewriter
 {
     static readonly Dictionary<string, string> _checkStates = new(StringComparer.InvariantCultureIgnoreCase) {
         ["vbUnchecked"] = "Unchecked",
@@ -16,7 +16,7 @@ public class CheckStateRewriter : CSharpSyntaxRewriter
     };
 
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (node.Parent is QualifiedNameSyntax
                     || node.Parent is FileScopedNamespaceDeclarationSyntax
                     || node.Parent is NamespaceDeclarationSyntax

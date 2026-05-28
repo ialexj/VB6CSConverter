@@ -8,7 +8,7 @@ namespace VB6Converter.Rewriters.Semantic;
 public class TypeFinder(SemanticModel sem) : LoggedRewriter
 {
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (node.Parent is VariableDeclarationSyntax || node.Parent is ParameterSyntax) {
                 if (sem.GetSymbolInfo(node).Symbol is ITypeSymbol) {
                     return base.VisitIdentifierName(node);
@@ -24,7 +24,7 @@ public class TypeFinder(SemanticModel sem) : LoggedRewriter
         });
 
     public override SyntaxNode VisitQualifiedName(QualifiedNameSyntax node)
-        => Log.Rewrite(this, node, node => {
+        => Rewrite(node, node => {
             if (node.Parent is VariableDeclarationSyntax || node.Parent is ParameterSyntax) {
                 if (sem.GetSymbolInfo(node).Symbol is ITypeSymbol) {
                     return node;

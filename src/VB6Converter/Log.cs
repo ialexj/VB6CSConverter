@@ -6,6 +6,7 @@ using System.Text.Json;
 using Serilog.Core;
 using Serilog.Sinks.Spectre;
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 
@@ -30,6 +31,29 @@ internal static class Log
             .MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose)
             .WriteTo.File(Path.Combine(outputDir, "_Rewriting.log"), outputTemplate: "{Message:lj}{NewLine}")
             .CreateLogger();
+
+        _rewritingLoggers.Clear();
+    }
+
+    static readonly ConcurrentDictionary<string, ILogger> _rewritingLoggers = new(StringComparer.OrdinalIgnoreCase);
+
+    public static ILogger GetRewritingLogger(string csFilePath)
+    {
+        if (string.IsNullOrEmpty(csFilePath))
+            return Rewriting;
+
+        return _rewritingLoggers.GetOrAdd(csFilePath, path => new LoggerConfiguration()
+            .MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose)
+            .WriteTo.File(path + ".rewrite.log", outputTemplate: "{Message:lj}{NewLine}")
+            .CreateLogger());
+    }
+
+    public static void CloseRewritingLoggers()
+    {
+        foreach (var logger in _rewritingLoggers.Values) {
+            (logger as IDisposable)?.Dispose();
+        }
+        _rewritingLoggers.Clear();
     }
 
 
@@ -49,35 +73,4 @@ internal static class Log
     public static ILogger ForNode(this ILogger logger, SyntaxNode node) => logger.ForTree(node.SyntaxTree).ForContext("node", node);
 
     public static ILogger ForRewriter(this ILogger logger, string rewriter) => logger.ForContext("rewriter", rewriter);
-
-    public static SyntaxNode Rewrite<T>(object rewriter, T node, Func<T, SyntaxNode> change, Func<SyntaxNode, object> value = null) where T : SyntaxNode
-    {
-        var file = Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath);
-        var log = Rewriting
-            .ForContext("file", file)
-            .ForContext("rewriter", rewriter.GetType().Name)
-            .ForContext("node", node);
-
-        try {
-            var @new = change(node);
-
-            if (log.IsEnabled(Serilog.Events.LogEventLevel.Verbose)) {
-                var oldValue = value?.Invoke(node) ?? node;
-                var newValue = value?.Invoke(@new) ?? @new;
-
-                if (!RoslynHelpers.IsEquivalentSyntax(oldValue, newValue)) {
-                    log.Verbose("{json:l}", JsonSerializer.Serialize(new { file, from = oldValue?.ToString(), to = newValue?.ToString() }));
-                }
-            }
-
-            return @new;
-        }
-        catch (Exception ex) when (!Debugger.IsAttached) {
-            log.ForContext("error", ex.Message)
-                .ForContext("method", ex.TargetSite.Name)
-                .Error("Failed to rewrite {node} ({method}): {error:nq}");
-
-            throw;
-        }
-    }
 }
