@@ -127,25 +127,37 @@ public class DisambiguatorTests
         CheckDisambiguation(cs, expected);
     }
 
-    //[TestMethod]
-    public void CallOnObject_AssumesArray()
+    [TestMethod]
+    public void CallOnIndexerBearingObject_AssumesIndexerAccess()
     {
         var cs = """
+            class XArray
+            {
+                public string this[int row, int column] => string.Empty;
+            }
+
             class Test
             {
-                object v;
+                XArray Vendas = new XArray();
+
                 void Test() {
-                    int x = v(0);
+                    string x = Vendas(0, 1);
                 }
             }
             """;
 
         var expected = """
+            class XArray
+            {
+                public string this[int row, int column] => string.Empty;
+            }
+
             class Test
             {
-                object[] v;
+                XArray Vendas = new XArray();
+
                 void Test() {
-                    int x = v[0];
+                    string x = Vendas[0, 1];
                 }
             }
             """;

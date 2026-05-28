@@ -9,6 +9,9 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 namespace VB6Converter.Rewriters.Semantic;
 public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
 {
+    static bool HasIndexer(ITypeSymbol type)
+        => type?.GetMembers().Any(m => m is IPropertySymbol { IsIndexer: true }) == true;
+
     // Correct calls that should actually be array access
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
         => Log.Rewrite(this, node, node => {
@@ -19,6 +22,9 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
 
             bool isElementAccess = false;
             if (symbol.Symbol is ILocalSymbol local && local.Type.Kind == SymbolKind.ArrayType){
+                isElementAccess = true;
+            }
+            else if (HasIndexer(model.GetTypeInfo(node.Expression).Type) || HasIndexer(model.GetTypeInfo(node.Expression).ConvertedType)) {
                 isElementAccess = true;
             }
             else if (symbol.CandidateSymbols.Any(f => f is IFieldSymbol fs && fs.Type.Kind == SymbolKind.ArrayType)) {
