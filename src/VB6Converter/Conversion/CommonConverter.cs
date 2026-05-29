@@ -26,7 +26,7 @@ public static class CommonConverter
             text = "this";
         }
         else if (string.Equals(text, "vbNullString", StringComparison.InvariantCultureIgnoreCase)) {
-            text = "string.Empty";
+            text = "\"\"";
         }
 
         return Identifier(text);
