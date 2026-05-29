@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 using VB6Converter.Rewriters;
-using VB6Converter.Rewriters.Forms;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Parser.VisualBasic6Parser;
 
@@ -15,10 +14,10 @@ public static class CompilationUnitConverter
         new VBLiteralRewriter(),
         new VBCoreRewriter(),
 
-        new CursorRewriter(),
-        new KeysRewriter(),
-        new MsgBoxRewriter(),
-        new CheckStateRewriter(),
+        //new CursorRewriter(),
+        //new KeysRewriter(),
+        //new MsgBoxRewriter(),
+        //new CheckStateRewriter(),
         new KeywordEscapeRewriter(),
 
         UsingsRewriter.Default

@@ -109,8 +109,6 @@ public static class ClassConverter
             );
         }
 
-
-
         return c;
     }
 

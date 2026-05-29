@@ -21,6 +21,7 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
             }
 
             bool isElementAccess = false;
+            bool isNonInvokable = false;
             if (symbol.Symbol is ILocalSymbol local && local.Type.Kind == SymbolKind.ArrayType){
                 isElementAccess = true;
             }
@@ -32,6 +33,7 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
             }
             else if (symbol.CandidateReason == CandidateReason.NotInvocable) {
                 isElementAccess = true;
+                isNonInvokable = true;
             }
             else {
                 // Check only the name/identifier being invoked, not sub-expressions,
@@ -43,11 +45,16 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
                 var diagnostics = model.GetDiagnostics(callableSpan);
                 if (diagnostics.Any(d => d.Id == "CS1955")) { // non-invokable member
                     isElementAccess = true;
+                    isNonInvokable = true;
                 }
             }
 
-            if (isElementAccess) {
+            if (isElementAccess && node.ArgumentList.Arguments.Count > 0) {
                 return ElementAccessExpression(node.Expression, BracketedArgumentList(node.ArgumentList.Arguments));
+            }
+            else if (isNonInvokable && node.ArgumentList.Arguments.Count == 0) {
+                // Likely a property with an extra pair of parens at the end, remove them
+                return node.Expression;
             }
             else {
                 return base.VisitInvocationExpression(node);

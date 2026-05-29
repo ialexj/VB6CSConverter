@@ -128,38 +128,39 @@ public static class Program
 
         var vbProject = VisualBasicProject.Load(options.Project);
 
-        // ── Pre-conversion: generate COM reference stubs ────────────────────
-        if (!options.SkipReferenceStubs) {
-            var referenceDir = Path.Join(options.OutputDir, "_References");
-            await GenerateReferenceStubs(options.Project, referenceDir, options.ExcludeReferences);
-        }
-        // ────────────────────────────────────────────────────────────────────
 
         // Open/Create C# project
         using var ws = new ConversionWorkspace();
         var projectBasePath = Path.GetDirectoryName(Path.GetFullPath(options.Project)) ?? Directory.GetCurrentDirectory();
         var allTargets = vbProject.Files.Select(f => ConversionTarget.Create(f, options.OutputDir, projectBasePath)).OrderBy(t => t.Name).ToArray();
         await ws.Open(allTargets, options.OutputDir, vbProject.Name);
-        ws.SetActiveFilter([.. options.Filter]);
 
-        if (ws.ActiveTargets.Count == 0) {
-            AnsiConsole.MarkupLine("[red]No files to convert.[/]");
-            return;
+        // Generate COM reference stubs
+        if (!options.SkipReferenceStubs) {
+            var referenceDir = Path.Join(options.OutputDir, "_References");
+            await GenerateReferenceStubs(options.Project, referenceDir, options.ExcludeReferences);
+            await CollectDiagnostics(ws, options.OutputDir);
+            PauseIfRequested(options.Pause);
         }
+        // ────────────────────────────────────────────────────────────────────
 
-        // Do the code transformation
-        var targetsThatNeedTranform = ws.ActiveTargets.Where(t => !t.Exists || t.HasErrors
-            || options.Filter.Any()
-            || options.Update.Contains(t.Name) || options.Update.Contains("*"))
-            .ToArray();
+        if (!options.SkipTransform) {
+            var conversionOptions = ConversionOptions.Default;
 
-        if (targetsThatNeedTranform.Length > 0) {
-            if (!options.SkipTransform) {
-                var conversionOptions = ConversionOptions.Default;
+            ws.SetActiveFilter([.. options.Filter]);
+            if (ws.ActiveTargets.Count == 0) {
+                AnsiConsole.MarkupLine("[red]No files to convert.[/]");
+                return;
+            }
 
-                // ────────────────────────────────────────────────────────────────────
+            // Do the code transformation
+            var targetsThatNeedTransform = ws.ActiveTargets.Where(t => !t.Exists || t.HasErrors
+                || options.Filter.Any()
+                || options.Update.Contains(t.Name) || options.Update.Contains("*"))
+                .ToArray();
 
-                await RunOperations("Converting VB6 to C#", targetsThatNeedTranform, (t, ctx, cancel) =>
+            if (targetsThatNeedTransform.Length > 0) {
+                await RunOperations("Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
                         var conversion = VB6ToCSharpConversion.ConvertFile(
                             t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions);
@@ -169,9 +170,10 @@ public static class Program
                     }));
 
                 // Split Form/Control designer code into separate *.designer.cs partial classes
-                var formControlTargets = targetsThatNeedTranform
+                var formControlTargets = targetsThatNeedTransform
                     .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
                     .ToArray();
+
                 if (formControlTargets.Length > 0) {
                     var newDesignerTargets = new ConcurrentBag<ConversionTarget>();
                     await RunOperations("Splitting designer files", formControlTargets, (t, ctx, cancel) =>
@@ -189,7 +191,7 @@ public static class Program
 
                 // Split files that exceed the line budget into numbered partial classes
                 if (options.SplitLines > 0) {
-                    foreach (var t in targetsThatNeedTranform) {
+                    foreach (var t in targetsThatNeedTransform) {
                         if (!File.Exists(t.OutputPath)) continue;
 
                         var content = await File.ReadAllTextAsync(t.OutputPath);
@@ -221,9 +223,6 @@ public static class Program
                     }
                 }
             }
-            else {
-                AnsiConsole.MarkupLine("[yellow]Some files aren't yet fully converted.[/]");
-            }
         }
 
         // At this point we should have the whole solution converted,
@@ -247,7 +246,7 @@ public static class Program
                 {
                     bool hasRewriterChanges = false;
                     do {
-                        if (compile && compilation is null || hasRewriterChanges || hasChanges) {
+                        if (compile && compilation is null) {
                             compilation = await CollectDiagnostics(ws, options.OutputDir);
                             PauseIfRequested(options.Pause);
                         }
@@ -270,6 +269,7 @@ public static class Program
 
                         if (hasRewriterChanges) {
                             hasChanges = true;
+                            compilation = null;
                         }
                     }
                     while (hasRewriterChanges);
@@ -287,6 +287,7 @@ public static class Program
                 await RunRewriter(true, "Qualifying Ambiguous Types", async (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
                 await RunRewriter(true, "Finding Members", async (t, sm) => new MemberFinder(sm));
 
+                await RunRewriter(true, "Rewriting default comparisons to null checks", async (t, sm) => new DefaultToNullRewriter(sm));
                 await RunRewriter(true, "Rewriting bitwise Or/And", async (t, sm) => new BitwiseOrRewriter(sm));
                 await RunRewriter(true, "Disambiguate Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
                 await RunRewriter(true, "Rewriting parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
@@ -328,12 +329,7 @@ public static class Program
         Log.CloseRewritingLoggers();
     }
 
-    static void PauseIfRequested(bool pause)
-    {
-        if (!pause) return;
-        AnsiConsole.MarkupLine("[grey]Press any key to continue (Ctrl-C to stop)...[/]");
-        Console.ReadKey(intercept: true);
-    }
+
 
     static async Task<Compilation> GetCompilation(ConversionWorkspace ws)
     {
@@ -357,6 +353,7 @@ public static class Program
     static async Task<Compilation> CollectDiagnostics(ConversionWorkspace ws, string outputDir)
     {
         var compilation = await GetCompilation(ws);
+
         AnsiConsole.Status()
             .Start("Collecting Diagnostics...", ctx => {
                 var diagnostics = compilation.GetDiagnostics();
@@ -368,8 +365,8 @@ public static class Program
                 if (errorCount > 0) {
                     AnsiConsole.MarkupLineInterpolated($"[red]Errors: {errorCount}[/]");
                 }
-
             });
+
         return compilation;
     }
 
@@ -434,6 +431,13 @@ public static class Program
     {
         string baseDir = AppContext.BaseDirectory;
         return Path.Combine(baseDir, "stubs", "ComStubGenerator.exe");
+    }
+
+    static void PauseIfRequested(bool pause)
+    {
+        if (!pause) return;
+        AnsiConsole.MarkupLine("[grey]Press any key to continue (Ctrl-C to stop)...[/]");
+        Console.ReadKey(intercept: true);
     }
 }
 

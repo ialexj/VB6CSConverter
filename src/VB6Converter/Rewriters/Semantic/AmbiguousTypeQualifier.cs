@@ -162,7 +162,7 @@ public class AmbiguousTypeQualifier(SemanticModel sem, IEnumerable<string> prefe
         // 3. Any type in the System.* namespace hierarchy
         var systemType = candidates.FirstOrDefault(c => {
             var ns = c.ContainingNamespace?.ToDisplayString() ?? string.Empty;
-            return ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal);
+            return ns == "System" || ns.StartsWith("Microsoft.VisualBasic", StringComparison.Ordinal);
         });
         if (systemType != null) {
             return systemType;

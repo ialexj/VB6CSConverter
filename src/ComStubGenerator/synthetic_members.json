@@ -15,6 +15,15 @@
 
       { "Name": "Close", "Kind": "Method", "ReturnType": "void", "Parameters": [] },
 
+      { "Name": "MaxButton", "Kind": "PropertyGet", "ReturnType": "bool", "Parameters": [] },
+      { "Name": "MaxButton", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+
+      { "Name": "MinButton", "Kind": "PropertyGet", "ReturnType": "bool", "Parameters": [] },
+      { "Name": "MinButton", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+
+      { "Name": "MDIChild", "Kind": "PropertyGet", "ReturnType": "bool", "Parameters": [] },
+      { "Name": "MDIChild", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+
       { "Name": "ClientHeight", "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
       { "Name": "ClientHeight", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
       { "Name": "ClientLeft",   "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
