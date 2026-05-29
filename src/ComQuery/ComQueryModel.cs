@@ -69,7 +69,9 @@ public record ComQueryType(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Description = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    bool IsControl = false);
+    bool IsControl = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool IsAppObject = false);
 
 /// <summary>A foreign type library discovered while inspecting a COM type library.</summary>
 public record ComQueryDiscoveredDep(Guid Guid, int Major, int Minor);

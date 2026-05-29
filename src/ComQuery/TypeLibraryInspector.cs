@@ -320,6 +320,9 @@ public sealed class TypeLibraryInspector
                 && ((typeAttr.wTypeFlags & System.Runtime.InteropServices.ComTypes.TYPEFLAGS.TYPEFLAG_FCONTROL) != 0
                     || isOcxLibrary);
 
+            bool isAppObject = kind == LibraryTypeKind.Class
+                && (typeAttr.wTypeFlags & System.Runtime.InteropServices.ComTypes.TYPEFLAGS.TYPEFLAG_FAPPOBJECT) != 0;
+
             return new ComQueryType(
                 Name: typeName,
                 Kind: kind,
@@ -328,7 +331,8 @@ public sealed class TypeLibraryInspector
                 AliasedType: aliasedType,
                 ImplementedInterfaces: implementedInterfaces.Count > 0 ? implementedInterfaces : null,
                 Description: typeDescription,
-                IsControl: isControl);
+                IsControl: isControl,
+                IsAppObject: isAppObject);
         }
         catch (Exception ex) {
             throw new InvalidOperationException(

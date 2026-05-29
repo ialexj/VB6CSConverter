@@ -80,6 +80,215 @@ public static class ReferenceStubGenerator
         return aliases;
     }
 
+    // Member names from IUnknown/IDispatch that are filtered by ComPlumbingFilterRewriter on the child stubs
+    // and must also be skipped when generating static forwarders in __AppObjects.
+    static readonly HashSet<string> AppObjectsBlockedMethodNames = new(StringComparer.Ordinal)
+    {
+        "AddRef", "Release", "QueryInterface",
+        "GetIDsOfNames", "GetTypeInfo", "GetTypeInfoCount",
+        "Equals", "GetHashCode", "GetType", "ToString",
+    };
+    static readonly HashSet<string> AppObjectsBlockedPropertyNames = new(StringComparer.Ordinal) { "ToString" };
+
+    /// <summary>
+    /// Generates a <c>__AppObjects.cs</c> file in <c><paramref name="referenceRoot"/>/{library.SafeName}/</c>
+    /// containing a <c>public static class __AppObjects</c> with:
+    /// <list type="bullet">
+    ///   <item>One <c>public static readonly T Name = new T();</c> field per COM app-object type
+    ///   (those marked with <c>TYPEFLAG_FAPPOBJECT</c>), collected across all supplied libraries.</item>
+    ///   <item>Static forwarding members for every property and method on each app-object type,
+    ///   so that VB6 code that calls members directly (without qualifying via the instance name)
+    ///   compiles unchanged after conversion.</item>
+    /// </list>
+    /// The file is written at <c><paramref name="referenceRoot"/>/__AppObjects.cs</c> (no library subfolder)
+    /// with no namespace so that <c>global using static __AppObjects;</c> makes all members globally visible.
+    /// Returns the path of the file written, or <see langword="null"/> when no app-object types exist.
+    /// </summary>
+    public static string? GenerateAppObjects(IEnumerable<ComQueryLibrary> libraries, string referenceRoot, bool useDynamic = true)
+    {
+        var appObjectTypes = (libraries ?? [])
+            .SelectMany(l => (l.Types ?? [])
+                .Where(t => t.IsAppObject && t.Kind == LibraryTypeKind.Class))
+            .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (appObjectTypes.Count == 0) return null;
+
+        Directory.CreateDirectory(referenceRoot);
+
+        // Tracks names used at the __AppObjects class level to keep them unique.
+        var classLevelUsed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "__AppObjects" };
+        var memberDecls = new List<MemberDeclarationSyntax>();
+
+        foreach (var appObjType in appObjectTypes) {
+            string safeName = MakeSafeIdentifier(appObjType.Name);
+            // Skip if a type with this name was already contributed by a previous library.
+            if (!classLevelUsed.Add(safeName)) continue;
+
+            // ── Singleton field ────────────────────────────────────────────
+            // public static readonly Screen Screen = new Screen();
+            memberDecls.Add(
+                FieldDeclaration(
+                    VariableDeclaration(ParseTypeName(safeName))
+                        .WithVariables(SingletonSeparatedList(
+                            VariableDeclarator(Identifier(safeName))
+                                .WithInitializer(EqualsValueClause(
+                                    ObjectCreationExpression(ParseTypeName(safeName))
+                                        .WithArgumentList(ArgumentList()))))))
+                    .WithModifiers(Modifiers(isPublic: true, isStatic: true, isReadOnly: true)));
+
+            var members = appObjType.Members ?? [];
+
+            // ── Static forwarding properties ───────────────────────────────
+            var propertyGroups = members
+                .Where(m => m.Kind == LibraryMemberKind.PropertyGet || m.Kind == LibraryMemberKind.PropertySet)
+                .GroupBy(m => m.Name)
+                .ToList();
+
+            foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
+                // Skip COM plumbing properties shared with IDispatch/IUnknown.
+                if (AppObjectsBlockedPropertyNames.Contains(group.Key)) continue;
+                // Skip if another app-object already emitted a forwarder with this name.
+                string instanceName = MakeSafeIdentifier(group.Key);
+                if (classLevelUsed.Contains(instanceName)) continue;
+
+                var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
+                var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
+
+                string propType = getter != null ? getter.ReturnType : "object";
+                if (propType == "void") propType = "object";
+
+                // The name as it appears on the stub class (mirrors GenerateClass naming) — already computed above.
+                // The name exposed as static in __AppObjects (unique at class level).
+                string staticName = MakeUniqueName(instanceName, classLevelUsed);
+
+                if (getter?.Parameters.Count > 0) {
+                    // Parameterized property → was emitted as a plain method (and Set{Name}) in GenerateClass.
+                    var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true).ToArray();
+                    var getArgs = getter.Parameters
+                        .Select(p => Argument(IdentifierName(MakeSafeIdentifier(p.Name)))).ToArray();
+
+                    memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(staticName))
+                        .WithModifiers(Modifiers(isPublic: true, isStatic: true))
+                        .WithParameterList(ParameterList(SeparatedList(getParams)))
+                        .WithExpressionBody(ArrowExpressionClause(
+                            InvocationExpression(
+                                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                                    IdentifierName(safeName), IdentifierName(instanceName)),
+                                ArgumentList(SeparatedList(getArgs)))))
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+
+                    if (setter != null) {
+                        var setStaticName = "Set" + staticName;
+                        classLevelUsed.Add(setStaticName);
+                        var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true)
+                            .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                            .ToArray();
+                        var setArgs = getter.Parameters
+                            .Select(p => Argument(IdentifierName(MakeSafeIdentifier(p.Name))))
+                            .Append(Argument(IdentifierName("value"))).ToArray();
+
+                        memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setStaticName))
+                            .WithModifiers(Modifiers(isPublic: true, isStatic: true))
+                            .WithParameterList(ParameterList(SeparatedList(setParams)))
+                            .WithExpressionBody(ArrowExpressionClause(
+                                InvocationExpression(
+                                    MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                                        IdentifierName(safeName), IdentifierName("Set" + instanceName)),
+                                    ArgumentList(SeparatedList(setArgs)))))
+                            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+                    }
+                }
+                else {
+                    var accessors = new List<AccessorDeclarationSyntax>();
+                    if (getter != null) {
+                        accessors.Add(
+                            AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                                .WithExpressionBody(ArrowExpressionClause(
+                                    MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                                        IdentifierName(safeName), IdentifierName(instanceName))))
+                                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+                    }
+                    if (setter != null) {
+                        accessors.Add(
+                            AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                                .WithExpressionBody(ArrowExpressionClause(
+                                    AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
+                                        MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                                            IdentifierName(safeName), IdentifierName(instanceName)),
+                                        IdentifierName("value"))))
+                                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+                    }
+
+                    memberDecls.Add(
+                        PropertyDeclaration(MemberType(propType, useDynamic), Identifier(staticName))
+                            .WithModifiers(Modifiers(isPublic: true, isStatic: true))
+                            .WithAccessorList(AccessorList(List(accessors))));
+                }
+            }
+
+            // ── Static forwarding methods ──────────────────────────────────
+            var usedMethodSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var method in members
+                         .Where(m => m.Kind == LibraryMemberKind.Method)
+                         .OrderBy(m => m.Name)) {
+                // Skip COM plumbing methods shared with IDispatch/IUnknown.
+                if (AppObjectsBlockedMethodNames.Contains(method.Name)) continue;
+                if (method.Name == "Invoke" && method.Parameters.Count == 8) continue;
+                string instanceMethodName = MakeSafeIdentifier(method.Name);
+                // Skip if another app-object already emitted a forwarder with this name.
+                if (classLevelUsed.Contains(instanceMethodName)) continue;
+                string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
+                string staticMethodName = MakeUniqueMethodName(instanceMethodName, paramSig, usedMethodSignatures, classLevelUsed);
+                // Claim the base name so cross-type duplicates are skipped rather than renamed.
+                classLevelUsed.Add(instanceMethodName);
+
+                var parameters = BuildParameters(method.Parameters, useDynamic).ToArray();
+                var args = method.Parameters.Select(p => {
+                    var arg = Argument(IdentifierName(MakeSafeIdentifier(p.Name)));
+                    if (p.IsOut && !p.IsOptional)
+                        arg = arg.WithRefKindKeyword(Token(SyntaxKind.RefKeyword));
+                    return arg;
+                }).ToArray();
+
+                var callExpr = InvocationExpression(
+                    MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName(safeName), IdentifierName(instanceMethodName)),
+                    ArgumentList(SeparatedList(args)));
+
+                bool isVoid = string.Equals(method.ReturnType, "void", StringComparison.OrdinalIgnoreCase);
+                TypeSyntax returnType = isVoid
+                    ? (TypeSyntax)PredefinedType(Token(SyntaxKind.VoidKeyword))
+                    : MemberType(method.ReturnType, useDynamic);
+
+                memberDecls.Add(
+                    MethodDeclaration(returnType, Identifier(staticMethodName))
+                        .WithModifiers(Modifiers(isPublic: true, isStatic: true))
+                        .WithParameterList(ParameterList(SeparatedList(parameters)))
+                        .WithExpressionBody(ArrowExpressionClause(callExpr))
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
+        }
+
+        var classDecl = ClassDeclaration(Identifier("__AppObjects"))
+            .WithModifiers(Modifiers(isPublic: true, isStatic: true))
+            .WithMembers(List(memberDecls));
+
+        // No namespace — class lives in the global namespace so that
+        // `global using static __AppObjects;` in _ReferenceUsings.cs exposes all
+        // members without requiring a library-specific qualifier.
+        var cu = CompilationUnit(
+                default,
+                default,
+                default,
+                SingletonList<MemberDeclarationSyntax>(classDecl))
+            .NormalizeWhitespace();
+
+        string filePath = Path.Combine(referenceRoot, "__AppObjects.cs");
+        File.WriteAllText(filePath, cu.ToFullString());
+        return filePath;
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Per-type dispatch
     // ──────────────────────────────────────────────────────────────────────
@@ -324,7 +533,7 @@ public static class ReferenceStubGenerator
         ("Name",            "string"), ("Tag",             "string"),
         ("_ExtentX",        "int"),    ("_ExtentY",        "int"),
         ("_StockProps",     "int"),    ("_Version",        "int"),
-        ("ToolTipText",     "string"),
+        ("ToolTipText",     "string"), ("Index",           "int"),
         ("HelpContextID",   "int"),
         ("WhatsThisHelpID", "int"),
         ("DragMode",        "int"),

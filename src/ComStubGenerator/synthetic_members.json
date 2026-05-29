@@ -33,5 +33,12 @@
       { "Name": "ClientWidth",  "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
       { "Name": "ClientWidth",  "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] }
     ]
+  },
+  {
+    "Targets": [ "VB.Control" ],
+    "Members": [
+      { "Name": "Index", "Kind": "PropertyGet", "ReturnType": "int", "Parameters": [] },
+      { "Name": "Index", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] }
+    ]
   }
 ]

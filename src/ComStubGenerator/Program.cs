@@ -172,6 +172,8 @@ public static class Program
             AnsiConsole.WriteLine($"  {library.Name}: {written.Count} stubs");
         }
 
+        ReferenceStubGenerator.GenerateAppObjects(merged, outputDir, useDynamic);
+
         var allAliases = merged.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
         var referenceUsingsPath = ReferenceUsingsGenerator.Generate(merged, outputDir, allAliases);
 

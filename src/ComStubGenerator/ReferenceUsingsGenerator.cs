@@ -44,6 +44,9 @@ public static class ReferenceUsingsGenerator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // A single root-level __AppObjects class is emitted when any library has an app-object type.
+        bool hasAppObjects = libraryList.Any(l => (l.Types ?? []).Any(t => t.IsAppObject && t.Kind == LibraryTypeKind.Class));
+
         // Deduplicate aliases by name (first declaration wins).
         var seenAliasNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var dedupedAliases = (aliases ?? [])
@@ -75,7 +78,7 @@ public static class ReferenceUsingsGenerator
             builder.AppendLine($"global using {ns};");
         }
 
-        if (namespaces.Count > 0 && (enumTypeUsings.Count > 0 || dedupedAliases.Count > 0)) {
+        if (namespaces.Count > 0 && (enumTypeUsings.Count > 0 || hasAppObjects || dedupedAliases.Count > 0)) {
             builder.AppendLine();
         }
 
@@ -83,8 +86,13 @@ public static class ReferenceUsingsGenerator
             builder.AppendLine($"global using static {enumType};");
         }
 
-        if (dedupedAliases.Count > 0) {
+        if (hasAppObjects) {
             if (enumTypeUsings.Count > 0) builder.AppendLine();
+            builder.AppendLine("global using static __AppObjects;");
+        }
+
+        if (dedupedAliases.Count > 0) {
+            if (enumTypeUsings.Count > 0 || hasAppObjects) builder.AppendLine();
             foreach (var (name, csType) in dedupedAliases) {
                 builder.AppendLine($"global using {name} = {csType};");
             }

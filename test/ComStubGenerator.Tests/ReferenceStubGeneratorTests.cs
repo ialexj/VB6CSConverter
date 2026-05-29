@@ -1560,6 +1560,228 @@ public class ReferenceStubGeneratorTests
     // Helpers
     // ──────────────────────────────────────────────────────────────────────
 
+    // ──────────────────────────────────────────────────────────────────────
+    // GenerateAppObjects
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void GenerateAppObjects_NoAppObjects_ReturnsNull()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("MyClass", LibraryTypeKind.Class, IsAppObject: false));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var result = ReferenceStubGenerator.GenerateAppObjects([library], tempDir);
+            result.Should().BeNull();
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateAppObjects_WithAppObject_WritesFileWithField()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("Screen", LibraryTypeKind.Class, IsAppObject: true));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var result = ReferenceStubGenerator.GenerateAppObjects([library], tempDir);
+
+            result.Should().NotBeNull();
+            result.Should().Be(Path.Combine(tempDir, "__AppObjects.cs"));
+            File.Exists(result!).Should().BeTrue();
+
+            var source = File.ReadAllText(result);
+            source.Should().Contain("public static class __AppObjects");
+            source.Should().Contain("public static readonly Screen Screen = new Screen()");
+            // File must be at the root — not inside a library subfolder.
+            Path.GetDirectoryName(result).Should().Be(tempDir);
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateAppObjects_WithMembers_EmitsStaticForwardingMembers()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("Global", LibraryTypeKind.Class,
+                IsAppObject: true,
+                Members: [
+                    new("Screen",   LibraryMemberKind.PropertyGet, "VB.Screen",    [], IsDefault: false),
+                    new("Printer",  LibraryMemberKind.PropertyGet, "VB.Printer",   [], IsDefault: false),
+                    new("Printer",  LibraryMemberKind.PropertySet, "void",         [new("value", "VB.Printer", false, false)]),
+                    new("Load",     LibraryMemberKind.Method,      "int",          [new("object", "dynamic",   true,  false)]),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var result = ReferenceStubGenerator.GenerateAppObjects([library], tempDir);
+
+            result.Should().NotBeNull();
+            var source = File.ReadAllText(result!);
+
+            // Singleton field
+            source.Should().Contain("public static readonly Global Global = new Global()");
+            // Read-only property forwarded to singleton
+            source.Should().Contain("public static VB.Screen Screen");
+            source.Should().Contain("get => Global.Screen");
+            // Read-write property forwarded
+            source.Should().Contain("public static VB.Printer Printer");
+            source.Should().Contain("get => Global.Printer");
+            source.Should().Contain("set => Global.Printer = value");
+            // Method forwarded
+            source.Should().Contain("public static int Load(");
+            source.Should().Contain("=> Global.Load(");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateAppObjects_MultipleAppObjects_AllFieldsEmitted()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("App",         LibraryTypeKind.Class, IsAppObject: true),
+            new ComQueryType("Printer",     LibraryTypeKind.Class, IsAppObject: true),
+            new ComQueryType("Screen",      LibraryTypeKind.Class, IsAppObject: true),
+            new ComQueryType("RegularClass",LibraryTypeKind.Class, IsAppObject: false));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var result = ReferenceStubGenerator.GenerateAppObjects([library], tempDir);
+
+            result.Should().NotBeNull();
+            var source = File.ReadAllText(result!);
+
+            source.Should().Contain("public static readonly App App = new App()");
+            source.Should().Contain("public static readonly Printer Printer = new Printer()");
+            source.Should().Contain("public static readonly Screen Screen = new Screen()");
+            source.Should().NotContain("RegularClass");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateAppObjects_ComPlumbingMembers_AreNotForwarded()
+    {
+        // Members like ToString, Equals, AddRef, QueryInterface etc. must be suppressed.
+        var library = MakeLibrary("VB",
+            new ComQueryType("Global", LibraryTypeKind.Class,
+                IsAppObject: true,
+                Members: [
+                    new("Screen",        LibraryMemberKind.PropertyGet, "VB.Screen", [], IsDefault: false),
+                    new("ToString",      LibraryMemberKind.PropertyGet, "string",    [], IsDefault: false),
+                    new("AddRef",        LibraryMemberKind.Method,      "int",       []),
+                    new("Release",       LibraryMemberKind.Method,      "int",       []),
+                    new("QueryInterface",LibraryMemberKind.Method,      "int",       []),
+                    new("GetHashCode",   LibraryMemberKind.Method,      "int",       []),
+                    new("Equals",        LibraryMemberKind.Method,      "bool",      [new("obj", "object", false, false)]),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var result = ReferenceStubGenerator.GenerateAppObjects([library], tempDir);
+            var source = File.ReadAllText(result!);
+
+            source.Should().Contain("public static VB.Screen Screen");
+            source.Should().NotContain("AddRef");
+            source.Should().NotContain("Release");
+            source.Should().NotContain("QueryInterface");
+            source.Should().NotContain("GetHashCode");
+            source.Should().NotContain("static bool Equals");
+            // ToString as a property should also be suppressed
+            source.Should().NotContain("static string ToString");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateAppObjects_DuplicateMemberAcrossAppObjects_OnlyOneForwarderEmitted()
+    {
+        // Both Global and App expose a property named "Title"; only one static forwarder should appear.
+        var library = MakeLibrary("VB",
+            new ComQueryType("App", LibraryTypeKind.Class,
+                IsAppObject: true,
+                Members: [
+                    new("Title", LibraryMemberKind.PropertyGet, "string", [], IsDefault: false),
+                    new("Title", LibraryMemberKind.PropertySet, "void",   [new("value", "string", false, false)]),
+                ]),
+            new ComQueryType("Global", LibraryTypeKind.Class,
+                IsAppObject: true,
+                Members: [
+                    new("Title", LibraryMemberKind.PropertyGet, "string", [], IsDefault: false),
+                    new("Title", LibraryMemberKind.PropertySet, "void",   [new("value", "string", false, false)]),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var result = ReferenceStubGenerator.GenerateAppObjects([library], tempDir);
+            var source = File.ReadAllText(result!);
+
+            // Exactly one static Title property (not two — no Title_2 variant).
+            source.Should().Contain("public static string Title");
+            source.Should().NotContain("Title_2");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateAppObjects_AcrossLibraries_SingleFileAtRoot()
+    {
+        // App objects from two different libraries must end up in one file at referenceRoot.
+        var vbLib  = MakeLibrary("VB",  new ComQueryType("Global",   LibraryTypeKind.Class, IsAppObject: true));
+        var daoLib = MakeLibrary("DAO", new ComQueryType("DBEngine", LibraryTypeKind.Class, IsAppObject: true));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var result = ReferenceStubGenerator.GenerateAppObjects([vbLib, daoLib], tempDir);
+
+            result.Should().NotBeNull();
+            result.Should().Be(Path.Combine(tempDir, "__AppObjects.cs"));
+
+            var source = File.ReadAllText(result!);
+            source.Should().Contain("public static readonly Global Global = new Global()");
+            source.Should().Contain("public static readonly DBEngine DBEngine = new DBEngine()");
+            // Must not contain any namespace declaration.
+            source.Should().NotContain("namespace ");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateAppObjects_AppObjectUsings_EmittedInReferenceUsings()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("Screen", LibraryTypeKind.Class, IsAppObject: true));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            ReferenceUsingsGenerator.Generate([library], tempDir);
+            var usingsPath = Path.Combine(tempDir, "_ReferenceUsings.cs");
+            var usings = File.ReadAllText(usingsPath);
+            // Single root-level class — no library qualifier.
+            usings.Should().Contain("global using static __AppObjects;");
+            usings.Should().NotContain("VB.__AppObjects");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     static ComQueryLibrary MakeLibrary(string safeName, params ComQueryType[] types)
         => new(safeName, TestGuid, 1, 0, Types: types);
 
