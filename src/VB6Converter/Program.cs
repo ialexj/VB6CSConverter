@@ -291,6 +291,13 @@ public static class Program
                 await RunRewriter(true, "Disambiguate Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
                 await RunRewriter(true, "Rewriting parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
 
+                await RunRewriter(true, "Refining Array Declarations", async (t, sm) => {
+                    var declaratorTypes = new Dictionary<VariableDeclaratorSyntax, ArrayTypeSyntax>();
+                    var symbolTypes = new Dictionary<ISymbol, ArrayTypeSyntax>(SymbolEqualityComparer.Default);
+                    await ArrayRefinementRewriter.GetAllArrayVariablesAndUsages(sm, ws.Project.Solution, declaratorTypes, symbolTypes);
+                    return new ArrayRefinementRewriter(sm, declaratorTypes, symbolTypes);
+                });
+
                 await RunRewriter(true, "Refining Types", async (t, sm) => {
                     var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
                     await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
