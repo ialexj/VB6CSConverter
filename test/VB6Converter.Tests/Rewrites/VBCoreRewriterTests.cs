@@ -188,6 +188,11 @@ public class VBCoreRewriterTests
         "y = Time",
         "y = System.DateTime.Now.TimeOfDay;");
 
+    [TestMethod]
+    public void DateMemberAccess() => ValidateBodyMatches(
+        "y = Date.Year",
+        "y = System.DateTime.Now.Date.Year;");
+
     // ── IsMissing ─────────────────────────────────────────────────────────────
 
     [TestMethod]

@@ -14,7 +14,8 @@ public class VBCoreRewriter : LoggedRewriter
 {
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
         => Rewrite(node, node => {
-            if (node.Parent is MemberAccessExpressionSyntax) {
+            if (node.Parent is MemberAccessExpressionSyntax memberAccess
+                && memberAccess.Name == node) {
                 return base.VisitIdentifierName(node);
             }
 
