@@ -334,7 +334,7 @@ public class VBCoreRewriter : LoggedRewriter
         => InvocationExpression(
             MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName("Strings").WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.VisualBasic")),
+                IdentifierName("Microsoft.VisualBasic.Strings"),
                 IdentifierName(methodName)),
             ArgumentList(args));
 
