@@ -162,8 +162,10 @@ public static class Program
             if (targetsThatNeedTransform.Length > 0) {
                 await RunOperations("Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
+                        var sourceRelativePath = Path.GetRelativePath(projectBasePath, t.File.Path).Replace('\\', '/');
                         var conversion = VB6ToCSharpConversion.ConvertFile(
-                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions);
+                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions,
+                            sourceRelativePath);
 
                         var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
                         return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));

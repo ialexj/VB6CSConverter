@@ -1,4 +1,5 @@
-﻿using Antlr4.Runtime.Tree;
+﻿using Antlr4.Runtime;
+using Antlr4.Runtime.Tree;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -18,6 +19,20 @@ using static VB6Parser.VisualBasic6Parser;
 namespace VB6Converter.Conversion;
 public static class ClassConverter
 {
+    static T AddGeneratedFromComment<T>(T declaration, string sourceRelativePath, int? line = null)
+        where T : MemberDeclarationSyntax
+    {
+        if (sourceRelativePath is not { Length: > 0 }) {
+            return declaration;
+        }
+
+        var source = line.HasValue
+            ? $"{sourceRelativePath}:{line.Value}"
+            : sourceRelativePath;
+        var generatedTrivia = TriviaList(Comment($"// Generated from: {source}"), EndOfLine("\n"));
+        return (T)declaration.WithLeadingTrivia(generatedTrivia.AddRange(declaration.GetLeadingTrivia()));
+    }
+
     public static ClassDeclarationSyntax GetClass(ModuleContext module, ClassContext ctx)
     {
         var c = ClassDeclaration(ctx.Name)
@@ -109,7 +124,7 @@ public static class ClassConverter
             );
         }
 
-        return c;
+        return AddGeneratedFromComment(c, ctx.SourceRelativePath);
     }
 
     public static ClassControlInfo GetControl(ControlPropertiesContext control, string sourceDirectory = null, string outputDirectory = null)
@@ -379,7 +394,8 @@ public static class ClassConverter
             method = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(method);
         }
 
-        return method;
+        var methodLine = (methodCtx as ParserRuleContext)?.Start?.Line;
+        return AddGeneratedFromComment(method, ctx.SourceRelativePath, methodLine);
     }
 
     public static MemberDeclarationSyntax GetProperty(IPropertyContext propCtx, ClassContext ctx)
@@ -402,7 +418,9 @@ public static class ClassConverter
             getter = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(getter);
             getter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(getter);
             var getTrivia = getter.GetLeadingTrivia().Insert(0, Comment("// VB6 multi-value property getter"));
-            return getter.WithLeadingTrivia(getTrivia);
+            getter = getter.WithLeadingTrivia(getTrivia);
+            var propertyLine = (propCtx as ParserRuleContext)?.Start?.Line;
+            return AddGeneratedFromComment(getter, ctx.SourceRelativePath, propertyLine);
         }
 
         if (propCtx is IPropertySetContext && parameters.Parameters.Count > 1) {
@@ -414,7 +432,9 @@ public static class ClassConverter
             setter = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(setter);
             setter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(setter);
             var setTrivia = setter.GetLeadingTrivia().Insert(0, Comment("// VB6 multi-value property setter"));
-            return setter.WithLeadingTrivia(setTrivia);
+            setter = setter.WithLeadingTrivia(setTrivia);
+            var propertyLine = (propCtx as ParserRuleContext)?.Start?.Line;
+            return AddGeneratedFromComment(setter, ctx.SourceRelativePath, propertyLine);
         }
 
         SyntaxKind kind;
@@ -472,7 +492,8 @@ public static class ClassConverter
         member = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(member);
         member = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(member);
         member = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(member);
-        return member;
+        var memberLine = (propCtx as ParserRuleContext)?.Start?.Line;
+        return AddGeneratedFromComment(member, ctx.SourceRelativePath, memberLine);
     }
 
     public static MethodDeclarationSyntax GetExtern(DeclareStmtContext declare, bool useDynamic = true)
@@ -549,6 +570,15 @@ public static class ClassConverter
         if (arg.PARAMARRAY() is not null) {
             parameter = parameter
                 .WithModifiers(TokenList(Token(SyntaxKind.ParamsKeyword)))
+                .WithType(ArrayType(parameter.Type)
+                    .WithRankSpecifiers(SingletonList(
+                        ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
+                            OmittedArraySizeExpression()
+                        ))
+                    )));
+        }
+        else if (arg.LPAREN() is not null) {
+            parameter = parameter
                 .WithType(ArrayType(parameter.Type)
                     .WithRankSpecifiers(SingletonList(
                         ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(
