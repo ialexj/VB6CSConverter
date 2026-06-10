@@ -50,6 +50,17 @@ public class AmbiguousTypeQualifier(SemanticModel sem, IEnumerable<string> prefe
             return null;
         }
 
+        // If any candidate is a non-type symbol (e.g. a static member brought in by
+        // 'using static'), qualify it via its containing type to resolve the ambiguity.
+        var nonTypeSymbol = info.CandidateSymbols.FirstOrDefault(s => s is not ITypeSymbol);
+        if (nonTypeSymbol?.ContainingType is { } containingType) {
+            var memberFqn = $"{containingType.ToDisplayString()}.{nonTypeSymbol.Name}";
+            if (memberFqn != node.ToString()) {
+                return ParseName(memberFqn).WithTriviaFrom(node);
+            }
+            return null;
+        }
+
         var typeSymbols = info.CandidateSymbols.OfType<ITypeSymbol>().ToList();
         if (typeSymbols.Count == 0) {
             return null;
@@ -150,7 +161,7 @@ public class AmbiguousTypeQualifier(SemanticModel sem, IEnumerable<string> prefe
         }
 
         // 2. Implied preferences
-        foreach (var implied in new string[] { "VB", "VBRUN" }) {
+        foreach (var implied in new string[] { "VB", "VBA", "VBRUN", "System" }) {
             foreach (var candidate in candidates) {
                 var ns = candidate.ContainingNamespace?.ToDisplayString() ?? string.Empty;
                 if (ns == implied || ns.StartsWith(implied + ".", StringComparison.Ordinal)) {
@@ -159,16 +170,7 @@ public class AmbiguousTypeQualifier(SemanticModel sem, IEnumerable<string> prefe
             }
         }
 
-        // 3. Any type in the System.* namespace hierarchy
-        var systemType = candidates.FirstOrDefault(c => {
-            var ns = c.ContainingNamespace?.ToDisplayString() ?? string.Empty;
-            return ns == "System" || ns.StartsWith("Microsoft.VisualBasic", StringComparison.Ordinal);
-        });
-        if (systemType != null) {
-            return systemType;
-        }
-
-        // 4. First candidate (Roslyn-defined order)
+        // 3. First candidate (Roslyn-defined order)
         return candidates[0];
     }
 }

@@ -291,6 +291,7 @@ public sealed class TypeLibraryInspector
             List<ComQueryEnumVal>   enumValues = [];
             string? aliasedType = null;
             List<string> implementedInterfaces = [];
+            bool isOleObject = false;
 
             if (kind == LibraryTypeKind.Alias) {
                 aliasedType = ResolveType(typeLib, typeInfo, typeAttr.tdescAlias, discoveredDeps);
@@ -304,6 +305,8 @@ public sealed class TypeLibraryInspector
                 implementedInterfaces = coclassInfo.ImplementedInterfaces;
                 if (coclassInfo.HasNewEnum)
                     implementedInterfaces.Insert(0, "System.Collections.IEnumerable");
+                if (coclassInfo.HasOleObject)
+                    isOleObject = true;
             }
             else if (kind == LibraryTypeKind.Struct) {
                 members = InspectStructFields(typeLib, typeInfo, typeAttr.cVars, discoveredDeps);
@@ -332,7 +335,8 @@ public sealed class TypeLibraryInspector
                 ImplementedInterfaces: implementedInterfaces.Count > 0 ? implementedInterfaces : null,
                 Description: typeDescription,
                 IsControl: isControl,
-                IsAppObject: isAppObject);
+                IsAppObject: isAppObject,
+                IsOleObject: isOleObject);
         }
         catch (Exception ex) {
             throw new InvalidOperationException(
@@ -436,7 +440,11 @@ public sealed class TypeLibraryInspector
     const int IMPLTYPEFLAG_FSOURCE     = 0x2;
     const int IMPLTYPEFLAG_FRESTRICTED = 0x4;
 
-    static (List<ComQueryMember> Members, List<string> ImplementedInterfaces, bool HasNewEnum) InspectCoclassMembers(
+    // IOleObject — the core OLE embedding interface; its presence on a coclass indicates
+    // an embeddable/ActiveX control even when TYPEFLAG_FCONTROL is absent.
+    static readonly Guid IoleObjectGuid = new("00000112-0000-0000-C000-000000000046");
+
+    static (List<ComQueryMember> Members, List<string> ImplementedInterfaces, bool HasNewEnum, bool HasOleObject) InspectCoclassMembers(
         System.Runtime.InteropServices.ComTypes.ITypeLib typeLib,
         System.Runtime.InteropServices.ComTypes.ITypeInfo coclassTypeInfo,
         System.Runtime.InteropServices.ComTypes.TYPEATTR typeAttr,
@@ -448,6 +456,7 @@ public sealed class TypeLibraryInspector
         var implementedInterfaceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visitedInterfaces = new HashSet<Guid>();
         bool hasNewEnum = false;
+        bool hasOleObject = false;
 
         for (int i = 0; i < typeAttr.cImplTypes; i++) {
             try {
@@ -467,6 +476,11 @@ public sealed class TypeLibraryInspector
 
                 try {
                     var implAttr = Marshal.PtrToStructure<System.Runtime.InteropServices.ComTypes.TYPEATTR>(pImplAttr);
+
+                    // Detect IOleObject by GUID regardless of whether member collection succeeds;
+                    // cross-library GetRefTypeInfo often fails for system interfaces.
+                    if (implAttr.guid == IoleObjectGuid)
+                        hasOleObject = true;
 
                     if (implAttr.typekind != System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_INTERFACE
                         && implAttr.typekind != System.Runtime.InteropServices.ComTypes.TYPEKIND.TKIND_DISPATCH) {
@@ -498,7 +512,7 @@ public sealed class TypeLibraryInspector
             catch { /* try next interface */ }
         }
 
-        return (members, implementedInterfaces, hasNewEnum);
+        return (members, implementedInterfaces, hasNewEnum, hasOleObject);
     }
 
     static (List<ComQueryMember> Members, List<string> BaseInterfaces, bool HasNewEnum) InspectInterfaceMembers(

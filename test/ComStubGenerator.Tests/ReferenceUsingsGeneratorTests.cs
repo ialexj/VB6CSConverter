@@ -97,6 +97,28 @@ public class ReferenceUsingsGeneratorTests : ReferenceStubGeneratorTestBase
     }
 
     [TestMethod]
+    public void GenerateReferenceUsings_WritesStaticUsingForModuleTypes()
+    {
+        var lib = MakeLibrary("VBScript",
+            new ComQueryType("RegExp", LibraryTypeKind.DispatchInterface, [], []),
+            new ComQueryType("Strings", LibraryTypeKind.Module, [], []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var filePath = ReferenceUsingsGenerator.Generate([lib], tempDir);
+            var source = File.ReadAllText(filePath);
+
+            source.Should().Contain("global using VBScript;",
+                "namespace using must still be emitted for the library");
+            source.Should().Contain("global using static VBScript.Strings;",
+                "Module types become static classes and need a global using static entry");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void GenerateReferenceUsings_TransitiveLibrariesAreIncluded()
     {
         // Program.cs now passes ALL merged libraries (direct + transitive) to Generate() so that

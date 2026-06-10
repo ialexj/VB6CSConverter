@@ -39,7 +39,7 @@ public static class ReferenceUsingsGenerator
 
         var enumTypeUsings = libraryList
             .SelectMany(l => (l.Types ?? [])
-                .Where(t => t.Kind == LibraryTypeKind.Enum)
+                .Where(t => t.Kind == LibraryTypeKind.Enum || t.Kind == LibraryTypeKind.Module)
                 .Select(t => $"{l.SafeName}.{t.Name}"))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();

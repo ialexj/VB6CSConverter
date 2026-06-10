@@ -10,31 +10,54 @@ public class BitwiseOrRewriter(SemanticModel semantics) : LoggedRewriter
     public override SyntaxNode VisitBinaryExpression(BinaryExpressionSyntax node)
         => Rewrite(node, node =>
         {
+            // VB6 enum flag combining: enum + enum → enum | enum
+            if (node.IsKind(SyntaxKind.AddExpression))
+            {
+                var leftType  = semantics.GetTypeInfo(node.Left).Type;
+                var rightType = semantics.GetTypeInfo(node.Right).Type;
+
+                if (leftType?.TypeKind == TypeKind.Enum && rightType?.TypeKind == TypeKind.Enum)
+                {
+                    var newOperator = Token(
+                        node.OperatorToken.LeadingTrivia,
+                        SyntaxKind.BarToken,
+                        node.OperatorToken.TrailingTrivia);
+
+                    // Visit children so chained a + b + c → a | b | c
+                    var visitedLeft  = (ExpressionSyntax)Visit(node.Left)!;
+                    var visitedRight = (ExpressionSyntax)Visit(node.Right)!;
+
+                    return BinaryExpression(SyntaxKind.BitwiseOrExpression, visitedLeft, newOperator, visitedRight);
+                }
+
+                return base.VisitBinaryExpression(node);
+            }
+
             if (!node.IsKind(SyntaxKind.LogicalOrExpression) && !node.IsKind(SyntaxKind.LogicalAndExpression))
                 return base.VisitBinaryExpression(node);
 
-            var leftType  = semantics.GetTypeInfo(node.Left).Type;
-            var rightType = semantics.GetTypeInfo(node.Right).Type;
+            var lType  = semantics.GetTypeInfo(node.Left).Type;
+            var rType = semantics.GetTypeInfo(node.Right).Type;
 
-            if (leftType is null || rightType is null)
+            if (lType is null || rType is null)
                 return base.VisitBinaryExpression(node);
 
-            if (leftType.SpecialType == SpecialType.System_Boolean || rightType.SpecialType == SpecialType.System_Boolean)
+            if (lType.SpecialType == SpecialType.System_Boolean || rType.SpecialType == SpecialType.System_Boolean)
                 return base.VisitBinaryExpression(node);
 
             var (newKind, tokenKind) = node.IsKind(SyntaxKind.LogicalOrExpression)
                 ? (SyntaxKind.BitwiseOrExpression,  SyntaxKind.BarToken)
                 : (SyntaxKind.BitwiseAndExpression, SyntaxKind.AmpersandToken);
 
-            var newOperator  = Token(
+            var newOp  = Token(
                 node.OperatorToken.LeadingTrivia,
                 tokenKind,
                 node.OperatorToken.TrailingTrivia);
 
             // Visit children so nested logical operators are also converted.
-            var visitedLeft  = (ExpressionSyntax)Visit(node.Left)!;
-            var visitedRight = (ExpressionSyntax)Visit(node.Right)!;
+            var visitLeft  = (ExpressionSyntax)Visit(node.Left)!;
+            var visitRight = (ExpressionSyntax)Visit(node.Right)!;
 
-            return BinaryExpression(newKind, visitedLeft, newOperator, visitedRight);
+            return BinaryExpression(newKind, visitLeft, newOp, visitRight);
         });
 }

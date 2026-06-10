@@ -4,6 +4,22 @@
   // They are NOT present in any COM type library (VB6.OLB _Form interface has no Client* members);
   // injecting them here prevents compile errors when InitializeComponent assigns these values.
   {
+    "Targets": [ "VB.Form", "VB.UserControl" ],
+    "Members": [
+      { "Name": "ClientHeight", "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
+      { "Name": "ClientHeight", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+
+      { "Name": "ClientLeft",   "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
+      { "Name": "ClientLeft",   "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+
+      { "Name": "ClientTop",    "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
+      { "Name": "ClientTop",    "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
+
+      { "Name": "ClientWidth",  "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
+      { "Name": "ClientWidth",  "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] }
+    ]
+  },
+  {
     "Targets": [ "VB.Form" ],
     "Members": [
       // VB6.OLB exposes Form.Show but does not mark its two parameters optional.
@@ -22,16 +38,7 @@
       { "Name": "MinButton", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
 
       { "Name": "MDIChild", "Kind": "PropertyGet", "ReturnType": "bool", "Parameters": [] },
-      { "Name": "MDIChild", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
-
-      { "Name": "ClientHeight", "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
-      { "Name": "ClientHeight", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
-      { "Name": "ClientLeft",   "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
-      { "Name": "ClientLeft",   "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
-      { "Name": "ClientTop",    "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
-      { "Name": "ClientTop",    "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] },
-      { "Name": "ClientWidth",  "Kind": "PropertyGet", "ReturnType": "float", "Parameters": [] },
-      { "Name": "ClientWidth",  "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] }
+      { "Name": "MDIChild", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] }
     ]
   },
   {

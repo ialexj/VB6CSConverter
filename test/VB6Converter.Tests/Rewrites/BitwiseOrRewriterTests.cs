@@ -76,6 +76,32 @@ public class BitwiseOrRewriterTests
     public void LeavesIntAndBoolUnchanged()
         => Check("class T { void M(int a, bool b) { var x = a && b; } }");
 
+    // ── Enum +: enum + enum → enum | enum ────────────────────────────────────
+
+    [TestMethod]
+    public void RewritesEnumPlusEnum()
+        => Check(
+            "enum F { A = 1, B = 2 } class T { void M() { var x = F.A + F.B; } }",
+            "enum F { A = 1, B = 2 } class T { void M() { var x = F.A | F.B; } }");
+
+    [TestMethod]
+    public void RewritesChainedEnumPlusEnum()
+        => Check(
+            "enum F { A = 1, B = 2, C = 4 } class T { void M() { var x = F.A + F.B + F.C; } }",
+            "enum F { A = 1, B = 2, C = 4 } class T { void M() { var x = F.A | F.B | F.C; } }");
+
+    [TestMethod]
+    public void LeavesEnumPlusIntUnchanged()
+        => Check("enum F { A = 1 } class T { void M() { var x = F.A + 1; } }");
+
+    [TestMethod]
+    public void LeavesIntPlusEnumUnchanged()
+        => Check("enum F { A = 1 } class T { void M() { var x = 1 + F.A; } }");
+
+    [TestMethod]
+    public void LeavesIntPlusIntUnchanged()
+        => Check("class T { void M(int a, int b) { var x = a + b; } }");
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static void Check(string cs, string? expected = null)
