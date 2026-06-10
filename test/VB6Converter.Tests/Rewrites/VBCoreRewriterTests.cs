@@ -109,77 +109,87 @@ public class VBCoreRewriterTests
         "y = CCur(x)",
         "y = Convert.ToDecimal(x);");
 
+    [TestMethod]
+    public void Val() => ValidateBodyMatches(
+        "y = Val(x)",
+        "y = Microsoft.VisualBasic.Conversion.Val(x);");
+
+    [TestMethod]
+    public void Val_StringArgument() => ValidateBodyMatches(
+        "y = Val(s)",
+        "y = Microsoft.VisualBasic.Conversion.Val(s);");
+
     // ── Strings ───────────────────────────────────────────────────────────────
 
     [TestMethod]
     public void Trim() => ValidateBodyMatches(
         "y = Trim(s)",
-        "y = Strings.Trim((string)s);");
+        "y = Microsoft.VisualBasic.Strings.Trim((string)s);");
 
     [TestMethod]
     public void LTrim() => ValidateBodyMatches(
         "y = LTrim(s)",
-        "y = Strings.LTrim((string)s);");
+        "y = Microsoft.VisualBasic.Strings.LTrim((string)s);");
 
     [TestMethod]
     public void RTrim() => ValidateBodyMatches(
         "y = RTrim(s)",
-        "y = Strings.RTrim((string)s);");
+        "y = Microsoft.VisualBasic.Strings.RTrim((string)s);");
 
     [TestMethod]
     public void LCase() => ValidateBodyMatches(
         "y = LCase(s)",
-        "y = Strings.LCase((string)s);");
+        "y = Microsoft.VisualBasic.Strings.LCase((string)s);");
 
     [TestMethod]
     public void UCase() => ValidateBodyMatches(
         "y = UCase(s)",
-        "y = Strings.UCase((string)s);");
+        "y = Microsoft.VisualBasic.Strings.UCase((string)s);");
 
     [TestMethod]
     public void Right() => ValidateBodyMatches(
         "y = Right(s, 3)",
-        "y = Strings.Right((string)s, 3);");
+        "y = Microsoft.VisualBasic.Strings.Right((string)s, 3);");
 
     [TestMethod]
     public void Mid2() => ValidateBodyMatches(
         "y = Mid(s, 2)",
-        "y = Strings.Mid((string)s, 2);");
+        "y = Microsoft.VisualBasic.Strings.Mid((string)s, 2);");
 
     [TestMethod]
     public void Mid3() => ValidateBodyMatches(
         "y = Mid(s, 2, 3)",
-        "y = Strings.Mid((string)s, 2, 3);");
+        "y = Microsoft.VisualBasic.Strings.Mid((string)s, 2, 3);");
 
     [TestMethod]
     public void Space() => ValidateBodyMatches(
         "y = Space(5)",
-        "y = Strings.Space(5);");
+        "y = Microsoft.VisualBasic.Strings.Space(5);");
 
     [TestMethod]
     public void InStr2() => ValidateBodyMatches(
         """y = InStr(s, "a")""",
-        """y = Strings.InStr((string)s, "a");""");
+        """y = Microsoft.VisualBasic.Strings.InStr((string)s, "a");""");
 
     [TestMethod]
     public void InStr3() => ValidateBodyMatches(
         """y = InStr(2, s, "a")""",
-        """y = Strings.InStr(2, (string)s, "a");""");
+        """y = Microsoft.VisualBasic.Strings.InStr(2, (string)s, "a");""");
 
     [TestMethod]
     public void Left() => ValidateBodyMatches(
         "y = Left(s, 3)",
-        "y = Strings.Left((string)s, 3);");
+        "y = Microsoft.VisualBasic.Strings.Left((string)s, 3);");
 
     [TestMethod]
     public void Len() => ValidateBodyMatches(
         "y = Len(s)",
-        "y = Strings.Len((string)s);");
+        "y = Microsoft.VisualBasic.Strings.Len((string)s);");
 
     [TestMethod]
     public void Replace() => ValidateBodyMatches(
         """y = Replace(s, "a", "b")""",
-        """y = Strings.Replace((string)s, "a", "b");""");
+        """y = Microsoft.VisualBasic.Strings.Replace((string)s, "a", "b");""");
 
     // ── Date/Time identifiers ─────────────────────────────────────────────────
 

@@ -552,8 +552,9 @@ public static class StatementConverter
         }
 
         return ExpressionStatement(
-            InvocationExpression(IdentifierName("FileOpen"), ArgumentList(args.ToArray())))
-            .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.VisualBasic"));
+            InvocationExpression(
+                ParseExpression("Microsoft.VisualBasic.FileSystem.FileOpen"),
+                ArgumentList(args.ToArray())));
     }
 
     public static StatementSyntax GetPrint(PrintStmtContext print, CallContext ctx)

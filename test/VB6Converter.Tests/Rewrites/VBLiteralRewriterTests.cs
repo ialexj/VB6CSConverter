@@ -10,7 +10,7 @@ public class VBLiteralRewriterTests
     [TestMethod]
     public void NullString() => ValidateBodyMatches(
         "x = vbNullString",
-        "x = string.Empty;");
+        "x = \"\";");
 
     [TestMethod]
     public void CrLf() => ValidateBodyMatches(
@@ -27,94 +27,94 @@ public class VBLiteralRewriterTests
     [TestMethod]
     public void Sunday() => ValidateBodyMatches(
         "x = vbSunday",
-        "x = FirstDayOfWeek.Sunday;");
+        "x = Microsoft.VisualBasic.FirstDayOfWeek.Sunday;");
 
     [TestMethod]
     public void Saturday() => ValidateBodyMatches(
         "x = vbSaturday",
-        "x = FirstDayOfWeek.Saturday;");
+        "x = Microsoft.VisualBasic.FirstDayOfWeek.Saturday;");
 
     // ── Tristate — TriState enum ──────────────────────────────────────────────
 
     [TestMethod]
     public void TriStateTrue() => ValidateBodyMatches(
         "x = vbTrue",
-        "x = TriState.True;");
+        "x = Microsoft.VisualBasic.TriState.True;");
 
     [TestMethod]
     public void TriStateFalse() => ValidateBodyMatches(
         "x = vbFalse",
-        "x = TriState.False;");
+        "x = Microsoft.VisualBasic.TriState.False;");
 
     [TestMethod]
     public void TriStateUseDefault() => ValidateBodyMatches(
         "x = vbUseDefault",
-        "x = TriState.UseDefault;");
+        "x = Microsoft.VisualBasic.TriState.UseDefault;");
 
     // ── Compare — CompareMethod enum ─────────────────────────────────────────
 
     [TestMethod]
     public void BinaryCompare() => ValidateBodyMatches(
         "x = vbBinaryCompare",
-        "x = CompareMethod.Binary;");
+        "x = Microsoft.VisualBasic.CompareMethod.Binary;");
 
     [TestMethod]
     public void TextCompare() => ValidateBodyMatches(
         "x = vbTextCompare",
-        "x = CompareMethod.Text;");
+        "x = Microsoft.VisualBasic.CompareMethod.Text;");
 
     // ── StrConv — VbStrConv enum ──────────────────────────────────────────────
 
     [TestMethod]
     public void UpperCase() => ValidateBodyMatches(
         "x = vbUpperCase",
-        "x = VbStrConv.UpperCase;");
+        "x = Microsoft.VisualBasic.VbStrConv.UpperCase;");
 
     [TestMethod]
     public void LowerCase() => ValidateBodyMatches(
         "x = vbLowerCase",
-        "x = VbStrConv.LowerCase;");
+        "x = Microsoft.VisualBasic.VbStrConv.LowerCase;");
 
     // ── Date format — DateFormat enum ─────────────────────────────────────────
 
     [TestMethod]
     public void LongDate() => ValidateBodyMatches(
         "x = vbLongDate",
-        "x = DateFormat.LongDate;");
+        "x = Microsoft.VisualBasic.DateFormat.LongDate;");
 
     [TestMethod]
     public void ShortDate() => ValidateBodyMatches(
         "x = vbShortDate",
-        "x = DateFormat.ShortDate;");
+        "x = Microsoft.VisualBasic.DateFormat.ShortDate;");
 
     // ── File attributes — FileAttribute enum ─────────────────────────────────
 
     [TestMethod]
     public void ReadOnly() => ValidateBodyMatches(
         "x = vbReadOnly",
-        "x = FileAttribute.ReadOnly;");
+        "x = Microsoft.VisualBasic.FileAttribute.ReadOnly;");
 
     [TestMethod]
     public void Hidden() => ValidateBodyMatches(
         "x = vbHidden",
-        "x = FileAttribute.Hidden;");
+        "x = Microsoft.VisualBasic.FileAttribute.Hidden;");
 
     [TestMethod]
     public void Archive() => ValidateBodyMatches(
         "x = vbArchive",
-        "x = FileAttribute.Archive;");
+        "x = Microsoft.VisualBasic.FileAttribute.Archive;");
 
     // ── Shell window style — AppWinStyle enum ────────────────────────────────
 
     [TestMethod]
     public void Hide() => ValidateBodyMatches(
         "x = vbHide",
-        "x = AppWinStyle.Hide;");
+        "x = Microsoft.VisualBasic.AppWinStyle.Hide;");
 
     [TestMethod]
     public void NormalFocus() => ValidateBodyMatches(
         "x = vbNormalFocus",
-        "x = AppWinStyle.NormalFocus;");
+        "x = Microsoft.VisualBasic.AppWinStyle.NormalFocus;");
 
     // ── VarType — integer literals (VariantType enum names differ from VB6) ──
 

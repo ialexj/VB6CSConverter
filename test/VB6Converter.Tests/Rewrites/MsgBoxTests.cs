@@ -16,7 +16,7 @@ namespace VB6Converter.Tests;
             MsgBox "This is a test!", vbOkOnly + vbInformation, "Cópia Periódica"
             """,
             """
-            MessageBox.Show("This is a test!", "Cópia Periódica", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MsgBox("This is a test!", vbOkOnly + vbInformation, "Cópia Periódica");
             """);
 
         [TestMethod]
@@ -25,7 +25,7 @@ namespace VB6Converter.Tests;
             x = Replace$(s, "a", "b")
             """,
             """
-            x = Strings.Replace((string)s, "a", "b");
+            x = Microsoft.VisualBasic.Strings.Replace((string)s, "a", "b");
             """
         );
 
@@ -37,7 +37,7 @@ namespace VB6Converter.Tests;
             End Function
             """,
             """
-            public static dynamic SqlStr(string s) => "'" + Strings.Replace((string)s, "'", "''") + "'";
+            public static dynamic SqlStr(string s) => "'" + Microsoft.VisualBasic.Strings.Replace((string)s, "'", "''") + "'";
             """);
 
         [TestMethod]

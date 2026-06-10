@@ -23,9 +23,8 @@ public class VBLiteralRewriter : LoggedRewriter
     static MemberAccessExpressionSyntax EnumMember(string typeName, string memberName)
         => MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName(typeName),
-                IdentifierName(memberName))
-            .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "Microsoft.VisualBasic"));
+                IdentifierName($"Microsoft.VisualBasic.{typeName}"),
+                IdentifierName(memberName));
 
     static readonly Dictionary<string, ExpressionSyntax> _literals = new(StringComparer.InvariantCultureIgnoreCase) {
         // String / char constants

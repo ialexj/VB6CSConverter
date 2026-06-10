@@ -52,6 +52,7 @@ public class VBCoreRewriter : LoggedRewriter
         ["CStr"] = node => ConvertToMemberAccess(node, "Convert.ToString"),
         ["CLng"] = node => ConvertToMemberAccess(node, "Convert.ToInt32"),
         ["CDbl"] = node => ConvertToMemberAccess(node, "Convert.ToDouble"),
+        ["Val"] = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Conversion.Val"),
 
         ["IIf"] = ConvertIIf,
 

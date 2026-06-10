@@ -46,15 +46,6 @@ public static class CompilationUnitConverter
     public static CompilationUnitSyntax GetGlobalStaticUsings()
     {
         var common = new string[] {
-            "Microsoft.VisualBasic.FileSystem",
-            "Microsoft.VisualBasic.Strings",
-            "Microsoft.VisualBasic.VBMath",
-            "Microsoft.VisualBasic.Constants",
-            "Microsoft.VisualBasic.ControlChars",
-            "Microsoft.VisualBasic.Conversion",
-            "Microsoft.VisualBasic.DateAndTime",
-            "Microsoft.VisualBasic.Interaction",
-            "Microsoft.VisualBasic.Information",
             "VB6",
         };
 
