@@ -2,7 +2,7 @@
 description: "Compare a converted C# method against its VB6 origin and report semantic drift or suggest corrections"
 argument-hint: "Method name and .cs file, e.g. Customers.Save in src/Customers.cs"
 agent: "agent"
-tools: [search, editFiles]
+tools: [search, edit/editFiles]
 ---
 
 Compare the C# implementation of the method specified in the chat message against its VB6 original to detect semantic drift.

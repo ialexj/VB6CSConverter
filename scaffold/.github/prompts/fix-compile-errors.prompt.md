@@ -2,7 +2,7 @@
 description: "Fix all Roslyn compile errors in a converted C# file, using the original VB6 source as the semantic reference"
 argument-hint: "Relative path to the .cs file to fix, e.g. src/Customers.cs"
 agent: "agent"
-tools: [search, editFiles, runCommands]
+tools: [search, edit/editFiles, execute/getTerminalOutput,execute/runInTerminal,read/terminalLastCommand,read/terminalSelection]
 ---
 
 Fix all compile errors in the C# file whose path is provided in the chat message.
