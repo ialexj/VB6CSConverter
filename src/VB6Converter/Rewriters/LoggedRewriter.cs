@@ -15,6 +15,12 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
         _file = file;
     }
 
+    /// <summary>
+    /// The sequence number for this rewriter run.
+    /// Set when the rewriter is instantiated to provide unique identification across iterations.
+    /// </summary>
+    public long RewriterSequence { get; set; }
+
     public Action<int, int> Progress { get; set; }
 
     [return: NotNullIfNotNull(nameof(node))]
@@ -29,10 +35,12 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
 
     protected SyntaxNode Rewrite<T>(T node, Func<T, SyntaxNode> change, Func<SyntaxNode, object> value = null) where T : SyntaxNode
     {
-        var file = Path.GetFileNameWithoutExtension(node.SyntaxTree.FilePath);
-        var log = Log.GetRewritingLogger(node.SyntaxTree.FilePath)
+        string path = _file ?? node.SyntaxTree.FilePath;
+        var file = Path.GetFileNameWithoutExtension(path);
+        var log = Log.GetRewritingLogger(path)
             .ForContext("file", file)
             .ForContext("rewriter", GetType().Name)
+            .ForContext("sequence", RewriterSequence)
             .ForContext("node", node);
 
         try {
@@ -51,6 +59,7 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
 
                 if (!RoslynHelpers.IsEquivalentSyntax(oldValue, newValue)) {
                     log.Verbose("{json:l}", JsonSerializer.Serialize(new {
+                        sequence = RewriterSequence,
                         rewriter = GetType().Name,
                         file = file,
                         line = node.GetLocation()?.GetLineSpan().StartLinePosition.Line,

@@ -10,7 +10,7 @@ using static VB6Converter.RoslynHelpers;
 
 namespace VB6Converter.Rewriters;
 
-public class VBCoreRewriter : LoggedRewriter
+public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
 {
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
         => Rewrite(node, node => {
@@ -46,6 +46,7 @@ public class VBCoreRewriter : LoggedRewriter
         ["Day"] = ConvertToMemberAccess,
 
         ["String"] = ConvertString,
+        ["Format"] = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Strings.Format"), node.ArgumentList),
         ["Len"] = ConvertLen,
         ["Left"] = ConvertLeft,
 

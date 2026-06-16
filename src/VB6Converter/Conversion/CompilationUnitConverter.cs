@@ -10,17 +10,17 @@ namespace VB6Converter.Conversion;
 
 public static class CompilationUnitConverter
 {
-    static readonly CSharpSyntaxRewriter[] rewriters = [
-        new VBLiteralRewriter(),
-        new VBCoreRewriter(),
+    static CSharpSyntaxRewriter[] CreateRewriters(string file) => [
+        new VBLiteralRewriter(file),
+        new VBCoreRewriter(file),
 
-        //new CursorRewriter(),
-        //new KeysRewriter(),
-        //new MsgBoxRewriter(),
-        //new CheckStateRewriter(),
-        new KeywordEscapeRewriter(),
+        //new CursorRewriter(file),
+        //new KeysRewriter(file),
+        //new MsgBoxRewriter(file),
+        //new CheckStateRewriter(file),
+        new KeywordEscapeRewriter(file),
 
-        UsingsRewriter.Default
+        new UsingsRewriter(file)
     ];
 
     public static CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string nsName, string className, bool isStatic, ConversionOptions options = null, string sourceDirectory = null, string outputDirectory = null, string sourceRelativePath = null)
@@ -36,7 +36,7 @@ public static class CompilationUnitConverter
 
         var cu = CompilationUnit(default, default, default, SingletonList<MemberDeclarationSyntax>(@namespace));
 
-        foreach (var rewriter in rewriters) {
+        foreach (var rewriter in CreateRewriters(sourceRelativePath)) {
             cu = (CompilationUnitSyntax)rewriter.Visit(cu);
         }
 

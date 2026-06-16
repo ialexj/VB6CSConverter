@@ -297,18 +297,24 @@ public class SyntheticMembersTests
         if (!File.Exists(path)) Assert.Inconclusive("synthetic_members.json not found in test output");
 
         var sets = SyntheticMembersLoader.Load(path);
-        var vbFormSet = sets.SingleOrDefault(set => set.Targets.Any(target =>
-            string.Equals(target, "VB.Form", StringComparison.OrdinalIgnoreCase)));
+        var vbFormSets = sets
+            .Where(set => set.Targets.Any(target =>
+                string.Equals(target, "VB.Form", StringComparison.OrdinalIgnoreCase)))
+            .ToList();
 
-        vbFormSet.Should().NotBeNull("the shipped synthetic members must include VB.Form overrides");
+        vbFormSets.Should().NotBeEmpty("the shipped synthetic members must include VB.Form overrides");
 
-        var show = vbFormSet!.Members.Single(member =>
-            string.Equals(member.Name, "Show", StringComparison.OrdinalIgnoreCase)
-            && member.Kind == LibraryMemberKind.Method);
+        var showOverrides = vbFormSets
+            .SelectMany(set => set.Members)
+            .Where(member => string.Equals(member.Name, "Show", StringComparison.OrdinalIgnoreCase)
+                && member.Kind == LibraryMemberKind.Method)
+            .ToList();
 
-        show.Parameters.Should().HaveCount(2);
-        show.Parameters.Should().OnlyContain(parameter => parameter.IsOptional,
-            "VB.Form.Show parameters must be optional so the stub generator emits defaults");
+        showOverrides.Should().NotBeEmpty("the shipped synthetic members must include at least one VB.Form.Show override");
+        showOverrides.Should().Contain(overrideMember =>
+            overrideMember.Parameters.Count == 2
+            && overrideMember.Parameters.All(parameter => parameter.IsOptional),
+            "VB.Form.Show must include an override where both parameters are optional so stubs emit defaults");
     }
 
     // ──────────────────────────────────────────────────────────────────────

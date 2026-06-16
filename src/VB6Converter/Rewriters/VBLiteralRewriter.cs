@@ -8,7 +8,7 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace VB6Converter.Rewriters;
 
-public class VBLiteralRewriter : LoggedRewriter
+public class VBLiteralRewriter(string file = null) : LoggedRewriter(file)
 {
     static LiteralExpressionSyntax Lit(object value) => (value switch {
         string s => LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(s)),

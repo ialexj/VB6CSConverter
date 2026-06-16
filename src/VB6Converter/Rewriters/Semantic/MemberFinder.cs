@@ -2,10 +2,15 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace VB6Converter.Rewriters.Semantic;
 
+/// <summary>
+/// Attempts to find the correct casing for member accesses and named arguments based on the semantic model.
+/// </summary>
+/// <param name="sem">The semantic model used to retrieve type and symbol information.</param>
 public class MemberFinder(SemanticModel sem) : LoggedRewriter
 {
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
@@ -46,8 +51,14 @@ public class MemberFinder(SemanticModel sem) : LoggedRewriter
 
             var passedName = node.NameColon.Name.Identifier.Text;
             var param = method.Parameters.FirstOrDefault(p => string.Equals(p.Name, passedName, StringComparison.OrdinalIgnoreCase));
-            if (param is not null && param.Name != passedName)
-                return base.VisitArgument(node.WithNameColon(node.NameColon.WithName(SyntaxFactory.IdentifierName(param.Name))));
+            if (param is not null && param.Name != passedName) {
+                // Visit children on the original node first to keep them within the semantic model's
+                // syntax tree. Applying the name-colon change to a pre-visited floating node causes
+                // "Syntax node is not within syntax tree" when the rewriter later calls GetTypeInfo
+                // on the adopted children.
+                var visited = (ArgumentSyntax)base.VisitArgument(node);
+                return visited.WithNameColon(visited.NameColon!.WithName(SyntaxFactory.IdentifierName(param.Name)));
+            }
 
             return base.VisitArgument(node);
         });

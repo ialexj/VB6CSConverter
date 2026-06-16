@@ -22,6 +22,7 @@ public static class Program
         public string? SyntheticMemberPath { get; set; }
         public string[] ExcludeReferences { get; set; } = [];
         public bool UseObject { get; set; }
+        public bool StrictParameters { get; set; }
     }
 
     public static async Task<int> Main(string[] args)
@@ -53,6 +54,9 @@ public static class Program
         var useObjectOpt = new Option<bool>("--use-object", []) {
             Description = "Emit 'object' instead of 'dynamic' for untyped, Object, and Variant COM members.",
         };
+        var strictParametersOpt = new Option<bool>("--strict-parameters", []) {
+            Description = "Emit required parameters without optional defaults unless COM metadata already requires optional semantics.",
+        };
 
         var rootCommand = new RootCommand("Generate C# stubs for COM type libraries referenced by a VB6 project.");
         rootCommand.Add(projectOpt);
@@ -63,6 +67,7 @@ public static class Program
         rootCommand.Add(syntheticPathOpt);
         rootCommand.Add(excludeRefsOpt);
         rootCommand.Add(useObjectOpt);
+        rootCommand.Add(strictParametersOpt);
 
         rootCommand.SetAction(async (ParseResult result) => await Run(new CommandLineOptions {
             Project = result.GetValue(projectOpt),
@@ -73,6 +78,7 @@ public static class Program
             SyntheticMemberPath = result.GetValue(syntheticPathOpt),
             ExcludeReferences = result.GetValue(excludeRefsOpt) ?? [],
             UseObject = result.GetValue(useObjectOpt),
+            StrictParameters = result.GetValue(strictParametersOpt),
         }));
 
         return await rootCommand.Parse(args).InvokeAsync();
@@ -112,7 +118,7 @@ public static class Program
             return 0;
         }
 
-        bool anyFailed = await GenerateStubsWindows(libFilters, options.OutputDir, options.Arch, !options.IncludeComPlumbing, syntheticSets, options.ExcludeReferences, !options.UseObject);
+        bool anyFailed = await GenerateStubsWindows(libFilters, options.OutputDir, options.Arch, !options.IncludeComPlumbing, syntheticSets, options.ExcludeReferences, !options.UseObject, options.StrictParameters);
         return anyFailed ? 1 : 0;
     }
 
@@ -124,7 +130,8 @@ public static class Program
         bool filterComPlumbing,
         IReadOnlyList<SyntheticMemberSet> syntheticSets,
         IEnumerable<string> excludeReferences,
-        bool useDynamic = true)
+        bool useDynamic = true,
+        bool strictParameters = false)
     {
         AnsiConsole.MarkupLine("[yellow]Querying COM type libraries...[/]");
 
@@ -165,14 +172,14 @@ public static class Program
             if (library.Types == null || library.Types.Count == 0) continue;
             resolved++;
 
-            var written = ReferenceStubGenerator.Generate(library, outputDir, filterComPlumbing, useDynamic);
+            var written = ReferenceStubGenerator.Generate(library, outputDir, filterComPlumbing, useDynamic, strictParameters);
             generated += written.Count;
 
             reportLines.Add($"OK          {library.Name} - {library.Guid} - {library.Path}  ({written.Count} types)");
             AnsiConsole.WriteLine($"  {library.Name}: {written.Count} stubs");
         }
 
-        ReferenceStubGenerator.GenerateAppObjects(merged, outputDir, useDynamic);
+        ReferenceStubGenerator.GenerateAppObjects(merged, outputDir, useDynamic, strictParameters);
 
         var allAliases = merged.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
         var referenceUsingsPath = ReferenceUsingsGenerator.Generate(merged, outputDir, allAliases);

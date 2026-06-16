@@ -35,7 +35,6 @@ public static class Program
         public string[] PreferredNamespaces { get; set; } = [];
         public string[] ExcludeReferences { get; set; } = [];
         public bool Pause { get; set; }
-        public int SplitLines { get; set; } = 5000;
     }
 
     public static Task<int> Main(string[] args)
@@ -128,7 +127,6 @@ public static class Program
 
         var vbProject = VisualBasicProject.Load(options.Project);
 
-
         // Open/Create C# project
         using var ws = new ConversionWorkspace();
         var projectBasePath = Path.GetDirectoryName(Path.GetFullPath(options.Project)) ?? Directory.GetCurrentDirectory();
@@ -190,40 +188,6 @@ public static class Program
                         }));
                     ws.AddToActiveTargets(newDesignerTargets);
                 }
-
-                // Split files that exceed the line budget into numbered partial classes
-                if (options.SplitLines > 0) {
-                    foreach (var t in targetsThatNeedTransform) {
-                        if (!File.Exists(t.OutputPath)) continue;
-
-                        var content = await File.ReadAllTextAsync(t.OutputPath);
-                        var cu = CSharpSyntaxTree.ParseText(content, path: t.OutputPath).GetCompilationUnitRoot();
-                        var chunks = LargeFileSplitter.Split(cu, options.SplitLines);
-                        if (chunks.Count <= 1) continue;
-
-                        var baseName = Path.GetFileNameWithoutExtension(t.OutputPath);
-                        var dir = Path.GetDirectoryName(t.OutputPath)!;
-
-                        // Remove numbered files left over from a previous run
-                        foreach (var f in Directory.GetFiles(dir, baseName + "*.cs")) {
-                            var stem = Path.GetFileNameWithoutExtension(f);
-                            if (stem.Length > baseName.Length && stem[baseName.Length..].All(char.IsDigit))
-                                File.Delete(f);
-                        }
-
-                        // Write each chunk and register it as a new conversion target
-                        var splitTargets = new List<ConversionTarget>(chunks.Count);
-                        for (int i = 0; i < chunks.Count; i++) {
-                            var name = baseName + (i + 1);
-                            var path = Path.Combine(dir, name + ".cs");
-                            await File.WriteAllTextAsync(path, chunks[i].NormalizeWhitespace().ToFullString());
-                            splitTargets.Add(ConversionTarget.CreateForSplit(name, path));
-                        }
-
-                        File.Delete(t.OutputPath);
-                        ws.ReplaceWithSplitParts(t, splitTargets);
-                    }
-                }
             }
         }
 
@@ -231,6 +195,9 @@ public static class Program
         // so we can build a semantic model and perform global rewrites.
         if (!options.SkipFixup) {
             AnsiConsole.MarkupLine("[yellow]Running fixups...[/]");
+
+            // Reset the rewriter sequence counter for this fixup phase
+            RewriterSequenceContext.Reset();
 
             bool hasChanges;
             int count = 0;
@@ -252,12 +219,21 @@ public static class Program
                             compilation = await CollectDiagnostics(ws, options.OutputDir);
                             PauseIfRequested(options.Pause);
                         }
+                        else if (!compile && hasRewriterChanges) {
+                            // For compile=false rewriters, CollectDiagnostics won't reload the project.
+                            // Without a reload, parallel SaveDocument writes leave Project pointing at
+                            // only the last writer's snapshot — all other files look stale and re-apply
+                            // the same rewrites on every inner iteration without converging.
+                            await ws.ReloadProject();
+                        }
 
                         hasRewriterChanges = await RunOperations(title, ws.ActiveTargets,
                             async (t, ctx, cancel) => await ws.WithCompilationUnit(t, cancel, async cu => {
                                 var sm = compilation?.GetSemanticModel(cu.SyntaxTree, true);
 
                                 var r = await rewriter(t, sm);
+                                // Assign the current sequence to this rewriter run
+                                r.RewriterSequence = RewriterSequenceContext.GetNextSequence();
                                 r.Progress = (current, total) => {
                                     ctx.IsIndeterminate = false;
                                     ctx.MaxValue = total;

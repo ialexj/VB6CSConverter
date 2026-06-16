@@ -166,6 +166,61 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
+    public void Generate_MethodWithRequiredParameters_DefaultMode_EmitsDefaultsForAllParameters()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("Worker", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("DoWork", LibraryMemberKind.Method, "void", [
+                        new("count", "int", IsOptional: false, IsOut: false),
+                        new("name", "string", IsOptional: false, IsOut: false),
+                    ]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("void DoWork(int count = default, string name = default)");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void Generate_MethodWithRequiredParameters_StrictMode_DoesNotEmitDefaults()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("Worker", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("DoWork", LibraryMemberKind.Method, "void", [
+                        new("count", "int", IsOptional: false, IsOut: false),
+                        new("name", "string", IsOptional: false, IsOut: false),
+                    ]),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir, strictParameters: true);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("void DoWork(int count, string name)");
+            source.Should().NotContain("void DoWork(int count = default, string name = default)");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void Generate_Interface_EmitsInterfaceDeclaration()
     {
         var library = MakeLibrary("TestLib",

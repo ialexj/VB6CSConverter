@@ -14,8 +14,8 @@ namespace VB6Converter.Rewriters;
 public static class DesignerFileSplitter
 {
     /// <summary>
-    /// Splits <paramref name="cu"/> into a main CU (code-behind) and an optional designer CU.
-    /// Returns <c>(cu, null)</c> if no designer section is found.
+    /// Splits <paramref name="cu"/> into a main CU (code-behind) and a designer CU.
+    /// Returns <c>(cu, null)</c> when no explicit designer section is found.
     /// </summary>
     public static (CompilationUnitSyntax Main, CompilationUnitSyntax Designer) Split(CompilationUnitSyntax cu)
     {
@@ -34,22 +34,27 @@ public static class DesignerFileSplitter
             }
         }
 
-        if (startIdx < 0) return (cu, null);
-
         // Designer section ends at the InitializeComponent method (always the last designer member)
         int endIdx = -1;
-        for (int i = cls.Members.Count - 1; i >= startIdx; i--) {
-            if (cls.Members[i] is MethodDeclarationSyntax method
-                && method.Identifier.Text == "InitializeComponent") {
-                endIdx = i;
-                break;
+        if (startIdx >= 0) {
+            for (int i = cls.Members.Count - 1; i >= startIdx; i--) {
+                if (cls.Members[i] is MethodDeclarationSyntax method
+                    && method.Identifier.Text == "InitializeComponent") {
+                    endIdx = i;
+                    break;
+                }
             }
         }
 
-        if (endIdx < 0) return (cu, null);
+        var hasDesignerSection = startIdx >= 0 && endIdx >= startIdx;
+        if (!hasDesignerSection) return (cu, null);
 
-        var designerMembers = cls.Members.Skip(startIdx).Take(endIdx - startIdx + 1).ToArray();
-        var mainMembers = cls.Members.Take(startIdx).Concat(cls.Members.Skip(endIdx + 1)).ToArray();
+        var designerMembers = hasDesignerSection
+            ? cls.Members.Skip(startIdx).Take(endIdx - startIdx + 1).ToArray()
+            : [];
+        var mainMembers = hasDesignerSection
+            ? cls.Members.Take(startIdx).Concat(cls.Members.Skip(endIdx + 1)).ToArray()
+            : cls.Members.ToArray();
 
         // Build main class: remove designer members, remove BaseList.
         // After re-parsing, #endregion lives in CloseBraceToken.LeadingTrivia — strip it.
@@ -66,9 +71,11 @@ public static class DesignerFileSplitter
 
         // Build designer class: strip #region from first member's leading trivia
         var cleanedMembers = designerMembers.ToArray();
-        cleanedMembers[0] = cleanedMembers[0].WithLeadingTrivia(
-            cleanedMembers[0].GetLeadingTrivia()
-                .Where(t => !t.IsKind(SyntaxKind.RegionDirectiveTrivia)));
+        if (cleanedMembers.Length > 0) {
+            cleanedMembers[0] = cleanedMembers[0].WithLeadingTrivia(
+                cleanedMembers[0].GetLeadingTrivia()
+                    .Where(t => !t.IsKind(SyntaxKind.RegionDirectiveTrivia)));
+        }
 
         var designerClass = ClassDeclaration(cls.Identifier)
             .WithModifiers(cls.Modifiers)

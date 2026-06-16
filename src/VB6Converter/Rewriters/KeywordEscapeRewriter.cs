@@ -9,7 +9,7 @@ namespace VB6Converter.Rewriters;
 /// Prefixes parameter names and variable declarators that collide with C# reserved
 /// keywords with <c>@</c> (e.g. <c>default</c> → <c>@default</c>).
 /// </summary>
-public class KeywordEscapeRewriter : LoggedRewriter
+public class KeywordEscapeRewriter(string file = null) : LoggedRewriter(file)
 {
     public static readonly KeywordEscapeRewriter Default = new();
 

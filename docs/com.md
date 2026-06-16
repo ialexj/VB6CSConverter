@@ -735,10 +735,17 @@ C# stub:
 
 #### Current behaviour
 
-`BuildParameters` walks the list and tracks whether an optional parameter has been seen.
-Any parameter that is either `IsOptional` itself, or that follows an optional parameter
-(`forceOptional`), is emitted as a plain value type with `= default` — the `ref` modifier is
-dropped in both cases.
+By default, COM stub method parameters are emitted as optional whenever C# permits it:
+
+- Parameters get `= default`.
+- `ref` is dropped when needed because C# disallows `ref` optional parameters.
+- `params` (`ParamArray`) parameters stay required because C# disallows defaults on `params`.
+
+`BuildParameters` still tracks trailing-optional rules in strict mode so C# parameter ordering
+remains valid when optional COM metadata appears.
+
+Use `--strict-parameters` with ComStubGenerator to disable default all-optional emission and
+fall back to metadata-driven optionality (plus required trailing-parameter compatibility fixes).
 
 The generated stubs compile and call sites that omit the argument work as expected.  Call
 sites that *do* pass the argument no longer need `ref`, which is a semantic difference from

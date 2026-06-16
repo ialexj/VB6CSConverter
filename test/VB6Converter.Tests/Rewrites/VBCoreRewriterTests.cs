@@ -110,6 +110,11 @@ public class VBCoreRewriterTests
         "y = Convert.ToDecimal(x);");
 
     [TestMethod]
+    public void Format() => ValidateBodyMatches(
+        "y = Format(x, \"Standard\")",
+        "y = Microsoft.VisualBasic.Strings.Format(x, \"Standard\");");
+
+    [TestMethod]
     public void Val() => ValidateBodyMatches(
         "y = Val(x)",
         "y = Microsoft.VisualBasic.Conversion.Val(x);");
