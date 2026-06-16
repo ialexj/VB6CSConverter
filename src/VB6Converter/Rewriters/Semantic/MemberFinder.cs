@@ -33,6 +33,29 @@ public class MemberFinder(SemanticModel sem) : LoggedRewriter
                 }
             }
 
+            // Handle pseudo-properties backed by GetX/SetX method pairs (e.g. GetValue/SetValue).
+            // VB6 code may spell the property with wrong casing (e.g. obj.value). No direct or
+            // case-insensitive member is found above, so look for a "Get" + name method.
+            // - Getter call site (InvocationExpressionSyntax parent): rename to GetX so the call
+            //   resolves directly.
+            // - Setter element-access site (ElementAccessExpressionSyntax parent): rename to the
+            //   canonical property name (strip the "Get" prefix) so that ParameterizedPropertyRewriter
+            //   can later find SetX via "Set" + canonicalName.
+            if (member is null) {
+                string getterCandidate = "Get" + name;
+                var getter = type.GetBaseTypesAndThis()
+                    .SelectMany(t => t.GetMembers())
+                    .OfType<IMethodSymbol>()
+                    .FirstOrDefault(m => string.Equals(m.Name, getterCandidate, StringComparison.OrdinalIgnoreCase));
+
+                if (getter is not null) {
+                    string newName = node.Parent is InvocationExpressionSyntax
+                        ? getter.Name               // obj.value(k)  → obj.GetValue(k)
+                        : getter.Name.Substring(3); // obj.value[k]  → obj.Value[k]  (for SetValue later)
+                    return node.WithName(SyntaxFactory.IdentifierName(newName));
+                }
+            }
+
             return node; // don't recurse
         });
 

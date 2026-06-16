@@ -24,6 +24,21 @@ public class MemberFinderTests
         => CheckMember(
             "class T { void RegistaOperacao(string id, int clienteID) { } void M() { RegistaOperacao(\"Clientes\", 1234); } }");
 
+    [TestMethod]
+    public void CorrectsGetterInvocationForGetSetPair()
+        // obj.item(k) → obj.GetItem(k) when the type exposes GetItem(int) but no "item" member.
+        => CheckMember(
+            "class XArr { public object GetItem(int k) => null; } class T { XArr obj = new(); void M() { var x = obj.item(0); } }",
+            "class XArr { public object GetItem(int k) => null; } class T { XArr obj = new(); void M() { var x = obj.GetItem(0); } }");
+
+    [TestMethod]
+    public void CorrectsSetterElementAccessForGetSetPair()
+        // obj.item[k] = v → obj.Item[k] = v (canonical name without "Get" prefix) so that
+        // ParameterizedPropertyRewriter can resolve SetItem via "Set" + "Item".
+        => CheckMember(
+            "class XArr { public object GetItem(int k) => null; public void SetItem(int k, object v) { } } class T { XArr obj = new(); void M() { obj.item[0] = null; } }",
+            "class XArr { public object GetItem(int k) => null; public void SetItem(int k, object v) { } } class T { XArr obj = new(); void M() { obj.Item[0] = null; } }");
+
     private static void CheckMember(string cs, string? expected = null)
     {
         var cu   = SyntaxFactory.ParseCompilationUnit(cs);
