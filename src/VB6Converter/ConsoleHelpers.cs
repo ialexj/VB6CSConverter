@@ -42,6 +42,7 @@ public static class ConsoleHelpers
             });
 
     public static async Task<bool> RunOperations(
+        ConversionWorkspace ws,
         string oper, IReadOnlyCollection<ConversionTarget> targets,
         Func<ConversionTarget, ProgressTask, CancellationToken, ValueTask<bool>> task)
     {
@@ -61,6 +62,7 @@ public static class ConsoleHelpers
         AnsiConsole.WriteLine($"{oper}");
         if (changed > 0) {
             AnsiConsole.MarkupLineInterpolated($"[cyan]  {changed} files changed.[/]");
+            await ws.ReloadProject();
         }
         else {
             AnsiConsole.WriteLine("  0 files changed.");

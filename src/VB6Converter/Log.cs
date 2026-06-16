@@ -42,6 +42,8 @@ internal static class Log
         if (string.IsNullOrEmpty(csFilePath))
             return Rewriting;
 
+        System.Diagnostics.Trace.WriteLine($"Creating logger for {csFilePath}");
+
         return _rewritingLoggers.GetOrAdd(csFilePath, path => new LoggerConfiguration()
             .MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose)
             .WriteTo.File(path + ".rewrite.log", outputTemplate: "{Message:lj}{NewLine}")

@@ -152,7 +152,7 @@ public static class Program
                 .ToArray();
 
             if (targetsThatNeedTransform.Length > 0) {
-                await RunOperations("Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
+                await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
                         var sourceRelativePath = Path.GetRelativePath(projectBasePath, t.File.Path).Replace('\\', '/');
                         var conversion = VB6ToCSharpConversion.ConvertFile(
@@ -163,6 +163,11 @@ public static class Program
                         return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
                     }));
 
+                // Reload from disk before splitting: parallel saves during conversion leave
+                // the in-memory Project stale (last-writer wins), so documents converted by
+                // earlier threads are not found in the workspace and would be re-created empty.
+                await ws.ReloadProject();
+
                 // Split Form/Control designer code into separate *.designer.cs partial classes
                 var formControlTargets = targetsThatNeedTransform
                     .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
@@ -170,7 +175,7 @@ public static class Program
 
                 if (formControlTargets.Length > 0) {
                     var newDesignerTargets = new ConcurrentBag<ConversionTarget>();
-                    await RunOperations("Splitting designer files", formControlTargets, (t, ctx, cancel) =>
+                    await RunOperations(ws, "Splitting designer files", formControlTargets, (t, ctx, cancel) =>
                         ws.WithCompilationUnit(t, cancel, cu => {
                             var (mainCu, designerCu) = DesignerFileSplitter.Split(cu);
                             if (designerCu is not null) {
@@ -213,15 +218,8 @@ public static class Program
                             compilation = await CollectDiagnostics(ws, options.OutputDir);
                             PauseIfRequested(options.Pause);
                         }
-                        else if (!compile && hasRewriterChanges) {
-                            // For compile=false rewriters, CollectDiagnostics won't reload the project.
-                            // Without a reload, parallel SaveDocument writes leave Project pointing at
-                            // only the last writer's snapshot — all other files look stale and re-apply
-                            // the same rewrites on every inner iteration without converging.
-                            await ws.ReloadProject();
-                        }
 
-                        hasRewriterChanges = await RunOperations(title, ws.ActiveTargets,
+                        hasRewriterChanges = await RunOperations(ws, title, ws.ActiveTargets,
                             async (t, ctx, cancel) => await ws.WithCompilationUnit(t, cancel, async cu => {
                                 var sm = compilation?.GetSemanticModel(cu.SyntaxTree, true);
 
