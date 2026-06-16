@@ -135,7 +135,9 @@ public class TypeDeclarationTests : ReferenceStubGeneratorTestBase
             written.Should().ContainSingle();
             var source = File.ReadAllText(written[0]);
             // IDispatch is stripped from the base list by ComPlumbingFilterRewriter (default behaviour).
-            source.Should().Contain("public class Animation : IAnimation");
+            // IComStub marker is prepended before other base interfaces.
+            source.Should().Contain("IComStub");
+            source.Should().Contain("IAnimation");
             source.Should().NotContain("IDispatch");
             source.Should().Contain("NotImplementedException");
         }

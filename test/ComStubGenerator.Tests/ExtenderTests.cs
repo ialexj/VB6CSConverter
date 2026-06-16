@@ -103,4 +103,177 @@ public class ExtenderTests : ReferenceStubGeneratorTestBase
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
         }
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // IControlStub<T> base interface
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_ControlClass_ImplementsIControlStub()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("MyCtrl", LibraryTypeKind.Class, IsControl: true));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("IControlStub<MyCtrl>",
+                "control class must implement IControlStub<TSelf>");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_NonControlClass_DoesNotImplementIControlStub()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("MyClass", LibraryTypeKind.Class));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().NotContain("IControlStub",
+                "non-control class must not implement IControlStub");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_OleControlClass_ImplementsBothIOleStubAndIControlStub()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("MyOleCtrl", LibraryTypeKind.Class,
+                IsControl: true, IsOleObject: true));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("IOleStub",
+                "OLE control class must implement IOleStub");
+            source.Should().Contain("IControlStub<MyOleCtrl>",
+                "OLE control class must also implement IControlStub<TSelf>");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ExtenderClass_GeneratesExtensionFile()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("VBControlExtender", LibraryTypeKind.Class,
+                IsControl: true,
+                Members: [
+                    new ComQueryMember("Caption", LibraryMemberKind.PropertyGet, "string", []),
+                    new ComQueryMember("Caption", LibraryMemberKind.PropertySet, "void", [
+                        new ComQueryParam("value", "string", false, false),
+                    ]),
+                    new ComQueryMember("Refresh", LibraryMemberKind.Method, "void", []),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            written.Should().Contain(p => p.EndsWith("VBControlExtender.cs", StringComparison.Ordinal));
+            written.Should().Contain(p => p.EndsWith("VBControlExtenderExtensions.cs", StringComparison.Ordinal));
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ExtenderClass_ExtensionTargetsIControlStubObject()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("VBControlExtender", LibraryTypeKind.Class,
+                Members: [
+                    new ComQueryMember("DoWork", LibraryMemberKind.Method, "void", []),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var extensionPath = written.First(p => p.EndsWith("VBControlExtenderExtensions.cs", StringComparison.Ordinal));
+            var source = File.ReadAllText(extensionPath);
+
+            source.Should().Contain("extension(IControlStub<object> self)");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ExtenderClass_ExtensionContainsAllMemberKinds()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("VBControlExtender", LibraryTypeKind.Class,
+                IsControl: true,
+                Members: [
+                    new ComQueryMember("Caption", LibraryMemberKind.PropertyGet, "string", []),
+                    new ComQueryMember("Caption", LibraryMemberKind.PropertySet, "void", [
+                        new ComQueryParam("value", "string", false, false),
+                    ]),
+                    new ComQueryMember("ToolTipText", LibraryMemberKind.PropertyGet, "string", []),
+                    new ComQueryMember("ToolTipText", LibraryMemberKind.PropertySet, "void", [
+                        new ComQueryParam("value", "string", false, false),
+                    ]),
+                    new ComQueryMember("Move", LibraryMemberKind.Method, "void", [
+                        new ComQueryParam("x", "int", false, false),
+                        new ComQueryParam("y", "int", false, false),
+                    ]),
+                    new ComQueryMember("Item", LibraryMemberKind.PropertyGet, "object", [
+                        new ComQueryParam("index", "object", false, false),
+                    ], IsDefault: true),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var extensionPath = written.First(p => p.EndsWith("VBControlExtenderExtensions.cs", StringComparison.Ordinal));
+            var source = File.ReadAllText(extensionPath);
+
+            source.Should().Contain("public string Caption");
+            source.Should().Contain("public void Move(");
+            source.Should().Contain("public dynamic this[dynamic index]");
+            source.Should().Contain("public int Left", "injected extender property should be present on extension block as well");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_NonExtenderClass_DoesNotGenerateExtensionFile()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("VBControl", LibraryTypeKind.Class,
+                Members: [
+                    new ComQueryMember("DoWork", LibraryMemberKind.Method, "void", []),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            written.Should().ContainSingle();
+            written[0].Should().EndWith("VBControl.cs");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
 }

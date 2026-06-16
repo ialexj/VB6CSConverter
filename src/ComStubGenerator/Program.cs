@@ -181,6 +181,8 @@ public static class Program
 
         ReferenceStubGenerator.GenerateAppObjects(merged, outputDir, useDynamic, strictParameters);
 
+        ReferenceStubGenerator.GenerateMarkerInterfaces(outputDir);
+
         var allAliases = merged.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
         var referenceUsingsPath = ReferenceUsingsGenerator.Generate(merged, outputDir, allAliases);
 

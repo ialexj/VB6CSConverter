@@ -77,10 +77,6 @@ public static class Program
         var pauseOpt = new Option<bool>("--pause", []) {
             Description = "Pause for user input after each diagnostics collection. Press any key to continue, Ctrl-C to stop.",
         };
-        var splitLinesOpt = new Option<int>("--split-lines", []) {
-            Description = "Maximum lines per generated .cs file before splitting into numbered partial classes (0 = disabled). Designer files are never split.",
-            DefaultValueFactory = _ => 5000,
-        };
 
         var rootCommand = new RootCommand("Convert VB6 projects to C#.") {
             projectOpt,
@@ -94,8 +90,7 @@ public static class Program
             skipDiagnosticsOpt,
             preferNamespacesOpt,
             excludeRefsOpt,
-            pauseOpt,
-            splitLinesOpt
+            pauseOpt
         };
 
         rootCommand.SetAction(async (ParseResult result) => {
@@ -111,8 +106,7 @@ public static class Program
                 SkipDiagnostics = result.GetValue(skipDiagnosticsOpt),
                 PreferredNamespaces = result.GetValue(preferNamespacesOpt) ?? [],
                 ExcludeReferences = result.GetValue(excludeRefsOpt) ?? [],
-                Pause = result.GetValue(pauseOpt),
-                SplitLines = result.GetValue(splitLinesOpt),
+                Pause = result.GetValue(pauseOpt)
             });
             return 0;
         });

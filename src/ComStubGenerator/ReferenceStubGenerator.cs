@@ -63,6 +63,14 @@ public static class ReferenceStubGenerator
             string filePath = Path.Combine(libDir, $"{emittedTypeName}.cs");
             File.WriteAllText(filePath, source);
             written.Add(filePath);
+
+            if (type.Kind == LibraryTypeKind.Class &&
+                type.Name.Contains("Extender", StringComparison.OrdinalIgnoreCase)) {
+                string extensionSource = GenerateExtenderExtensionSource(library, emittedTypeName, source);
+                string extensionPath = Path.Combine(libDir, $"{emittedTypeName}Extensions.cs");
+                File.WriteAllText(extensionPath, extensionSource);
+                written.Add(extensionPath);
+            }
         }
 
         return written;
@@ -298,6 +306,76 @@ public static class ReferenceStubGenerator
         return filePath;
     }
 
+    /// <summary>
+    /// Writes <c>_ComStubInterfaces.cs</c> to <paramref name="referenceRoot"/> containing
+    /// the marker interfaces used as extension targets on all generated stubs:
+    /// <list type="bullet">
+    ///   <item><c>IComStub</c> — base marker for all COM stubs.</item>
+    ///   <item><c>IOleStub : IComStub</c> — marker for coclasses that implement IOleObject.</item>
+    ///   <item><c>IControlStub&lt;T&gt; : IComStub</c> — marker for ActiveX control stubs;
+    ///         exposes a default <c>T Object =&gt; (T)(object)this</c> property that simulates
+    ///         the VB6 extender's <c>Object</c> property (returns the underlying control).</item>
+    /// </list>
+    /// The file is placed in the global namespace (no namespace wrapper) so that the types
+    /// are visible throughout the converted project without an explicit <c>using</c>.
+    /// </summary>
+    public static string GenerateMarkerInterfaces(string referenceRoot)
+    {
+        Directory.CreateDirectory(referenceRoot);
+
+        var iComStub = InterfaceDeclaration(Identifier("IComStub"))
+            .WithModifiers(Modifiers(isPublic: true));
+
+        var iOleStub = InterfaceDeclaration(Identifier("IOleStub"))
+            .WithModifiers(Modifiers(isPublic: true))
+            .WithBaseList(BaseList(SingletonSeparatedList<BaseTypeSyntax>(
+                SimpleBaseType(IdentifierName("IComStub")))));
+
+        // IControlStub<T> : IComStub
+        //   Simulates the VB6 extender mechanism.  The default `T Object => (T)(object)this`
+        //   property lets callers obtain the underlying control instance via the extender's
+        //   well-known `Object` property without any runtime overhead.
+        //   The double-cast via object is required because inside a default interface member
+        //   `this` is typed as the interface, not the type parameter T.
+        var objectProperty = PropertyDeclaration(
+                IdentifierName("T"),
+                Identifier("Object"))
+            .WithExpressionBody(ArrowExpressionClause(
+                CastExpression(
+                    IdentifierName("T"),
+                    ParenthesizedExpression(
+                        CastExpression(
+                            PredefinedType(Token(SyntaxKind.ObjectKeyword)),
+                            ThisExpression())))))
+            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+
+        var iControlStub = InterfaceDeclaration(Identifier("IControlStub"))
+            .WithModifiers(Modifiers(isPublic: true))
+            .WithTypeParameterList(TypeParameterList(
+                SingletonSeparatedList(
+                    TypeParameter(Identifier("T"))
+                        .WithVarianceKeyword(Token(SyntaxKind.OutKeyword)))))
+            .WithConstraintClauses(
+                SingletonList(TypeParameterConstraintClause(
+                        IdentifierName("T"))
+                    .WithConstraints(SingletonSeparatedList<TypeParameterConstraintSyntax>(
+                        ClassOrStructConstraint(SyntaxKind.ClassConstraint)))))
+            .WithBaseList(BaseList(SingletonSeparatedList<BaseTypeSyntax>(
+                SimpleBaseType(IdentifierName("IComStub")))))
+            .WithMembers(SingletonList<MemberDeclarationSyntax>(objectProperty));
+
+        var cu = CompilationUnit(
+                default,
+                default,
+                default,
+                List<MemberDeclarationSyntax>([iComStub, iOleStub, iControlStub]))
+            .NormalizeWhitespace();
+
+        string filePath = Path.Combine(referenceRoot, "_ComStubInterfaces.cs");
+        File.WriteAllText(filePath, cu.ToFullString());
+        return filePath;
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Per-type dispatch
     // ──────────────────────────────────────────────────────────────────────
@@ -514,6 +592,9 @@ public static class ReferenceStubGenerator
             .WithModifiers(Modifiers(isPublic: true))
             .WithMembers(List(memberDecls));
 
+        string ifaceMarkerName = type.IsOleObject ? "IOleStub" : "IComStub";
+        var ifaceMarkerBase = (BaseTypeSyntax)SimpleBaseType(IdentifierName(ifaceMarkerName));
+
         var baseInterfaces = (type.ImplementedInterfaces ?? [])
             .Where(i => !string.IsNullOrWhiteSpace(i))
             .Where(i => i != "_Object")
@@ -522,9 +603,8 @@ public static class ReferenceStubGenerator
             .Select(n => (BaseTypeSyntax)SimpleBaseType(ParseTypeName(n)))
             .ToArray();
 
-        if (baseInterfaces.Length > 0) {
-            decl = decl.WithBaseList(BaseList(SeparatedList(baseInterfaces)));
-        }
+        decl = decl.WithBaseList(BaseList(SeparatedList(
+            new[] { ifaceMarkerBase }.Concat(baseInterfaces).ToArray())));
 
         return decl;
     }
@@ -722,6 +802,9 @@ public static class ReferenceStubGenerator
             .WithMembers(List(memberDecls));
 
         if (!isStatic) {
+            string markerName = type.IsOleObject ? "IOleStub" : "IComStub";
+            var markerBase = (BaseTypeSyntax)SimpleBaseType(IdentifierName(markerName));
+
             var baseInterfaces = (type.ImplementedInterfaces ?? [])
                 .Where(i => !string.IsNullOrWhiteSpace(i))
                 .Where(i => i != "_Object")  // _Object is a COM plumbing artefact; omit it
@@ -730,9 +813,18 @@ public static class ReferenceStubGenerator
                 .Select(n => (BaseTypeSyntax)SimpleBaseType(ParseTypeName(n)))
                 .ToArray();
 
-            if (baseInterfaces.Length > 0) {
-                decl = decl.WithBaseList(BaseList(SeparatedList(baseInterfaces)));
-            }
+            // ActiveX control stubs also implement IControlStub<TSelf> to expose the VB6
+            // extender's Object property (returns the underlying control as its own type).
+            BaseTypeSyntax[] controlBase = type.IsControl
+                ? [(BaseTypeSyntax)SimpleBaseType(
+                    GenericName(Identifier("IControlStub"))
+                        .WithTypeArgumentList(TypeArgumentList(
+                            SingletonSeparatedList<TypeSyntax>(
+                                IdentifierName(emittedTypeName)))))]
+                : [];
+
+            decl = decl.WithBaseList(BaseList(SeparatedList(
+                new[] { markerBase }.Concat(controlBase).Concat(baseInterfaces).ToArray())));
         }
 
         return decl;
@@ -741,6 +833,208 @@ public static class ReferenceStubGenerator
     // ──────────────────────────────────────────────────────────────────────
     // Default-member forwarding indexer
     // ──────────────────────────────────────────────────────────────────────
+
+    static string GenerateExtenderExtensionSource(
+        ComQueryLibrary library,
+        string emittedTypeName,
+        string classSource)
+    {
+        var classTree = CSharpSyntaxTree.ParseText(classSource);
+        var classRoot = classTree.GetCompilationUnitRoot();
+
+        var classDecl = classRoot.DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .FirstOrDefault(c => string.Equals(c.Identifier.ValueText, emittedTypeName, StringComparison.Ordinal));
+        if (classDecl == null) {
+            throw new InvalidOperationException($"Failed to locate generated class '{emittedTypeName}' while building extender extension block.");
+        }
+
+        var extensionMembers = new List<MemberDeclarationSyntax>();
+        foreach (var member in classDecl.Members) {
+            switch (member) {
+                case MethodDeclarationSyntax methodDecl:
+                    extensionMembers.Add(BuildForwardingMethod(methodDecl, emittedTypeName));
+                    break;
+
+                case PropertyDeclarationSyntax propertyDecl:
+                    if (string.Equals(propertyDecl.Identifier.ValueText, "Object", StringComparison.Ordinal))
+                        continue;
+                    extensionMembers.Add(BuildForwardingProperty(propertyDecl, emittedTypeName));
+                    break;
+
+                case IndexerDeclarationSyntax indexerDecl:
+                    extensionMembers.Add(BuildForwardingIndexer(indexerDecl, emittedTypeName));
+                    break;
+
+                default:
+                    throw new InvalidOperationException(
+                        $"Unsupported member kind '{member.Kind()}' in generated class '{emittedTypeName}' while emitting extender extension block.");
+            }
+        }
+
+        if (extensionMembers.Count == 0) {
+            throw new InvalidOperationException(
+                $"No members available to emit for extender extension block of '{emittedTypeName}'.");
+        }
+
+        var extensionReceiverParam = Parameter(Identifier("self"))
+            .WithType(
+                GenericName(Identifier("IControlStub"))
+                    .WithTypeArgumentList(TypeArgumentList(
+                        SingletonSeparatedList<TypeSyntax>(
+                            PredefinedType(Token(SyntaxKind.ObjectKeyword))))));
+
+        var extensionBlock = ExtensionBlockDeclaration(
+            default,
+            default,
+            Token(SyntaxKind.ExtensionKeyword),
+            default,
+            ParameterList(SingletonSeparatedList(extensionReceiverParam)),
+            default,
+            Token(SyntaxKind.OpenBraceToken),
+            List(extensionMembers),
+            Token(SyntaxKind.CloseBraceToken),
+            default);
+
+        var extensionClass = ClassDeclaration(Identifier($"{emittedTypeName}Extensions"))
+            .WithModifiers(Modifiers(isPublic: true, isStatic: true))
+            .WithMembers(SingletonList<MemberDeclarationSyntax>(extensionBlock));
+
+        var ns = IdentifierName(library.SafeName);
+        var extensionCu = CompilationUnit(
+                default,
+                default,
+                default,
+                SingletonList<MemberDeclarationSyntax>(
+                    FileScopedNamespaceDeclaration(ns)
+                        .WithMembers(SingletonList<MemberDeclarationSyntax>(extensionClass))))
+            .NormalizeWhitespace();
+
+        string extensionSource = extensionCu.ToFullString();
+
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Preview);
+        var extensionTree = CSharpSyntaxTree.ParseText(extensionSource, parseOptions);
+        var parseErrors = extensionTree.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Take(5)
+            .Select(d => d.ToString())
+            .ToArray();
+
+        if (parseErrors.Length > 0) {
+            throw new InvalidOperationException(
+                $"Failed to emit extension block for '{emittedTypeName}'. Parse errors: {string.Join(" | ", parseErrors)}");
+        }
+
+        return extensionSource;
+    }
+
+    static MethodDeclarationSyntax BuildForwardingMethod(MethodDeclarationSyntax methodDecl, string emittedTypeName)
+    {
+        var callArgs = methodDecl.ParameterList.Parameters
+            .Select(BuildForwardingArgument)
+            .ToArray();
+
+        var callExpr = InvocationExpression(
+            MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                BuildForwardingReceiver(emittedTypeName),
+                IdentifierName(methodDecl.Identifier)),
+            ArgumentList(SeparatedList(callArgs)));
+
+        return MethodDeclaration(methodDecl.ReturnType, methodDecl.Identifier)
+            .WithModifiers(Modifiers(isPublic: true))
+            .WithParameterList(methodDecl.ParameterList)
+            .WithExpressionBody(ArrowExpressionClause(callExpr))
+            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+    }
+
+    static PropertyDeclarationSyntax BuildForwardingProperty(PropertyDeclarationSyntax propertyDecl, string emittedTypeName)
+    {
+        var accessors = new List<AccessorDeclarationSyntax>();
+
+        foreach (var accessor in propertyDecl.AccessorList?.Accessors ?? []) {
+            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration)) {
+                accessors.Add(
+                    AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                        .WithExpressionBody(ArrowExpressionClause(
+                            MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                BuildForwardingReceiver(emittedTypeName),
+                                IdentifierName(propertyDecl.Identifier))))
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
+
+            if (accessor.IsKind(SyntaxKind.SetAccessorDeclaration)) {
+                accessors.Add(
+                    AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                        .WithExpressionBody(ArrowExpressionClause(
+                            AssignmentExpression(
+                                SyntaxKind.SimpleAssignmentExpression,
+                                MemberAccessExpression(
+                                    SyntaxKind.SimpleMemberAccessExpression,
+                                    BuildForwardingReceiver(emittedTypeName),
+                                    IdentifierName(propertyDecl.Identifier)),
+                                IdentifierName("value"))))
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
+        }
+
+        return PropertyDeclaration(propertyDecl.Type, propertyDecl.Identifier)
+            .WithModifiers(Modifiers(isPublic: true))
+            .WithAccessorList(AccessorList(List(accessors)));
+    }
+
+    static IndexerDeclarationSyntax BuildForwardingIndexer(IndexerDeclarationSyntax indexerDecl, string emittedTypeName)
+    {
+        var elementAccess = ElementAccessExpression(
+            BuildForwardingReceiver(emittedTypeName),
+            BracketedArgumentList(SeparatedList(
+                indexerDecl.ParameterList.Parameters.Select(BuildForwardingArgument))));
+
+        var accessors = new List<AccessorDeclarationSyntax>();
+        foreach (var accessor in indexerDecl.AccessorList?.Accessors ?? []) {
+            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration)) {
+                accessors.Add(
+                    AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                        .WithExpressionBody(ArrowExpressionClause(elementAccess))
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
+
+            if (accessor.IsKind(SyntaxKind.SetAccessorDeclaration)) {
+                accessors.Add(
+                    AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                        .WithExpressionBody(ArrowExpressionClause(
+                            AssignmentExpression(
+                                SyntaxKind.SimpleAssignmentExpression,
+                                elementAccess,
+                                IdentifierName("value"))))
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+            }
+        }
+
+        return IndexerDeclaration(indexerDecl.Type)
+            .WithModifiers(Modifiers(isPublic: true))
+            .WithParameterList(indexerDecl.ParameterList)
+            .WithAccessorList(AccessorList(List(accessors)));
+    }
+
+    static ArgumentSyntax BuildForwardingArgument(ParameterSyntax parameter)
+    {
+        var argument = Argument(IdentifierName(parameter.Identifier));
+        if (parameter.Type is RefTypeSyntax) {
+            argument = argument.WithRefKindKeyword(Token(SyntaxKind.RefKeyword));
+        }
+
+        return argument;
+    }
+
+    static ExpressionSyntax BuildForwardingReceiver(string emittedTypeName)
+    {
+        return ParenthesizedExpression(
+            CastExpression(
+                IdentifierName(emittedTypeName),
+                IdentifierName("self")));
+    }
 
     /// <summary>
     /// When a type's DISPID 0 property has <em>no</em> parameters (e.g. <c>Recordset.Fields</c>
@@ -878,6 +1172,8 @@ public static class ReferenceStubGenerator
 
         return StructDeclaration(Identifier(emittedTypeName))
             .WithModifiers(Modifiers(isPublic: true))
+            .WithBaseList(BaseList(SingletonSeparatedList<BaseTypeSyntax>(
+                SimpleBaseType(IdentifierName("IComStub")))))
             .WithMembers(List(fieldDecls));
     }
 

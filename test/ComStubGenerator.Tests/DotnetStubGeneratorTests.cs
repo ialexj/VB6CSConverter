@@ -57,8 +57,9 @@ public class DotnetStubGeneratorTests
 
         var source = GenerateSingle(library);
 
-        // No colon after the class name means no base list
-        source.Should().NotContain("Widget :");
+        // _Object is filtered out; only the IComStub marker remains
+        source.Should().Contain("Widget : IComStub");
+        source.Should().NotContain("_Object");
     }
 
     // ──────────────────────────────────────────────────────────────────────
