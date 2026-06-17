@@ -108,21 +108,29 @@ public class ArrayRefinementRewriter(
                 .ToList();
 
             var specificTypes = allElementTypes.Where(IsSpecificType).ToList();
-            if (specificTypes.Count == 0)
-                continue; // all dynamic/object — nothing to refine
 
-            var firstSpecificText = specificTypes[0].ToString();
-            if (specificTypes.Any(t => t.ToString() != firstSpecificText))
-                continue; // conflicting specific types — unsafe to refine
+            TypeSyntax bestElementType;
+            bool typeNeedsChange;
 
-            var bestElementType = specificTypes[0];
+            if (specificTypes.Count == 0) {
+                // All element types are dynamic/object — only a rank change is possible.
+                bestElementType = declaredElementType;
+                typeNeedsChange = false;
+            }
+            else {
+                var firstSpecificText = specificTypes[0].ToString();
+                if (specificTypes.Any(t => t.ToString() != firstSpecificText))
+                    continue; // conflicting specific types — unsafe to refine
+
+                bestElementType = specificTypes[0];
+                // A type change is needed if ANY of the element types (declared or in a creation)
+                // differs from the best specific type — e.g. declaration is string[] but a
+                // creation is new dynamic[…], or declaration is dynamic[] but a creation is new string[…].
+                typeNeedsChange = allElementTypes.Any(t => t.ToString() != firstSpecificText);
+            }
 
             int currentRank = declaredArrayType.RankSpecifiers[0].Sizes.Count;
             bool rankNeedsChange = currentRank != agreedRank!.Value;
-            // A type change is needed if ANY of the element types (declared or in a creation)
-            // differs from the best specific type — e.g. declaration is string[] but a
-            // creation is new dynamic[…], or declaration is dynamic[] but a creation is new string[…].
-            bool typeNeedsChange = allElementTypes.Any(t => t.ToString() != firstSpecificText);
 
             if (!rankNeedsChange && !typeNeedsChange)
                 continue;

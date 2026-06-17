@@ -75,6 +75,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
     {
         // XArray-style default member where all args are optional: keep trailing defaults,
         // but suppress only the first default value on the emitted indexer.
+        // The generated named method form should still preserve all optional defaults.
         var library = MakeLibrary("XArrayLib",
             new ComQueryType("XArrayObject", LibraryTypeKind.DispatchInterface,
                 Members: [
@@ -95,9 +96,52 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("this[", "the default parameterized property must emit an indexer");
             source.Should().Contain("Index", "the first indexer parameter must be emitted");
-            source.Should().NotContain("Index = default", "the first optional default must be suppressed");
+            source.Should().NotContain("this[dynamic Index = default", "the first optional default must be suppressed on the indexer");
             source.Should().Contain("short Dimension = default", "trailing optional defaults must be preserved");
             source.Should().Contain("int Flags = default", "trailing optional defaults must be preserved");
+            source.Should().Contain("XArray(dynamic Index = default, short Dimension = default, int Flags = default)",
+                "named method form must preserve optional defaults like regular methods");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_NonDefaultIndexedProperty_MethodPair_PreservesOptionalDefaults()
+    {
+        // Non-default parameterized properties emit method pairs, and should preserve
+        // optional defaults exactly like regular methods.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object",
+                        [
+                            new("Index", "object", IsOptional: true, IsOut: false),
+                            new("Dimension", "short", IsOptional: true, IsOut: false),
+                            new("Flags", "int", IsOptional: true, IsOut: false),
+                        ],
+                        IsDefault: false),
+                    new("Value", LibraryMemberKind.PropertySet, "void",
+                        [
+                            new("Index", "object", IsOptional: true, IsOut: false),
+                            new("Dimension", "short", IsOptional: true, IsOut: false),
+                            new("Flags", "int", IsOptional: true, IsOut: false),
+                        ],
+                        IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("Value(dynamic Index = default, short Dimension = default, int Flags = default)",
+                "getter method must preserve optional defaults");
+            source.Should().Contain("SetValue(dynamic Index = default, short Dimension = default, int Flags = default, dynamic value)",
+                "setter method must preserve optional defaults before the value parameter");
+            source.Should().NotContain("this[", "non-default parameterized property must not become an indexer");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);

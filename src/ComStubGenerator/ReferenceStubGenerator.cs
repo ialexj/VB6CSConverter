@@ -181,7 +181,7 @@ public static class ReferenceStubGenerator
 
                 if (getter?.Parameters.Count > 0) {
                     // Parameterized property → was emitted as a plain method (and Set{Name}) in GenerateClass.
-                    var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters).ToArray();
+                    var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                     var getArgs = getter.Parameters
                         .Select(p => Argument(IdentifierName(MakeSafeIdentifier(p.Name)))).ToArray();
 
@@ -198,7 +198,7 @@ public static class ReferenceStubGenerator
                     if (setter != null) {
                         var setStaticName = "Set" + staticName;
                         classLevelUsed.Add(setStaticName);
-                        var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters)
+                        var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                             .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
                             .ToArray();
                         var setArgs = getter.Parameters
@@ -533,14 +533,14 @@ public static class ReferenceStubGenerator
                 // renaming it to GetItem — adding another GetItem here would produce a duplicate.
                 if (!string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase)) {
                     string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
-                    var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters).ToArray();
+                    var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                     memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
                         .WithParameterList(ParameterList(SeparatedList(getParams)))
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
                     if (setter != null) {
                         string setName = MakeUniqueName("Set" + MakeSafeIdentifier(group.Key), usedMemberNames);
-                        var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters)
+                        var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                             .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
                             .ToArray();
                         memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
@@ -554,13 +554,13 @@ public static class ReferenceStubGenerator
                 // method and the setter (if any) as Set{Name} so that ParameterizedPropertyRewriter
                 // can rewrite call-site assignments to obj.SetFoo(k, v).
                 string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
-                var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters).ToArray();
+                var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                 memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
                     .WithParameterList(ParameterList(SeparatedList(getParams)))
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
                 if (setter != null) {
-                    var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters)
+                    var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                         .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
                         .ToArray();
                     memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier("Set" + getName))
@@ -742,7 +742,7 @@ public static class ReferenceStubGenerator
                 // renaming it to GetItem — adding another GetItem here would produce a duplicate.
                 if (!string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase)) {
                     string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
-                    var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters).ToArray();
+                    var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                     memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
                         .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                         .WithParameterList(ParameterList(SeparatedList(getParams)))
@@ -751,7 +751,7 @@ public static class ReferenceStubGenerator
 
                     if (setter != null) {
                         string setName = MakeUniqueName("Set" + MakeSafeIdentifier(group.Key), usedMemberNames);
-                        var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters)
+                        var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                             .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
                             .ToArray();
                         memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
@@ -767,7 +767,7 @@ public static class ReferenceStubGenerator
                 // method and the setter (if any) as Set{Name} so that ParameterizedPropertyRewriter
                 // can rewrite call-site assignments to obj.SetFoo(k, v).
                 string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
-                var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters).ToArray();
+                var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                 memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
                     .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                     .WithParameterList(ParameterList(SeparatedList(getParams)))
@@ -775,7 +775,7 @@ public static class ReferenceStubGenerator
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
                 if (setter != null) {
-                    var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters)
+                    var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                         .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
                         .ToArray();
                     memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier("Set" + getName))

@@ -37,6 +37,19 @@ public class ArrayRefinementRewriterTests
         x = new string[5];
         """);
 
+    // ── All dynamic, but rank disagrees — rank-only change ────────────────────
+
+    [TestMethod]
+    public Task AllDynamic_RankChanged() => CheckRefinement(
+        """
+        dynamic[] x = default;
+        x = new dynamic[0, 10];
+        """,
+        """
+        dynamic[,] x = default;
+        x = new dynamic[0, 10];
+        """);
+
     // ── No change: all types are dynamic — nothing specific to refine to ──────
 
     [TestMethod]

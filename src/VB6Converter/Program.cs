@@ -295,8 +295,6 @@ public static class Program
             await CollectDiagnostics(ws, options.OutputDir);
             PauseIfRequested(options.Pause);
         }
-
-        Log.CloseRewritingLoggers();
     }
 
 
