@@ -25,9 +25,10 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             var written = ReferenceStubGenerator.Generate(library, tempDir);
 
             var source = File.ReadAllText(written[0]);
-            // Should emit an indexer, not a named property called "Fields"
+            // Should emit an indexer and a named method form, but NOT a plain property called "Fields"
             source.Should().Contain("this[");
-            source.Should().NotContain("object Fields");
+            source.Should().Contain("Fields(", "named method form must be emitted for the default property");
+            source.Should().NotContain("Fields {", "plain property must not be emitted");
             // Regular non-default property should still appear as-is
             source.Should().Contain("bool EOF");
         }
@@ -60,7 +61,9 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             source.Should().Contain("get");
             source.Should().Contain("set");
             source.Should().Contain("NotImplementedException");
-            source.Should().NotContain("object Fields");
+            source.Should().Contain("Fields(", "named getter method must be emitted");
+            source.Should().Contain("void SetFields(", "named setter method must be emitted");
+            source.Should().NotContain("Fields {", "plain property must not be emitted");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
@@ -102,11 +105,12 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
     }
 
     [TestMethod]
-    public void Generate_IndexerAndDuplicateItemMethod_DispatchInterface_ItemMethodIsSkipped()
+    public void Generate_IndexerAndDuplicateItemMethod_DispatchInterface_ItemMethodRenamedToGetItem()
     {
         // COM collection types (e.g. ComCtlLib.Panels) often define Item as both a PropertyGet
         // (DISPID 0, with params → C# indexer) and a Method with the same name.
-        // C# forbids both because the indexer is internally named "Item" (CS0102).
+        // C# forbids both because the indexer is internally named "Item" (CS0102),
+        // so the explicit Item method should be renamed to GetItem.
         var library = MakeLibrary("ComctlLib",
             new ComQueryType("Panels", LibraryTypeKind.DispatchInterface,
                 Members: [
@@ -126,7 +130,8 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
 
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("this[", "the indexer must be emitted");
-            source.Should().NotContain("Panel Item(", "the duplicate Item method must be suppressed");
+            source.Should().Contain("Panel GetItem(", "the duplicate Item method must be renamed to GetItem");
+            source.Should().NotContain("Panel Item(", "the original Item method signature must not remain");
             source.Should().Contain("short Count", "unrelated properties must still appear");
         }
         finally {
@@ -135,7 +140,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
     }
 
     [TestMethod]
-    public void Generate_IndexerAndDuplicateItemMethod_Class_ItemMethodIsSkipped()
+    public void Generate_IndexerAndDuplicateItemMethod_Class_ItemMethodRenamedToGetItem()
     {
         // Same as the DispatchInterface test but for a class type.
         var library = MakeLibrary("ComctlLib",
@@ -158,7 +163,8 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("this[", "the indexer must be emitted");
             source.Should().Contain("NotImplementedException", "class indexer must have a throw body");
-            source.Should().NotContain("Panel Item(", "the duplicate Item method must be suppressed");
+            source.Should().Contain("Panel GetItem(", "the duplicate Item method must be renamed to GetItem");
+            source.Should().NotContain("Panel Item(", "the original Item method signature must not remain");
             source.Should().Contain("short Count", "unrelated properties must still appear");
         }
         finally {
@@ -232,6 +238,176 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             // The forwarding indexer's return type should match Fields.Item's return type
             recordsetSource.Should().Contain("DAO.Field",
                 "forwarding indexer return type must match the inner collection's item type");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ForwardingIndexerAndItemMethod_DispatchInterface_ItemMethodRenamedToGetItem()
+    {
+        // Forwarding indexer comes from Recordset.Fields -> Fields.Item(Index).
+        // If Recordset also has a Method Item(Index), it should be renamed to GetItem.
+        var library = MakeLibrary("DAO",
+            new ComQueryType("Recordset", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "DAO.Fields", [], IsDefault: true),
+                    new("Item", LibraryMemberKind.Method, "DAO.Field",
+                        [new("Index", "object", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                ],
+                EnumValues: []),
+            new ComQueryType("Fields", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "DAO.Field",
+                        [new("Index", "object", false, false)], IsDefault: true),
+                ],
+                EnumValues: []),
+            new ComQueryType("Field", LibraryTypeKind.DispatchInterface,
+                Members: [],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var recordsetSource = written
+                .Select(File.ReadAllText)
+                .First(s => s.Contains("interface Recordset"));
+
+            recordsetSource.Should().Contain("this[",
+                "a forwarding indexer must be emitted for the two-hop DISPID 0 chain");
+            recordsetSource.Should().Contain("DAO.Field GetItem(",
+                "the Item method must be renamed to GetItem when an indexer is present");
+            recordsetSource.Should().NotContain("DAO.Field Item(",
+                "the original Item method signature must not remain");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Default property (non-Item name) → indexer + named method pair
+    // ──────────────────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void Generate_DefaultPropertyNonItem_DispatchInterface_EmitsIndexerAndNamedMethods()
+    {
+        // XArrayObject.XArray.Value-style: default parameterized property that is NOT named "Item".
+        // Must emit both a C# indexer (for arr[i] call sites) and a named method pair
+        // (for VB6 call sites like xa.Value(i) and xa.Value(i) = v that survive conversion).
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object",
+                        [new("Index", "object", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                    new("Value", LibraryMemberKind.PropertySet, "void",
+                        [new("Index", "object", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[", "indexer must be emitted for bang-operator / index call sites");
+            source.Should().Contain("Value(", "named getter method must be emitted");
+            source.Should().Contain("void SetValue(", "named setter method must be emitted");
+            source.Should().NotContain("Value {", "plain property must not be emitted");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyNonItem_Class_EmitsIndexerAndNamedMethods()
+    {
+        // Same as the DispatchInterface test but for a class type — methods must have throw bodies.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.Class,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object",
+                        [new("Index", "object", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                    new("Value", LibraryMemberKind.PropertySet, "void",
+                        [new("Index", "object", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[", "indexer must be emitted");
+            source.Should().Contain("Value(", "named getter method must be emitted");
+            source.Should().Contain("void SetValue(", "named setter method must be emitted");
+            source.Should().Contain("NotImplementedException", "class stubs must have throw bodies");
+            source.Should().NotContain("Value {", "plain property must not be emitted");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyNonItem_ReadOnly_DispatchInterface_EmitsIndexerAndGetterMethod()
+    {
+        // Read-only default parameterized property: indexer + getter method, no SetX.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object",
+                        [new("Index", "object", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[", "indexer must be emitted");
+            source.Should().Contain("Value(", "named getter method must be emitted");
+            source.Should().NotContain("SetValue", "no setter method should be emitted for a read-only property");
+            source.Should().NotContain("Value {", "plain property must not be emitted");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyNamedItem_DispatchInterface_EmitsIndexerOnly()
+    {
+        // When the default parameterized property IS named "Item", only the indexer is emitted.
+        // The method loop will handle any explicit Item method by renaming it to GetItem;
+        // emitting a second GetItem from the property loop would create a duplicate.
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("Collection", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Item", LibraryMemberKind.PropertyGet, "object",
+                        [new("Index", "object", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[", "indexer must be emitted");
+            source.Should().NotContain(" Item(", "no named method should be emitted for an Item default property");
+            source.Should().NotContain("GetItem(", "no GetItem method should be auto-emitted for an Item default property");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);

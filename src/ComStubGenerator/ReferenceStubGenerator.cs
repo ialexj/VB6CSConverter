@@ -496,6 +496,8 @@ public static class ReferenceStubGenerator
             var pg = g.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             return pg?.IsDefault == true && pg.Parameters.Count > 0;
         });
+        var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: true, useDynamic, strictParameters);
+        bool hasAnyIndexer = hasIndexer || forwardingIndexer is not null;
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
             var getter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             var setter = group.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertySet);
@@ -523,6 +525,29 @@ public static class ReferenceStubGenerator
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
+
+                // For non-"Item" default properties also emit a named method form so that VB6 code
+                // that calls the property by name (e.g. xa.Value(i)) still compiles after
+                // conversion via ParameterizedPropertyRewriter.  "Item"-named properties are
+                // excluded because the method loop already handles any explicit Item method by
+                // renaming it to GetItem — adding another GetItem here would produce a duplicate.
+                if (!string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase)) {
+                    string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+                    var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters).ToArray();
+                    memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
+                        .WithParameterList(ParameterList(SeparatedList(getParams)))
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+
+                    if (setter != null) {
+                        string setName = MakeUniqueName("Set" + MakeSafeIdentifier(group.Key), usedMemberNames);
+                        var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters)
+                            .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                            .ToArray();
+                        memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
+                            .WithParameterList(ParameterList(SeparatedList(setParams)))
+                            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+                    }
+                }
             }
             else if (getter?.Parameters.Count > 0) {
                 // C# has no parameterized non-indexer properties.  Emit the getter as a plain
@@ -546,7 +571,7 @@ public static class ReferenceStubGenerator
             else {
                 // Skip any "Item" property when an indexer is already being emitted — C# does not
                 // allow both a named "Item" property and an indexer in the same type (CS0102).
-                if (hasIndexer && string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase))
+                if (hasAnyIndexer && string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 string propertyName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
@@ -566,14 +591,14 @@ public static class ReferenceStubGenerator
         foreach (var method in (type.Members ?? [])
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
-            // In C#, "Item" is reserved as the indexer accessor name; skip any duplicate Method
-            // named Item when an indexer has already been emitted to avoid CS0102.
-            if (hasIndexer && string.Equals(method.Name, "Item", StringComparison.OrdinalIgnoreCase)) continue;
             // GetEnumerator is already declared by IEnumerable; re-declaring it in the derived
             // interface shadows the inherited member and produces CS0108.
             if (inheritsIEnumerable && string.Equals(method.Name, "GetEnumerator", StringComparison.OrdinalIgnoreCase)) continue;
             string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
-            string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
+            string rawMethodName = hasAnyIndexer && string.Equals(method.Name, "Item", StringComparison.OrdinalIgnoreCase)
+                ? "GetItem"
+                : method.Name;
+            string methodName = MakeUniqueMethodName(MakeSafeIdentifier(rawMethodName), paramSig, usedMethodSignatures, usedMemberNames);
             var parameters = BuildParameters(method.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
 
             var methodDecl = MethodDeclaration(
@@ -585,7 +610,6 @@ public static class ReferenceStubGenerator
             memberDecls.Add(methodDecl);
         }
 
-        var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: true, useDynamic, strictParameters);
         if (forwardingIndexer != null) memberDecls.Add(forwardingIndexer);
 
         var decl = InterfaceDeclaration(Identifier(emittedTypeName))
@@ -672,6 +696,10 @@ public static class ReferenceStubGenerator
             var pg = g.FirstOrDefault(m => m.Kind == LibraryMemberKind.PropertyGet);
             return pg?.IsDefault == true && pg.Parameters.Count > 0;
         });
+        var forwardingIndexer = !isStatic
+            ? TryBuildDefaultForwardingIndexer(library, type, isForInterface: false, useDynamic, strictParameters)
+            : null;
+        bool hasAnyIndexer = hasIndexer || forwardingIndexer is not null;
 
         foreach (var group in propertyGroups.OrderBy(g => g.Key)) {
             if (exceptionDerived && ExceptionInheritedMembers.Contains(group.Key)) continue;
@@ -706,6 +734,33 @@ public static class ReferenceStubGenerator
                     .WithParameterList(BracketedParameterList(SeparatedList(indexerParams)))
                     .WithAccessorList(AccessorList(List(accessors)));
                 memberDecls.Add(indexer);
+
+                // For non-"Item" default properties also emit a named method form so that VB6 code
+                // that calls the property by name (e.g. xa.Value(i)) still compiles after
+                // conversion via ParameterizedPropertyRewriter.  "Item"-named properties are
+                // excluded because the method loop already handles any explicit Item method by
+                // renaming it to GetItem — adding another GetItem here would produce a duplicate.
+                if (!string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase)) {
+                    string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+                    var getParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters).ToArray();
+                    memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
+                        .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
+                        .WithParameterList(ParameterList(SeparatedList(getParams)))
+                        .WithExpressionBody(ThrowNotImplementedExprBody())
+                        .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+
+                    if (setter != null) {
+                        string setName = MakeUniqueName("Set" + MakeSafeIdentifier(group.Key), usedMemberNames);
+                        var setParams = BuildParameters(getter.Parameters, useDynamic, stripDefaults: true, strictParameters: strictParameters)
+                            .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                            .ToArray();
+                        memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
+                            .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
+                            .WithParameterList(ParameterList(SeparatedList(setParams)))
+                            .WithExpressionBody(ThrowNotImplementedExprBody())
+                            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
+                    }
+                }
             }
             else if (getter?.Parameters.Count > 0) {
                 // C# has no parameterized non-indexer properties.  Emit the getter as a plain
@@ -733,7 +788,7 @@ public static class ReferenceStubGenerator
             else {
                 // Skip any "Item" property when an indexer is already being emitted — C# does not
                 // allow both a named "Item" property and an indexer in the same class (CS0102).
-                if (hasIndexer && string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase)) {
+                if (hasAnyIndexer && string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase)) {
                     handledPropertyNames.Add(group.Key);
                     continue;
                 }
@@ -754,11 +809,11 @@ public static class ReferenceStubGenerator
                      .Where(m => m.Kind == LibraryMemberKind.Method)
                      .OrderBy(m => m.Name)) {
             if (exceptionDerived && ExceptionInheritedMembers.Contains(method.Name)) continue;
-            // In C#, "Item" is reserved as the indexer accessor name; skip any duplicate Method
-            // named Item when an indexer has already been emitted to avoid CS0102.
-            if (hasIndexer && string.Equals(method.Name, "Item", StringComparison.OrdinalIgnoreCase)) continue;
             string paramSig = string.Join(",", method.Parameters.Select(p => p.Type));
-            string methodName = MakeUniqueMethodName(MakeSafeIdentifier(method.Name), paramSig, usedMethodSignatures, usedMemberNames);
+            string rawMethodName = hasAnyIndexer && string.Equals(method.Name, "Item", StringComparison.OrdinalIgnoreCase)
+                ? "GetItem"
+                : method.Name;
+            string methodName = MakeUniqueMethodName(MakeSafeIdentifier(rawMethodName), paramSig, usedMethodSignatures, usedMemberNames);
 
             var parameters = BuildParameters(method.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
 
@@ -773,10 +828,7 @@ public static class ReferenceStubGenerator
             memberDecls.Add(methodDecl);
         }
 
-        if (!isStatic) {
-            var forwardingIndexer = TryBuildDefaultForwardingIndexer(library, type, isForInterface: false, useDynamic, strictParameters);
-            if (forwardingIndexer != null) memberDecls.Add(forwardingIndexer);
-        }
+        if (forwardingIndexer != null) memberDecls.Add(forwardingIndexer);
 
         if (type.IsControl && !isStatic) {
             foreach (var (extName, extCsType) in VB6ControlExtenderProperties) {

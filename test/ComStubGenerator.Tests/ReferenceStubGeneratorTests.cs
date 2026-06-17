@@ -351,9 +351,10 @@ public class ReferenceStubGeneratorTests
             var written = ReferenceStubGenerator.Generate(library, tempDir);
 
             var source = File.ReadAllText(written[0]);
-            // Should emit an indexer, not a named property called "Fields"
+            // Should emit an indexer and a named method form, but NOT a plain property called "Fields"
             source.Should().Contain("this[");
-            source.Should().NotContain("object Fields");
+            source.Should().Contain("Fields(", "named method form must be emitted for the default property");
+            source.Should().NotContain("Fields {", "plain property must not be emitted");
             // Regular non-default property should still appear as-is
             source.Should().Contain("bool EOF");
         }
@@ -386,7 +387,9 @@ public class ReferenceStubGeneratorTests
             source.Should().Contain("get");
             source.Should().Contain("set");
             source.Should().Contain("NotImplementedException");
-            source.Should().NotContain("object Fields");
+            source.Should().Contain("Fields(", "named getter method must be emitted");
+            source.Should().Contain("void SetFields(", "named setter method must be emitted");
+            source.Should().NotContain("Fields {", "plain property must not be emitted");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
@@ -394,11 +397,12 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
-    public void Generate_IndexerAndDuplicateItemMethod_DispatchInterface_ItemMethodIsSkipped()
+    public void Generate_IndexerAndDuplicateItemMethod_DispatchInterface_ItemMethodRenamedToGetItem()
     {
         // COM collection types (e.g. ComCtlLib.Panels) often define Item as both a PropertyGet
         // (DISPID 0, with params → C# indexer) and a Method with the same name.
-        // C# forbids both because the indexer is internally named "Item" (CS0102).
+        // C# forbids both because the indexer is internally named "Item" (CS0102),
+        // so the explicit Item method should be renamed to GetItem.
         var library = MakeLibrary("ComctlLib",
             new ComQueryType("Panels", LibraryTypeKind.DispatchInterface,
                 Members: [
@@ -418,7 +422,8 @@ public class ReferenceStubGeneratorTests
 
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("this[", "the indexer must be emitted");
-            source.Should().NotContain("Panel Item(", "the duplicate Item method must be suppressed");
+            source.Should().Contain("Panel GetItem(", "the duplicate Item method must be renamed to GetItem");
+            source.Should().NotContain("Panel Item(", "the original Item method signature must not remain");
             source.Should().Contain("short Count", "unrelated properties must still appear");
         }
         finally {
@@ -427,7 +432,7 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
-    public void Generate_IndexerAndDuplicateItemMethod_Class_ItemMethodIsSkipped()
+    public void Generate_IndexerAndDuplicateItemMethod_Class_ItemMethodRenamedToGetItem()
     {
         // Same as the DispatchInterface test but for a class type.
         var library = MakeLibrary("ComctlLib",
@@ -450,7 +455,8 @@ public class ReferenceStubGeneratorTests
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("this[", "the indexer must be emitted");
             source.Should().Contain("NotImplementedException", "class indexer must have a throw body");
-            source.Should().NotContain("Panel Item(", "the duplicate Item method must be suppressed");
+            source.Should().Contain("Panel GetItem(", "the duplicate Item method must be renamed to GetItem");
+            source.Should().NotContain("Panel Item(", "the original Item method signature must not remain");
             source.Should().Contain("short Count", "unrelated properties must still appear");
         }
         finally {
