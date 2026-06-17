@@ -37,7 +37,7 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
     {
         string path = _file ?? node.SyntaxTree.FilePath;
         var file = Path.GetFileNameWithoutExtension(path);
-        var log = Log.GetRewritingLogger(path)
+        var log = Log.Rewriting
             .ForContext("file", file)
             .ForContext("rewriter", GetType().Name)
             .ForContext("sequence", RewriterSequence)
