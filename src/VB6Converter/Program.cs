@@ -245,8 +245,6 @@ public static class Program
                     while (hasRewriterChanges);
                 }
 
-                Log.Rewriting.Information("====== Starting Fixups ======");
-
                 if (count == 0) {
                     // These rewrites work first time
                     await RunRewriter(false, "Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
@@ -307,12 +305,6 @@ public static class Program
             .StartAsync("Compiling...", async ctx => {
                 var project = await ws.ReloadProject();
                 compilation = await project.GetCompilationAsync();
-
-                Log.Rewriting.Information("===== Compilation Statistics =====");
-                var diagnostics = compilation.GetDiagnostics();
-                foreach (var severity in diagnostics.GroupBy(d => d.Severity)) {
-                    Log.Rewriting.Information($"{severity.Key}: {severity.Count()}");
-                }
             });
 
         return compilation;
