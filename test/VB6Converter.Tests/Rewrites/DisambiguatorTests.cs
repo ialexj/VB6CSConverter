@@ -165,6 +165,48 @@ public class DisambiguatorTests
         CheckDisambiguation(cs, expected);
     }
 
+    [TestMethod]
+    public void DisambiguatesDynamicLocal()
+    {
+        var cs = """
+            dynamic abc = null;
+            var a = abc(1);
+            """;
+
+        var expected = """
+            dynamic abc = null;
+            var a = abc[1];
+            """;
+
+        CheckDisambiguation(cs, expected);
+    }
+
+    [TestMethod]
+    public void DisambiguatesDynamicField()
+    {
+        var cs = """
+            class Test
+            {
+                dynamic abc;
+                void M() {
+                    var a = abc(1);
+                }
+            }
+            """;
+
+        var expected = """
+            class Test
+            {
+                dynamic abc;
+                void M() {
+                    var a = abc[1];
+                }
+            }
+            """;
+
+        CheckDisambiguation(cs, expected);
+    }
+
     private static void CheckDisambiguation(string cs, string expected)
     {
         var cu = SyntaxFactory.ParseCompilationUnit(cs);

@@ -139,8 +139,8 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("Value(dynamic Index = default, short Dimension = default, int Flags = default)",
                 "getter method must preserve optional defaults");
-            source.Should().Contain("SetValue(dynamic Index = default, short Dimension = default, int Flags = default, dynamic value)",
-                "setter method must preserve optional defaults before the value parameter");
+            source.Should().Contain("SetValue(dynamic Index = default, short Dimension = default, int Flags = default, dynamic value = default)",
+                "setter value parameter must also get = default when strictParameters is off");
             source.Should().NotContain("this[", "non-default parameterized property must not become an indexer");
         }
         finally {
@@ -246,7 +246,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("this[", "the default Image property must emit an indexer");
             source.Should().Contain("IImage GetItem(dynamic Index = default)", "the Item getter must be renamed");
-            source.Should().Contain("void SetItem(dynamic Index = default, ComctlLib.IImage value)", "the Item setter must remain SetItem");
+            source.Should().Contain("void SetItem(dynamic Index = default, ComctlLib.IImage value = default)", "the Item setter must remain SetItem");
             source.Should().NotContain("IImage Item(dynamic Index = default)", "the original Item getter signature must not remain");
         }
         finally {
@@ -461,6 +461,112 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             source.Should().Contain("Value(", "named getter method must be emitted");
             source.Should().NotContain("SetValue", "no setter method should be emitted for a read-only property");
             source.Should().NotContain("Value {", "plain property must not be emitted");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultIndexedProperty_MethodPair_DefaultMode_OptionalizesAllMethodParameters()
+    {
+        // Indexed-property methods should follow the same rule as regular methods:
+        // with strictParameters=false, all parameters get '= default' regardless of
+        // COM optional metadata.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object",
+                        [
+                            new("Index", "object", IsOptional: false, IsOut: false),
+                            new("Dimension", "short", IsOptional: false, IsOut: false),
+                        ],
+                        IsDefault: true),
+                    new("Value", LibraryMemberKind.PropertySet, "void",
+                        [
+                            new("Index", "object", IsOptional: false, IsOut: false),
+                            new("Dimension", "short", IsOptional: false, IsOut: false),
+                        ],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("Value(dynamic Index = default, short Dimension = default)",
+                "default mode should optionalize all generated method parameters");
+            source.Should().Contain("SetValue(dynamic Index = default, short Dimension = default, dynamic value = default)",
+                "default mode should optionalize setter value parameter too");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultIndexedProperty_MethodPair_StrictMode_PreservesRequiredMethodParameters()
+    {
+        // With strictParameters=true, required COM parameters should remain required
+        // on generated methods for indexed properties.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object",
+                        [
+                            new("Index", "object", IsOptional: false, IsOut: false),
+                            new("Dimension", "short", IsOptional: false, IsOut: false),
+                        ],
+                        IsDefault: true),
+                    new("Value", LibraryMemberKind.PropertySet, "void",
+                        [
+                            new("Index", "object", IsOptional: false, IsOut: false),
+                            new("Dimension", "short", IsOptional: false, IsOut: false),
+                        ],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir, strictParameters: true);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("Value(dynamic Index, short Dimension)",
+                "strict mode should keep required parameters required");
+            source.Should().Contain("SetValue(dynamic Index, short Dimension, dynamic value)",
+                "strict mode should keep required setter index parameters required");
+            source.Should().NotContain("Value(dynamic Index = default, short Dimension = default)");
+            source.Should().NotContain("SetValue(dynamic Index = default, short Dimension = default, dynamic value)");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_NonDefaultIndexedProperty_MethodPair_StrictMode_PreservesRequiredMethodParameters()
+    {
+        // Same strict-mode requirement for non-default indexed properties emitted as methods.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Count", LibraryMemberKind.PropertyGet, "int",
+                        [new("nDim", "short", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir, strictParameters: true);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("int Count(short nDim)",
+                "strict mode should keep required parameters required for non-default indexed properties");
+            source.Should().NotContain("int Count(short nDim = default)");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);

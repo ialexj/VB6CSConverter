@@ -62,6 +62,7 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
                             if (rightType.Type != null
                                 && rightType.Type.SpecialType != SpecialType.System_Object
                                 && rightType.Type.TypeKind != TypeKind.Dynamic
+                                && rightType.Type.TypeKind != TypeKind.Error
                                 && rightType.Type.ToString() != "Microsoft.VisualBasic.VariantType"
                                 && !SymbolEqualityComparer.Default.Equals(type, rightType.Type)) {
 

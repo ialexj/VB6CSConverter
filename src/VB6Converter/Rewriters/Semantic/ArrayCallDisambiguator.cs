@@ -22,13 +22,15 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
 
             bool isElementAccess = false;
             bool isNonInvokable = false;
-            if (symbol.Symbol is ILocalSymbol local && local.Type.Kind == SymbolKind.ArrayType){
+            if (symbol.Symbol is ILocalSymbol or IFieldSymbol or IParameterSymbol) {
+                // VB6 has no closures or first-class functions; any variable used with
+                // call syntax must be an array/indexer access, never an invocation.
                 isElementAccess = true;
             }
             else if (HasIndexer(model.GetTypeInfo(node.Expression).Type) || HasIndexer(model.GetTypeInfo(node.Expression).ConvertedType)) {
                 isElementAccess = true;
             }
-            else if (symbol.CandidateSymbols.Any(f => f is IFieldSymbol fs && fs.Type.Kind == SymbolKind.ArrayType)) {
+            else if (symbol.CandidateSymbols.Any(f => f is ILocalSymbol or IFieldSymbol or IParameterSymbol)) {
                 isElementAccess = true;
             }
             else if (symbol.CandidateReason == CandidateReason.NotInvocable) {

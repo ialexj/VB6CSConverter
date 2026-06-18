@@ -152,8 +152,9 @@ internal static class RoslynHelpers
         var t = typeInfo.ConvertedType;
         if (t?.TypeKind == TypeKind.Dynamic)
             return IdentifierName("dynamic");
-        return !string.IsNullOrEmpty(t?.Name)
-            ? ParseTypeName(t.ToString())
+        var typeName = t?.ToString();
+        return !string.IsNullOrEmpty(typeName)
+            ? ParseTypeName(typeName)
             : PredefinedType(Token(SyntaxKind.ObjectKeyword));
     }
 
@@ -161,8 +162,9 @@ internal static class RoslynHelpers
     {
         if (typeSymbol?.TypeKind == TypeKind.Dynamic)
             return IdentifierName("dynamic");
-        return !string.IsNullOrEmpty(typeSymbol?.Name)
-            ? ParseTypeName(typeSymbol.ToString())
+        var typeName = typeSymbol?.ToString();
+        return !string.IsNullOrEmpty(typeName)
+            ? ParseTypeName(typeName)
             : PredefinedType(Token(SyntaxKind.ObjectKeyword));
     }
 
