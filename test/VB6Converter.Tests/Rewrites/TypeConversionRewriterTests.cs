@@ -46,6 +46,45 @@ public class TypeConversionRewriterTests
             "class T { void M() { string s = \"12\"; int i = System.Convert.ToInt32(s); } }");
 
     [TestMethod]
+    public void ConvertsBoolFalseToIntAssignment()
+        => CheckRewrites(
+            "class T { void M() { long l = 0L; l = false; } }",
+            "class T { void M() { long l = 0L; l = 0; } }");
+
+    [TestMethod]
+    public void ConvertsBoolTrueToIntAssignment()
+        => CheckRewrites(
+            "class T { void M() { long l = 0L; l = true; } }",
+            "class T { void M() { long l = 0L; l = -1; } }");
+
+    [TestMethod]
+    public void ConvertsBoolFalseToIntInitializer()
+        => CheckRewrites(
+            "class T { void M() { long l = false; } }",
+            "class T { void M() { long l = 0; } }");
+
+    [TestMethod]
+    public void ConvertsBoolTrueToIntInitializer()
+        => CheckRewrites(
+            "class T { void M() { long l = true; } }",
+            "class T { void M() { long l = -1; } }");
+
+    [TestMethod]
+    public void ConvertsBoolExpressionToIntAssignment()
+        => CheckRewrites(
+            "class T { void M() { bool b = true; long l = 0L; l = b; } }",
+            "class T { void M() { bool b = true; long l = 0L; l = -(System.Convert.ToInt64(b)); } }");
+
+    [TestMethod]
+    public void BoolToIntIsIdempotent()
+    {
+        const string source = "class T { void M() { bool b = true; long l = 0L; l = b; } }";
+        var firstPass = RewriteWithFreshSemantics(source);
+        var secondPass = RewriteWithFreshSemantics(firstPass);
+        secondPass.Should().Be(firstPass);
+    }
+
+    [TestMethod]
     public void LeavesImplicitNumericConversionUnchanged()
         => CheckRewrites(
             "class T { void M() { int i = 1; long l = i; } }");

@@ -767,6 +767,14 @@ public sealed class TypeLibraryInspector
                             continue;
                         }
 
+                        // LCID parameters are hidden runtime locale arguments injected by COM;
+                        // they are invisible to VB6 callers and must not appear in the stub signature.
+                        // Skipping them here also ensures the ParamArray (cParamsOpt == -1) marking
+                        // below lands on the correct parameter (e.g. Args, not lcid).
+                        bool isLcid = (flags
+                            & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FLCID) != 0;
+                        if (isLcid) continue;
+
                         bool isOptional = (flags
                             & System.Runtime.InteropServices.ComTypes.PARAMFLAG.PARAMFLAG_FOPT) != 0
                             || (flags

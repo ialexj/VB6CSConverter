@@ -187,10 +187,13 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
 
     static SyntaxNode ConvertString(InvocationExpressionSyntax node)
     {
+        var charExpr = CastExpression(
+            PredefinedType(Token(SyntaxKind.CharKeyword)),
+            node.ArgumentList.Arguments[1].Expression);
         return ObjectCreationExpression(
             PredefinedType(Token(SyntaxKind.StringKeyword)),
             ArgumentList(
-                node.ArgumentList.Arguments[1].Expression,
+                charExpr,
                 node.ArgumentList.Arguments[0].Expression),
             null);
     }

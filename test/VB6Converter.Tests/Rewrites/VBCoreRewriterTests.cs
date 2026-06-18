@@ -172,6 +172,16 @@ public class VBCoreRewriterTests
         "y = Microsoft.VisualBasic.Strings.Space(5);");
 
     [TestMethod]
+    public void StringRepeat_NumericCode() => ValidateBodyMatches(
+        "y = String$(255, 0)",
+        "y = new string ((char)0, 255);");
+
+    [TestMethod]
+    public void StringRepeat_CharCode() => ValidateBodyMatches(
+        "y = String$(10, 65)",
+        "y = new string ((char)65, 10);");
+
+    [TestMethod]
     public void InStr2() => ValidateBodyMatches(
         """y = InStr(s, "a")""",
         """y = Microsoft.VisualBasic.Strings.InStr((string)s, "a");""");
@@ -251,6 +261,21 @@ public class VBCoreRewriterTests
         public static void Test(dynamic x = default)
         {
             if (x != default)
+                DoSomething();
+        }
+        """);
+
+    [TestMethod]
+    public void IsMissing_Negated_DefaultValue_ParamName() => ValidateMemberMatches(
+        """
+        Public Sub Test(Optional DefaultValue As Variant)
+            If Not IsMissing(DefaultValue) Then DoSomething
+        End Sub
+        """,
+        """
+        public static void Test(dynamic DefaultValue = default)
+        {
+            if (DefaultValue != default)
                 DoSomething();
         }
         """);

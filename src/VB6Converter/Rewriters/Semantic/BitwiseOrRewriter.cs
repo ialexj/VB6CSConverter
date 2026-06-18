@@ -60,4 +60,26 @@ public class BitwiseOrRewriter(SemanticModel semantics) : LoggedRewriter
 
             return BinaryExpression(newKind, visitLeft, newOp, visitRight);
         });
+
+    public override SyntaxNode VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
+        => Rewrite(node, node =>
+        {
+            // VB6 `Not intExpr` is bitwise complement; convert `!x` → `~x` for non-boolean operands.
+            if (!node.IsKind(SyntaxKind.LogicalNotExpression))
+                return base.VisitPrefixUnaryExpression(node);
+
+            var operandType = semantics.GetTypeInfo(node.Operand).Type;
+
+            if (operandType is null || operandType.SpecialType == SpecialType.System_Boolean)
+                return base.VisitPrefixUnaryExpression(node);
+
+            var newToken = Token(
+                node.OperatorToken.LeadingTrivia,
+                SyntaxKind.TildeToken,
+                node.OperatorToken.TrailingTrivia);
+
+            var visitedOperand = (ExpressionSyntax)Visit(node.Operand)!;
+
+            return PrefixUnaryExpression(SyntaxKind.BitwiseNotExpression, newToken, visitedOperand);
+        });
 }

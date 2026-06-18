@@ -62,6 +62,9 @@ public static class CommonConverter
             if (complex.GetText() == "Currency") {
                 return PredefinedType(Token(SyntaxKind.DecimalKeyword));
             }
+            else if (complex.GetText() == "Any") {
+                return PredefinedType(Token(SyntaxKind.ObjectKeyword));
+            }
             else {
                 return complex.ToTypeSyntax();
             }

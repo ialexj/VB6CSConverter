@@ -258,7 +258,41 @@ public class TypeConversionRewriter(SemanticModel semantics) : LoggedRewriter
 
     private ExpressionSyntax ApplyConvert(ExpressionSyntax expression, string methodName)
     {
+        // Check source type before visiting — Visit may rewrite the expression.
+        // VB6: True = -1, False = 0. When converting bool → integer, negate the
+        // System.Convert result so that true maps to -1 (not 1).
+        var isBoolToInt = semantics.GetTypeInfo(expression).Type?.SpecialType == SpecialType.System_Boolean;
+
         expression = (ExpressionSyntax)Visit(expression);
+
+        if (isBoolToInt) {
+            // Optimise literal cases: emit the integer constant directly.
+            if (expression.IsKind(SyntaxKind.FalseLiteralExpression)) {
+                return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0))
+                    .WithTriviaFrom(expression);
+            }
+            if (expression.IsKind(SyntaxKind.TrueLiteralExpression)) {
+                return PrefixUnaryExpression(
+                    SyntaxKind.UnaryMinusExpression,
+                    LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(1))
+                        .WithTriviaFrom(expression));
+            }
+
+            // Non-literal bool expression: -(System.Convert.ToXxx(expr))
+            var convertCall = InvocationExpression(
+                MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName("System"),
+                        IdentifierName("Convert")),
+                    IdentifierName(methodName)),
+                ArgumentList(SingletonSeparatedList(Argument(expression))));
+
+            return PrefixUnaryExpression(
+                SyntaxKind.UnaryMinusExpression,
+                ParenthesizedExpression(convertCall));
+        }
 
         return InvocationExpression(
             MemberAccessExpression(

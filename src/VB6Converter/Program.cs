@@ -127,6 +127,20 @@ public static class Program
         var allTargets = vbProject.Files.Select(f => ConversionTarget.Create(f, options.OutputDir, projectBasePath)).OrderBy(t => t.Name).ToArray();
         await ws.Open(allTargets, options.OutputDir, vbProject.Name);
 
+        var conversionOptions = ConversionOptions.Default;
+
+        ws.SetActiveFilter([.. options.Filter]);
+        if (ws.ActiveTargets.Count == 0) {
+            AnsiConsole.MarkupLine("[red]No files to convert.[/]");
+            return;
+        }
+
+        // Do the code transformation
+        var targetsThatNeedTransform = ws.ActiveTargets.Where(t => !t.Exists || t.HasErrors
+            || options.Filter.Any()
+            || options.Update.Contains(t.Name) || options.Update.Contains("*"))
+            .ToArray();
+
         // Generate COM reference stubs
         if (!options.SkipReferenceStubs) {
             var referenceDir = Path.Join(options.OutputDir, "_References");
@@ -136,57 +150,41 @@ public static class Program
         }
         // ────────────────────────────────────────────────────────────────────
 
-        if (!options.SkipTransform) {
-            var conversionOptions = ConversionOptions.Default;
+        if (!options.SkipTransform && targetsThatNeedTransform.Length > 0) {
+            await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
+                ws.WithCompilationUnit(t, cancel, cu => {
+                    var sourceRelativePath = Path.GetRelativePath(projectBasePath, t.File.Path).Replace('\\', '/');
+                    var conversion = VB6ToCSharpConversion.ConvertFile(
+                        t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions,
+                        sourceRelativePath);
 
-            ws.SetActiveFilter([.. options.Filter]);
-            if (ws.ActiveTargets.Count == 0) {
-                AnsiConsole.MarkupLine("[red]No files to convert.[/]");
-                return;
-            }
+                    var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
+                    return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
+                }));
 
-            // Do the code transformation
-            var targetsThatNeedTransform = ws.ActiveTargets.Where(t => !t.Exists || t.HasErrors
-                || options.Filter.Any()
-                || options.Update.Contains(t.Name) || options.Update.Contains("*"))
+            // Reload from disk before splitting: parallel saves during conversion leave
+            // the in-memory Project stale (last-writer wins), so documents converted by
+            // earlier threads are not found in the workspace and would be re-created empty.
+            await ws.ReloadProject();
+
+            // Split Form/Control designer code into separate *.designer.cs partial classes
+            var formControlTargets = targetsThatNeedTransform
+                .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
                 .ToArray();
 
-            if (targetsThatNeedTransform.Length > 0) {
-                await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
+            if (formControlTargets.Length > 0) {
+                var newDesignerTargets = new ConcurrentBag<ConversionTarget>();
+                await RunOperations(ws, "Splitting designer files", formControlTargets, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
-                        var sourceRelativePath = Path.GetRelativePath(projectBasePath, t.File.Path).Replace('\\', '/');
-                        var conversion = VB6ToCSharpConversion.ConvertFile(
-                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions,
-                            sourceRelativePath);
-
-                        var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
-                        return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
+                        var (mainCu, designerCu) = DesignerFileSplitter.Split(cu);
+                        if (designerCu is not null) {
+                            File.WriteAllText(t.DesignerOutputPath, designerCu.NormalizeWhitespace().ToFullString());
+                            newDesignerTargets.Add(ConversionTarget.CreateForSplit(
+                                Path.GetFileNameWithoutExtension(t.DesignerOutputPath), t.DesignerOutputPath));
+                        }
+                        return ValueTask.FromResult(mainCu);
                     }));
-
-                // Reload from disk before splitting: parallel saves during conversion leave
-                // the in-memory Project stale (last-writer wins), so documents converted by
-                // earlier threads are not found in the workspace and would be re-created empty.
-                await ws.ReloadProject();
-
-                // Split Form/Control designer code into separate *.designer.cs partial classes
-                var formControlTargets = targetsThatNeedTransform
-                    .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
-                    .ToArray();
-
-                if (formControlTargets.Length > 0) {
-                    var newDesignerTargets = new ConcurrentBag<ConversionTarget>();
-                    await RunOperations(ws, "Splitting designer files", formControlTargets, (t, ctx, cancel) =>
-                        ws.WithCompilationUnit(t, cancel, cu => {
-                            var (mainCu, designerCu) = DesignerFileSplitter.Split(cu);
-                            if (designerCu is not null) {
-                                File.WriteAllText(t.DesignerOutputPath, designerCu.NormalizeWhitespace().ToFullString());
-                                newDesignerTargets.Add(ConversionTarget.CreateForSplit(
-                                    Path.GetFileNameWithoutExtension(t.DesignerOutputPath), t.DesignerOutputPath));
-                            }
-                            return ValueTask.FromResult(mainCu);
-                        }));
-                    ws.AddToActiveTargets(newDesignerTargets);
-                }
+                ws.AddToActiveTargets(newDesignerTargets);
             }
         }
 

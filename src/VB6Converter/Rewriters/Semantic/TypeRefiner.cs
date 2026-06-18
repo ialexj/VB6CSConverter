@@ -18,7 +18,7 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
         var declarator = node.Variables.First();
 
         if (varTypes.TryGetValue(declarator, out var typeSymbol)) {
-            return node.WithType(typeSymbol);
+            return node.WithType(typeSymbol.WithTriviaFrom(node.Type));
         }
 
         return base.VisitVariableDeclaration(node);
@@ -49,6 +49,23 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
                     continue;
                 }
 
+                // Initializer-only declarations (e.g. const fields) never appear as assignment expressions.
+                // Infer from the declaration initializer so these members can be refined.
+                if (variable.Initializer is { Value: var initExpr }) {
+                    var initType = semantics.GetTypeInfo(initExpr).Type;
+                    if (IsUsableRefinementType(initType, type)) {
+                        var typeSyntax = initType.ToTypeSyntax();
+
+                        vars.AddOrUpdate(variable, typeSyntax, (_, existing) => {
+                            if (Equals(typeSyntax.ToString(), existing.ToString())) {
+                                return existing;
+                            }
+
+                            return type.ToTypeSyntax(); // keep as is
+                        });
+                    }
+                }
+
                 var references = await SymbolFinder.FindReferencesAsync(symbol, solution);
 
                 foreach (var reference in references) {
@@ -58,16 +75,10 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
                             .FindNode(location.Location.SourceSpan);
 
                         if (node.Parent is AssignmentExpressionSyntax assignment) {
-                            var rightType = sem.GetTypeInfo(assignment.Right);
-                            if (rightType.Type != null
-                                && rightType.Type.SpecialType != SpecialType.System_Object
-                                && rightType.Type.TypeKind != TypeKind.Dynamic
-                                && rightType.Type.TypeKind != TypeKind.Error
-                                && rightType.Type.TypeKind != TypeKind.Array
-                                && rightType.Type.ToString() != "Microsoft.VisualBasic.VariantType"
-                                && !SymbolEqualityComparer.Default.Equals(type, rightType.Type)) {
+                            var rightType = sem.GetTypeInfo(assignment.Right).Type;
+                            if (IsUsableRefinementType(rightType, type)) {
 
-                                var typeSyntax = rightType.Type.ToTypeSyntax();
+                                var typeSyntax = rightType.ToTypeSyntax();
 
                                 vars.AddOrUpdate(variable, typeSyntax, (variable, existing) => {
                                     if (Equals(typeSyntax.ToString(), existing.ToString())) {
@@ -84,4 +95,13 @@ public class TypeRefiner(ConcurrentDictionary<VariableDeclaratorSyntax, TypeSynt
             }
         }
     }
+
+    private static bool IsUsableRefinementType(ITypeSymbol candidate, ITypeSymbol existing)
+        => candidate != null
+            && candidate.SpecialType != SpecialType.System_Object
+            && candidate.TypeKind != TypeKind.Dynamic
+            && candidate.TypeKind != TypeKind.Error
+            && candidate.TypeKind != TypeKind.Array
+            && candidate.ToString() != "Microsoft.VisualBasic.VariantType"
+            && !SymbolEqualityComparer.Default.Equals(existing, candidate);
 }

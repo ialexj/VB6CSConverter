@@ -993,11 +993,7 @@ public static class ReferenceStubGenerator
         }
 
         var extensionReceiverParam = Parameter(Identifier("self"))
-            .WithType(
-                GenericName(Identifier("IControlStub"))
-                    .WithTypeArgumentList(TypeArgumentList(
-                        SingletonSeparatedList<TypeSyntax>(
-                            PredefinedType(Token(SyntaxKind.ObjectKeyword))))));
+            .WithType(IdentifierName("IComStub"));
 
         var extensionBlock = ExtensionBlockDeclaration(
             default,

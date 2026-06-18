@@ -195,7 +195,7 @@ public class ExtenderTests : ReferenceStubGeneratorTestBase
     }
 
     [TestMethod]
-    public void Generate_ExtenderClass_ExtensionTargetsIControlStubObject()
+    public void Generate_ExtenderClass_ExtensionTargetsIComStub()
     {
         var library = MakeLibrary("VB",
             new ComQueryType("VBControlExtender", LibraryTypeKind.Class,
@@ -209,7 +209,7 @@ public class ExtenderTests : ReferenceStubGeneratorTestBase
             var extensionPath = written.First(p => p.EndsWith("VBControlExtenderExtensions.cs", StringComparison.Ordinal));
             var source = File.ReadAllText(extensionPath);
 
-            source.Should().Contain("extension(IControlStub<object> self)");
+            source.Should().Contain("extension(IComStub self)");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);

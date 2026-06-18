@@ -181,6 +181,10 @@ public static class ValueConverter
             if (text.StartsWith('&')) {
                 string hex = text.TrimStart(['&', 'H']);
                 long value = long.Parse(hex, System.Globalization.NumberStyles.HexNumber);
+                if (value > int.MaxValue && value <= uint.MaxValue) {
+                    var uintLit = LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal("0x" + hex, (uint)value));
+                    return CheckedExpression(SyntaxKind.UncheckedExpression, CastExpression(PredefinedType(Token(SyntaxKind.IntKeyword)), uintLit));
+                }
                 return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal("0x" + hex, value));
             }
             else {
@@ -250,6 +254,19 @@ public static class ValueConverter
                         return IsPatternExpression(bin.Left, UnaryPattern(ConstantPattern(lit)));
                     }
                 }
+            }
+
+            // Not IsMissing(x) → x != default
+            // Handled here rather than in VBCoreRewriter so the `!` never enters the tree,
+            // preventing downstream rewriters (DefaultToNullRewriter, BitwiseOrRewriter) from
+            // misinterpreting the negation as a bitwise operation on an untyped operand.
+            if (values[0] is InvocationExpressionSyntax isMissingCall
+                && isMissingCall.Expression is IdentifierNameSyntax isMissingName
+                && isMissingName.Identifier.Text.Equals("IsMissing", StringComparison.OrdinalIgnoreCase)
+                && isMissingCall.ArgumentList.Arguments.Count == 1)
+            {
+                var arg = isMissingCall.ArgumentList.Arguments[0].Expression;
+                return BinaryExpression(SyntaxKind.NotEqualsExpression, arg, LiteralExpression(SyntaxKind.DefaultLiteralExpression));
             }
         }
 
