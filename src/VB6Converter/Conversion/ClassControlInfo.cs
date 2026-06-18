@@ -15,7 +15,7 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
 
     public TypeSyntax Type { get; internal set; } = type;
 
-    public IEnumerable<(NameSyntax name, ExpressionSyntax value)> Properties { get; set; } = [];
+    public IEnumerable<(ExpressionSyntax target, ExpressionSyntax value)> Properties { get; set; } = [];
 
     public IEnumerable<ClassControlInfo> Children { get; set; } = [];
 
@@ -25,7 +25,7 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
             : Name;
 
     public LiteralExpressionSyntax? GetArrayIndex()
-        => Properties.FirstOrDefault(p => p.name is IdentifierNameSyntax id && id.Identifier.Text == "Index")
+        => Properties.FirstOrDefault(p => p.target is IdentifierNameSyntax id && id.Identifier.Text == "Index")
             .value as LiteralExpressionSyntax;
 
     public FieldDeclarationSyntax GetField()
@@ -49,14 +49,11 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
     {
         bool isFirst = true;
         foreach (var prop in Properties) {
-            if (prop.name is IdentifierNameSyntax id && id.Identifier.Text == "Index") {
+            if (prop.target is IdentifierNameSyntax id && id.Identifier.Text == "Index") {
                 continue;
             }
 
-            NameSyntax name = GetIndexedName();
-            foreach (var segment in prop.name.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()) {
-                name = QualifiedName(name, segment);
-            }
+            var name = PrefixTarget(GetIndexedName(), prop.target);
 
             // FRX resource reference — emit `Name = default; // Resource: path`
             if (prop.value.HasFrxResource()) {
@@ -109,6 +106,38 @@ public class ClassControlInfo(TypeSyntax type, IdentifierNameSyntax name)
         foreach (var child in Children) {
             foreach (var stmt in child.GetAssignments()) {
                 yield return stmt;
+            }
+        }
+    }
+
+    static ExpressionSyntax PrefixTarget(ExpressionSyntax root, ExpressionSyntax relativeTarget)
+    {
+        if (relativeTarget is IdentifierNameSyntax id) {
+            return MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, root, id);
+        }
+
+        var leftMost = GetLeftMostExpression(relativeTarget);
+        if (leftMost is IdentifierNameSyntax leftMostIdentifier) {
+            var prefixedLeftMost = MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, root, leftMostIdentifier);
+            return relativeTarget.ReplaceNode(leftMost, prefixedLeftMost);
+        }
+
+        return MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, root, IdentifierName(relativeTarget.ToString()));
+    }
+
+    static ExpressionSyntax GetLeftMostExpression(ExpressionSyntax expression)
+    {
+        var current = expression;
+        while (true) {
+            switch (current) {
+                case MemberAccessExpressionSyntax memberAccess:
+                    current = memberAccess.Expression;
+                    continue;
+                case ElementAccessExpressionSyntax elementAccess:
+                    current = elementAccess.Expression;
+                    continue;
+                default:
+                    return current;
             }
         }
     }

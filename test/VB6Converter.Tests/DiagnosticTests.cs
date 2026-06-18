@@ -1,8 +1,13 @@
-﻿using System;
+﻿using AwesomeAssertions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VB6Parser;
 using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests;
@@ -13,13 +18,136 @@ namespace VB6Converter.Tests;
 [TestClass]
 public class DiagnosticTests
 {
+    static byte[] CreateFrxImageSegment(int length)
+    {
+        var bytes = new byte[length];
+        BitConverter.GetBytes(length - 4).CopyTo(bytes, 0);
+        bytes[4] = 0x6C;
+        bytes[5] = 0x74;
+        BitConverter.GetBytes(length - 12).CopyTo(bytes, 8);
+
+        // BMP magic header at start of image payload so exporter chooses .bmp
+        bytes[12] = 0x42;
+        bytes[13] = 0x4D;
+        return bytes;
+    }
+
+    static string ConvertFormWithFrx(string vb, string sourceDir, string outputDir)
+    {
+        using var reader = new StringReader(vb);
+        var conversion = VB6ToCSharpConversion.Convert(
+            reader,
+            "frmEditorMain",
+            "VB6Converter.Tests.Generated",
+            VisualBasicFileType.Form,
+            options: null,
+            sourceDirectory: sourceDir,
+            outputDirectory: outputDir,
+            sourceRelativePath: "frmEditorMain.frm");
+
+        conversion.ParseErrors.Should().BeEmpty();
+        conversion.TransformErrors.Should().BeEmpty();
+        conversion.SyntaxErrors.Should().BeEmpty();
+
+        return conversion.CompilationUnit.NormalizeWhitespace().ToFullString();
+    }
+
+    [TestMethod]
+    public void DesignerCollectionInitialization_ConvertsToIndexedAssignments()
+    {
+        var vb = """
+            Begin VB.Form frmEditorMain
+                Begin ComctlLib.ImageList imlstEdit
+                    BeginProperty Images {0713E8C2-850A-101B-AFC0-4210102A8DA7}
+                        NumListImages = 3
+                        BeginProperty ListImage1 {0713E8C3-850A-101B-AFC0-4210102A8DA7}
+                            Picture = "frmEditorMain.frx":0028
+                            Key = "New"
+                        EndProperty
+                        BeginProperty ListImage2 {0713E8C3-850A-101B-AFC0-4210102A8DA7}
+                            Picture = "frmEditorMain.frx":013A
+                            Key = "Open"
+                        EndProperty
+                        BeginProperty ListImage3 {0713E8C3-850A-101B-AFC0-4210102A8DA7}
+                            Picture = "frmEditorMain.frx":024C
+                            Key = "Save"
+                        EndProperty
+                    EndProperty
+                End
+            End
+            """;
+
+        var sourceDir = Path.Combine(Path.GetTempPath(), $"vb6_src_{Guid.NewGuid():N}");
+        var outputDir = Path.Combine(Path.GetTempPath(), $"vb6_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sourceDir);
+        Directory.CreateDirectory(outputDir);
+
+        try {
+            var frxPath = Path.Combine(sourceDir, "frmEditorMain.frx");
+            var frxBytes = new byte[0x300];
+            CreateFrxImageSegment(0x13A - 0x28).CopyTo(frxBytes, 0x28);
+            CreateFrxImageSegment(0x24C - 0x13A).CopyTo(frxBytes, 0x13A);
+            CreateFrxImageSegment(0x300 - 0x24C).CopyTo(frxBytes, 0x24C);
+            File.WriteAllBytes(frxPath, frxBytes);
+
+            var output = ConvertFormWithFrx(vb, sourceDir, outputDir);
+
+            output.Should().Contain("imlstEdit.ListImages[0].Picture = default;  // Resource: _Resources/frmEditorMain_0028.bmp");
+            output.Should().Contain("imlstEdit.ListImages[0].Key = \"New\";");
+            output.Should().Contain("imlstEdit.ListImages[1].Picture = default;  // Resource: _Resources/frmEditorMain_013A.bmp");
+            output.Should().Contain("imlstEdit.ListImages[1].Key = \"Open\";");
+            output.Should().Contain("imlstEdit.ListImages[2].Picture = default;  // Resource: _Resources/frmEditorMain_024C.bmp");
+            output.Should().Contain("imlstEdit.ListImages[2].Key = \"Save\";");
+            output.Should().NotContain("NumListImages");
+        }
+        finally {
+            if (Directory.Exists(sourceDir)) {
+                Directory.Delete(sourceDir, recursive: true);
+            }
+            if (Directory.Exists(outputDir)) {
+                Directory.Delete(outputDir, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void DesignerCollectionInitialization_FallsBackWhenCountDoesNotMatch()
+    {
+        var vb = """
+            Begin VB.Form frmEditorMain
+                Begin ComctlLib.ImageList imlstEdit
+                    BeginProperty Images
+                        NumListImages = 3
+                        BeginProperty ListImage1
+                            Key = "New"
+                        EndProperty
+                        BeginProperty ListImage2
+                            Key = "Open"
+                        EndProperty
+                    EndProperty
+                End
+            End
+            """;
+
+        var conversion = VB6ToCSharpConversion.ConvertString(vb, "frmEditorMain", type: VisualBasicFileType.Form);
+        conversion.ParseErrors.Should().BeEmpty();
+        conversion.TransformErrors.Should().BeEmpty();
+        conversion.SyntaxErrors.Should().BeEmpty();
+
+        var output = conversion.CompilationUnit.NormalizeWhitespace().ToFullString();
+        output.Should().Contain("imlstEdit.Images.NumListImages = 3;");
+        output.Should().Contain("imlstEdit.Images.ListImage1.Key = \"New\";");
+        output.Should().Contain("imlstEdit.Images.ListImage2.Key = \"Open\";");
+        output.Should().NotContain("imlstEdit.ListImages[0].Key");
+    }
+
     [TestMethod]
     public void TrailingColon() => ConversionShouldSucceed(
         """
         Sub Test()
             FindFirst
 
-            x = Y(A):            
+            x = Y(A):
         End Sub
         """);
 
@@ -44,11 +172,11 @@ public class DiagnosticTests
     [TestMethod]
     public void Test4() => ConversionShouldSucceed(
         """
-        Begin VB.Form frmEditorMain 
+        Begin VB.Form frmEditorMain
             Caption         =   "Editor"
             ClientHeight    =   6495
             FillColor       =   &H00C0C0C0&
-            BeginProperty Font 
+            BeginProperty Font
                 Name            =   "Terminal"
                 Size            =   6
                 Charset         =   255
@@ -56,7 +184,7 @@ public class DiagnosticTests
                 Shortcut        =   +{F5}
                 Shortcut        =   ^{F5}
             EndProperty
-        End 
+        End
         """);
 
     [TestMethod]
@@ -64,7 +192,7 @@ public class DiagnosticTests
         """
         Private Sub Test()
         Error:
-                ErrorHandle 
+                ErrorHandle
         End Sub
         """,
         """
@@ -79,7 +207,7 @@ public class DiagnosticTests
     public void LabelInline() => ValidateMemberMatches(
         """
         Private Sub Test()
-        Error:     ErrorHandle 
+        Error:     ErrorHandle
         End Sub
         """,
         """
@@ -92,7 +220,7 @@ public class DiagnosticTests
 
     [TestMethod]
     public void Assignment() => ConversionShouldSucceed(
-        """   
+        """
         Private Sub Test()
             MethodCall arg:="Str1" & "Str2"
         End Sub
@@ -172,7 +300,7 @@ public class DiagnosticTests
         """
         With rsFicha
             !oficDataConsulta = mskPrescricaoO(optPMData).Text
-        End With       
+        End With
         """,
         """
         rsFicha["oficDataConsulta"] = mskPrescricaoO[optPMData].Text;
@@ -196,7 +324,7 @@ public class DiagnosticTests
         990                       .FontBold = True
         1000                      .AddTable sTableFormat, sTableHeader, sTableBody, &HE0E0E0, &HE0E0E0, True
         1010                      .FontBold = False
-        End Sub 
+        End Sub
         """);
 
     [TestMethod]

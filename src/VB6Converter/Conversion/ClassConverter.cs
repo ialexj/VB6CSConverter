@@ -7,6 +7,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System;
 using VB6Converter.Rewriters;
 using VB6Parser;
 using VB6Parser.Frx;
@@ -145,13 +146,103 @@ public static class ClassConverter
             Children = children
         };
 
-        IEnumerable<(NameSyntax name, ExpressionSyntax value)> GetProperties(IEnumerable<Cp_PropertiesContext> properties, NameSyntax parent = null)
+        IEnumerable<(ExpressionSyntax target, ExpressionSyntax value)> GetProperties(IEnumerable<Cp_PropertiesContext> properties, ExpressionSyntax parent = null)
         {
-            NameSyntax GetFullName(NameSyntax expr) => parent is not null ? parent.ToName().AppendName(expr.ToName()) : expr;
+            ExpressionSyntax GetFullName(ExpressionSyntax expr)
+            {
+                if (parent is null) {
+                    return expr;
+                }
+
+                var combined = parent;
+                foreach (var segment in expr.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()) {
+                    combined = MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, combined, segment);
+                }
+
+                return combined;
+            }
+
+            bool TryGetSinglePropertyContext(Cp_PropertiesContext prop, out Cp_SinglePropertyContext single)
+            {
+                single = prop.cp_SingleProperty();
+                return single is not null;
+            }
+
+            bool TryGetCollectionPattern(Cp_NestedPropertyContext nested, out string collectionPropertyName, out Dictionary<int, Cp_NestedPropertyContext> itemsByIndex)
+            {
+                collectionPropertyName = null;
+                itemsByIndex = null;
+
+                var nestedProperties = nested.cp_Properties();
+                if (nestedProperties.Length == 0 || !TryGetSinglePropertyContext(nestedProperties[0], out var countProperty)) {
+                    return false;
+                }
+
+                var countPropertyExpression = GetCallIdentifierExpression(countProperty.implicitCallStmt_InStmt(), default);
+                if (countPropertyExpression is not IdentifierNameSyntax countIdentifier
+                    || !countIdentifier.Identifier.Text.StartsWith("Num", StringComparison.Ordinal)
+                    || countIdentifier.Identifier.Text.Length <= 3) {
+                    return false;
+                }
+
+                if (countProperty.cp_PropertyValue()?.literal()?.INTEGERLITERAL() is not ITerminalNode countLiteral
+                    || !int.TryParse(countLiteral.GetText(), out var expectedCount)
+                    || expectedCount < 0) {
+                    return false;
+                }
+
+                var remaining = nestedProperties.Skip(1).ToArray();
+                if (remaining.Length != expectedCount) {
+                    return false;
+                }
+
+                var collectionItems = new Dictionary<int, Cp_NestedPropertyContext>();
+                foreach (var itemProp in remaining) {
+                    if (itemProp.cp_NestedProperty() is not Cp_NestedPropertyContext itemNested) {
+                        return false;
+                    }
+
+                    if (!TryParseTrailingInteger(itemNested.ambiguousIdentifier().GetText(), out var designerIndex)) {
+                        return false;
+                    }
+
+                    var zeroBasedIndex = designerIndex - 1;
+                    if (zeroBasedIndex < 0 || zeroBasedIndex >= expectedCount || !collectionItems.TryAdd(zeroBasedIndex, itemNested)) {
+                        return false;
+                    }
+                }
+
+                if (collectionItems.Count != expectedCount) {
+                    return false;
+                }
+
+                collectionPropertyName = countIdentifier.Identifier.Text[3..];
+                itemsByIndex = collectionItems;
+                return true;
+            }
+
+            bool TryParseTrailingInteger(string text, out int value)
+            {
+                value = 0;
+                if (string.IsNullOrEmpty(text)) {
+                    return false;
+                }
+
+                int digitStart = text.Length;
+                while (digitStart > 0 && char.IsDigit(text[digitStart - 1])) {
+                    digitStart--;
+                }
+
+                if (digitStart == text.Length) {
+                    return false;
+                }
+
+                return int.TryParse(text[digitStart..], out value);
+            }
 
             foreach (var prop in properties) {
                 if (prop.cp_SingleProperty() is Cp_SinglePropertyContext single) {
-                    var propName = GetFullName(GetCallIdentifierExpression(single.implicitCallStmt_InStmt(), default).ToName());
+                    var propName = GetFullName(GetCallIdentifierExpression(single.implicitCallStmt_InStmt(), default));
 
                     // FRX binary resource reference
                     if (single.FRX_OFFSET() is { } frxToken
@@ -213,6 +304,23 @@ public static class ClassConverter
                     yield return (propName, valueSyntax);
                 }
                 else if (prop.cp_NestedProperty() is Cp_NestedPropertyContext nested) {
+                    if (TryGetCollectionPattern(nested, out var collectionPropertyName, out var itemsByIndex)) {
+                        var collectionName = GetFullName(IdentifierName(collectionPropertyName));
+
+                        foreach (var item in itemsByIndex.OrderBy(k => k.Key)) {
+                            var itemName = ElementAccessExpression(
+                                collectionName,
+                                BracketedArgumentList(SingletonSeparatedList(
+                                    Argument(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(item.Key))))));
+
+                            foreach (var itemProperty in GetProperties(item.Value.cp_Properties(), itemName)) {
+                                yield return itemProperty;
+                            }
+                        }
+
+                        continue;
+                    }
+
                     var name = GetFullName(GetIdentifierName(nested.ambiguousIdentifier()));
 
                     foreach (var np in GetProperties(nested.cp_Properties(), name)) {
