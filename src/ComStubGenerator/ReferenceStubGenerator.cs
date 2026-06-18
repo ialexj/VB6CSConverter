@@ -199,7 +199,7 @@ public static class ReferenceStubGenerator
                         var setStaticName = "Set" + staticName;
                         classLevelUsed.Add(setStaticName);
                         var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
-                            .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                            .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
                             .ToArray();
                         var setArgs = getter.Parameters
                             .Select(p => Argument(IdentifierName(MakeSafeIdentifier(p.Name))))
@@ -364,11 +364,56 @@ public static class ReferenceStubGenerator
                 SimpleBaseType(IdentifierName("IComStub")))))
             .WithMembers(SingletonList<MemberDeclarationSyntax>(objectProperty));
 
+        // [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+        // public sealed class IndexedPropertyAttribute : Attribute
+        // Marks getter and setter methods emitted from parameterized COM properties so that
+        // tooling can distinguish them from regular methods with a similar naming pattern.
+        var attributeUsageAttr = Attribute(
+            ParseName("System.AttributeUsage"),
+            AttributeArgumentList(SeparatedList(new AttributeArgumentSyntax[] {
+                AttributeArgument(
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        ParseName("System.AttributeTargets"),
+                        IdentifierName("Method"))),
+                AttributeArgument(
+                    LiteralExpression(SyntaxKind.FalseLiteralExpression))
+                    .WithNameEquals(NameEquals(IdentifierName("AllowMultiple")))
+            })));
+
+        var indexedPropConstructor = ConstructorDeclaration(Identifier("IndexedPropertyAttribute"))
+            .WithModifiers(Modifiers(isPublic: true))
+            .WithParameterList(ParameterList(SingletonSeparatedList(
+                Parameter(Identifier("name"))
+                    .WithType(PredefinedType(Token(SyntaxKind.StringKeyword))))))
+            .WithExpressionBody(ArrowExpressionClause(
+                AssignmentExpression(
+                    SyntaxKind.SimpleAssignmentExpression,
+                    IdentifierName("Name"),
+                    IdentifierName("name"))))
+            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
+
+        var indexedPropNameProp = PropertyDeclaration(
+                PredefinedType(Token(SyntaxKind.StringKeyword)),
+                Identifier("Name"))
+            .WithModifiers(Modifiers(isPublic: true))
+            .WithAccessorList(AccessorList(SingletonList(
+                AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                    .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)))));
+
+        var indexedPropertyAttrClass = ClassDeclaration(Identifier("IndexedPropertyAttribute"))
+            .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.SealedKeyword)))
+            .WithAttributeLists(SingletonList(
+                AttributeList(SingletonSeparatedList(attributeUsageAttr))))
+            .WithBaseList(BaseList(SingletonSeparatedList<BaseTypeSyntax>(
+                SimpleBaseType(ParseName("System.Attribute")))))
+            .WithMembers(List<MemberDeclarationSyntax>([indexedPropConstructor, indexedPropNameProp]));
+
         var cu = CompilationUnit(
                 default,
                 default,
                 default,
-                List<MemberDeclarationSyntax>([iComStub, iOleStub, iControlStub]))
+                List<MemberDeclarationSyntax>([iComStub, iOleStub, iControlStub, indexedPropertyAttrClass]))
             .NormalizeWhitespace();
 
         string filePath = Path.Combine(referenceRoot, "_ComStubInterfaces.cs");
@@ -535,15 +580,17 @@ public static class ReferenceStubGenerator
                     string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
                     var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                     memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
+                        .WithAttributeLists(SingletonList(IndexedPropertyAttributeList(group.Key)))
                         .WithParameterList(ParameterList(SeparatedList(getParams)))
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
                     if (setter != null) {
                         string setName = MakeUniqueName("Set" + MakeSafeIdentifier(group.Key), usedMemberNames);
                         var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
-                            .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                            .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
                             .ToArray();
                         memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
+                            .WithAttributeLists(SingletonList(IndexedPropertyAttributeList(group.Key)))
                             .WithParameterList(ParameterList(SeparatedList(setParams)))
                             .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
                     }
@@ -557,18 +604,20 @@ public static class ReferenceStubGenerator
                 string getName = MakeUniqueName(MakeSafeIdentifier(renameItemGetter ? "GetItem" : group.Key), usedMemberNames);
                 var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                 memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
+                    .WithAttributeLists(SingletonList(IndexedPropertyAttributeList(group.Key)))
                     .WithParameterList(ParameterList(SeparatedList(getParams)))
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
                 if (setter != null) {
                     var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
-                        .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                        .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
                         .ToArray();
                     // Keep SetItem for pseudo-property rewriting when Item getter is renamed to GetItem.
                     string setName = renameItemGetter
                         ? MakeUniqueName("SetItem", usedMemberNames)
                         : "Set" + getName;
                     memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
+                        .WithAttributeLists(SingletonList(IndexedPropertyAttributeList(group.Key)))
                         .WithParameterList(ParameterList(SeparatedList(setParams)))
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
                 }
@@ -749,6 +798,7 @@ public static class ReferenceStubGenerator
                     string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
                     var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                     memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
+                        .WithAttributeLists(SingletonList(IndexedPropertyAttributeList(group.Key)))
                         .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                         .WithParameterList(ParameterList(SeparatedList(getParams)))
                         .WithExpressionBody(ThrowNotImplementedExprBody())
@@ -757,9 +807,10 @@ public static class ReferenceStubGenerator
                     if (setter != null) {
                         string setName = MakeUniqueName("Set" + MakeSafeIdentifier(group.Key), usedMemberNames);
                         var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
-                            .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                            .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
                             .ToArray();
                         memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
+                            .WithAttributeLists(SingletonList(IndexedPropertyAttributeList(group.Key)))
                             .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                             .WithParameterList(ParameterList(SeparatedList(setParams)))
                             .WithExpressionBody(ThrowNotImplementedExprBody())
@@ -775,6 +826,7 @@ public static class ReferenceStubGenerator
                 string getName = MakeUniqueName(MakeSafeIdentifier(renameItemGetter ? "GetItem" : group.Key), usedMemberNames);
                 var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                 memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
+                    .WithAttributeLists(SingletonList(IndexedPropertyAttributeList(group.Key)))
                     .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                     .WithParameterList(ParameterList(SeparatedList(getParams)))
                     .WithExpressionBody(ThrowNotImplementedExprBody())
@@ -782,13 +834,14 @@ public static class ReferenceStubGenerator
 
                 if (setter != null) {
                     var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
-                        .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
+                        .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
                         .ToArray();
                     // Keep SetItem for pseudo-property rewriting when Item getter is renamed to GetItem.
                     string setName = renameItemGetter
                         ? MakeUniqueName("SetItem", usedMemberNames)
                         : "Set" + getName;
                     memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
+                        .WithAttributeLists(SingletonList(IndexedPropertyAttributeList(group.Key)))
                         .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                         .WithParameterList(ParameterList(SeparatedList(setParams)))
                         .WithExpressionBody(ThrowNotImplementedExprBody())
@@ -1404,6 +1457,14 @@ public static class ReferenceStubGenerator
                 stripDefaults: stripDefaultForCurrent,
                 strictParameters: strictParameters);
         }
+    }
+
+    static ParameterSyntax BuildSetterValueParam(string type, bool useDynamic, bool strictParameters)
+    {
+        var p = Parameter(Identifier("value")).WithType(MemberType(type, useDynamic));
+        if (!strictParameters)
+            p = p.WithDefault(EqualsValueClause(LiteralExpression(SyntaxKind.DefaultLiteralExpression, Token(SyntaxKind.DefaultKeyword))));
+        return p;
     }
 
     static ParameterSyntax BuildParameter(

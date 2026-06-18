@@ -28,6 +28,19 @@ internal static class StubGenHelpers
                         SyntaxKind.StringLiteralExpression, Literal(memberName))))))
             .WithLeadingTrivia(TriviaList(Whitespace(Environment.NewLine)))));
 
+    /// <summary>
+    /// Builds <c>[IndexedProperty("<paramref name="propertyName"/>")]</c>.
+    /// Applied to getter and setter methods emitted from a parameterized COM property
+    /// to distinguish them from regular methods with a similar naming pattern.
+    /// </summary>
+    public static AttributeListSyntax IndexedPropertyAttributeList(string propertyName)
+        => AttributeList(SingletonSeparatedList(
+            Attribute(
+                IdentifierName("IndexedProperty"),
+                AttributeArgumentList(SingletonSeparatedList(
+                    AttributeArgument(LiteralExpression(
+                        SyntaxKind.StringLiteralExpression, Literal(propertyName))))))));
+
     public static SyntaxTokenList Modifiers(
         bool isPublic = false, bool isInternal = false, bool isProtected = false,
         bool isStatic = false,

@@ -61,6 +61,25 @@ public class MarkerInterfaceTests : ReferenceStubGeneratorTestBase
         }
     }
 
+    [TestMethod]
+    public void GenerateMarkerInterfaces_ContainsIndexedPropertyAttribute()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var filePath = ReferenceStubGenerator.GenerateMarkerInterfaces(tempDir);
+            var source = File.ReadAllText(filePath);
+
+            source.Should().Contain("public sealed class IndexedPropertyAttribute", "attribute class must be declared");
+            source.Should().Contain("IndexedPropertyAttribute : System.Attribute", "must extend System.Attribute");
+            source.Should().Contain("System.AttributeTargets.Method", "must target methods only");
+            source.Should().Contain("AllowMultiple = false", "must not allow multiple");
+            source.Should().Contain("public string Name", "must expose the property name");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Class stubs
     // ──────────────────────────────────────────────────────────────────────
