@@ -217,6 +217,44 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
     }
 
     [TestMethod]
+    public void Generate_IndexerAndParameterizedItemPropertyMethods_DispatchInterface_ItemGetterIsGetItemAndSetterIsSetItem()
+    {
+        // Matches ComCtlLib.IImages shape: a non-Item default parameterized property emits the
+        // indexer, while Item property methods should be emitted as GetItem/SetItem.
+        var library = MakeLibrary("ComctlLib",
+            new ComQueryType("IImages", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Image", LibraryMemberKind.PropertyGet, "ComctlLib.IImage",
+                        [new("Index", "dynamic", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                    new("Image", LibraryMemberKind.PropertySet, "void",
+                        [new("Index", "dynamic", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                    new("Item", LibraryMemberKind.PropertyGet, "ComctlLib.IImage",
+                        [new("Index", "dynamic", IsOptional: true, IsOut: false)],
+                        IsDefault: false),
+                    new("Item", LibraryMemberKind.PropertySet, "void",
+                        [new("Index", "dynamic", IsOptional: true, IsOut: false)],
+                        IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[", "the default Image property must emit an indexer");
+            source.Should().Contain("IImage GetItem(dynamic Index = default)", "the Item getter must be renamed");
+            source.Should().Contain("void SetItem(dynamic Index = default, ComctlLib.IImage value)", "the Item setter must remain SetItem");
+            source.Should().NotContain("IImage Item(dynamic Index = default)", "the original Item getter signature must not remain");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void Generate_DefaultPropertyWithoutParams_EmitsRegularProperty()
     {
         // DISPID 0 with no parameters is a plain default value property — keep it as a named property.

@@ -553,7 +553,8 @@ public static class ReferenceStubGenerator
                 // C# has no parameterized non-indexer properties.  Emit the getter as a plain
                 // method and the setter (if any) as Set{Name} so that ParameterizedPropertyRewriter
                 // can rewrite call-site assignments to obj.SetFoo(k, v).
-                string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+                bool renameItemGetter = hasAnyIndexer && string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase);
+                string getName = MakeUniqueName(MakeSafeIdentifier(renameItemGetter ? "GetItem" : group.Key), usedMemberNames);
                 var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                 memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
                     .WithParameterList(ParameterList(SeparatedList(getParams)))
@@ -563,7 +564,11 @@ public static class ReferenceStubGenerator
                     var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                         .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
                         .ToArray();
-                    memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier("Set" + getName))
+                    // Keep SetItem for pseudo-property rewriting when Item getter is renamed to GetItem.
+                    string setName = renameItemGetter
+                        ? MakeUniqueName("SetItem", usedMemberNames)
+                        : "Set" + getName;
+                    memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
                         .WithParameterList(ParameterList(SeparatedList(setParams)))
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
                 }
@@ -766,7 +771,8 @@ public static class ReferenceStubGenerator
                 // C# has no parameterized non-indexer properties.  Emit the getter as a plain
                 // method and the setter (if any) as Set{Name} so that ParameterizedPropertyRewriter
                 // can rewrite call-site assignments to obj.SetFoo(k, v).
-                string getName = MakeUniqueName(MakeSafeIdentifier(group.Key), usedMemberNames);
+                bool renameItemGetter = hasAnyIndexer && string.Equals(group.Key, "Item", StringComparison.OrdinalIgnoreCase);
+                string getName = MakeUniqueName(MakeSafeIdentifier(renameItemGetter ? "GetItem" : group.Key), usedMemberNames);
                 var getParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters).ToArray();
                 memberDecls.Add(MethodDeclaration(MemberType(propType, useDynamic), Identifier(getName))
                     .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
@@ -778,7 +784,11 @@ public static class ReferenceStubGenerator
                     var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                         .Append(Parameter(Identifier("value")).WithType(MemberType(propType, useDynamic)))
                         .ToArray();
-                    memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier("Set" + getName))
+                    // Keep SetItem for pseudo-property rewriting when Item getter is renamed to GetItem.
+                    string setName = renameItemGetter
+                        ? MakeUniqueName("SetItem", usedMemberNames)
+                        : "Set" + getName;
+                    memberDecls.Add(MethodDeclaration(PredefinedType(Token(SyntaxKind.VoidKeyword)), Identifier(setName))
                         .WithModifiers(Modifiers(isPublic: true, isStatic: isStatic))
                         .WithParameterList(ParameterList(SeparatedList(setParams)))
                         .WithExpressionBody(ThrowNotImplementedExprBody())
