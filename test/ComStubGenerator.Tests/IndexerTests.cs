@@ -28,6 +28,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             // Should emit an indexer and a named method form, but NOT a plain property called "Fields"
             source.Should().Contain("this[");
             source.Should().Contain("Fields(", "named method form must be emitted for the default property");
+            source.Should().Contain("[IndexedProperty(\"Fields\")]", "named method form must be marked with IndexedProperty");
             source.Should().NotContain("Fields {", "plain property must not be emitted");
             // Regular non-default property should still appear as-is
             source.Should().Contain("bool EOF");
@@ -63,6 +64,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             source.Should().Contain("NotImplementedException");
             source.Should().Contain("Fields(", "named getter method must be emitted");
             source.Should().Contain("void SetFields(", "named setter method must be emitted");
+            source.Should().Contain("[IndexedProperty(\"Fields\")]", "getter and setter must be marked with IndexedProperty");
             source.Should().NotContain("Fields {", "plain property must not be emitted");
         }
         finally {
@@ -141,6 +143,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
                 "getter method must preserve optional defaults");
             source.Should().Contain("SetValue(dynamic Index = default, short Dimension = default, int Flags = default, dynamic value = default)",
                 "setter value parameter must also get = default when strictParameters is off");
+            source.Should().Contain("[IndexedProperty(\"Value\")]", "getter and setter must be marked with IndexedProperty");
             source.Should().NotContain("this[", "non-default parameterized property must not become an indexer");
         }
         finally {
@@ -247,6 +250,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             source.Should().Contain("this[", "the default Image property must emit an indexer");
             source.Should().Contain("IImage GetItem(dynamic Index = default)", "the Item getter must be renamed");
             source.Should().Contain("void SetItem(dynamic Index = default, ComctlLib.IImage value = default)", "the Item setter must remain SetItem");
+            source.Should().Contain("[IndexedProperty(\"Item\")]", "GetItem and SetItem must be marked with IndexedProperty(\"Item\")");
             source.Should().NotContain("IImage Item(dynamic Index = default)", "the original Item getter signature must not remain");
         }
         finally {
@@ -400,6 +404,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             source.Should().Contain("this[", "indexer must be emitted for bang-operator / index call sites");
             source.Should().Contain("Value(", "named getter method must be emitted");
             source.Should().Contain("void SetValue(", "named setter method must be emitted");
+            source.Should().Contain("[IndexedProperty(\"Value\")]", "getter and setter must be marked with IndexedProperty");
             source.Should().NotContain("Value {", "plain property must not be emitted");
         }
         finally {
@@ -431,6 +436,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             source.Should().Contain("this[", "indexer must be emitted");
             source.Should().Contain("Value(", "named getter method must be emitted");
             source.Should().Contain("void SetValue(", "named setter method must be emitted");
+            source.Should().Contain("[IndexedProperty(\"Value\")]", "getter and setter must be marked with IndexedProperty");
             source.Should().Contain("NotImplementedException", "class stubs must have throw bodies");
             source.Should().NotContain("Value {", "plain property must not be emitted");
         }
@@ -459,6 +465,7 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("this[", "indexer must be emitted");
             source.Should().Contain("Value(", "named getter method must be emitted");
+            source.Should().Contain("[IndexedProperty(\"Value\")]", "getter-only parameterized property must also be marked with IndexedProperty");
             source.Should().NotContain("SetValue", "no setter method should be emitted for a read-only property");
             source.Should().NotContain("Value {", "plain property must not be emitted");
         }

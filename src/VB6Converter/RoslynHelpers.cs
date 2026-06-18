@@ -162,6 +162,11 @@ internal static class RoslynHelpers
     {
         if (typeSymbol?.TypeKind == TypeKind.Dynamic)
             return IdentifierName("dynamic");
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+            return ArrayType(arrayType.ElementType.ToTypeSyntax(),
+                SingletonList(ArrayRankSpecifier(
+                    SeparatedList<ExpressionSyntax>(
+                        Enumerable.Repeat(OmittedArraySizeExpression(), arrayType.Rank)))));
         var typeName = typeSymbol?.ToString();
         return !string.IsNullOrEmpty(typeName)
             ? ParseTypeName(typeName)

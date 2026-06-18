@@ -82,7 +82,8 @@ public class IOTests
             Print #1, x
             """);
 
-        GetBodyText(conversion).Should().Contain("PrintLine");
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.PrintLine");
     }
 
     [TestMethod]
@@ -93,7 +94,7 @@ public class IOTests
             Print #1, x;
             """);
 
-        GetBodyText(conversion).Should().Contain("Print(");
+        GetBodyText(conversion).Should().Contain("Microsoft.VisualBasic.FileSystem.Print(");
         GetBodyText(conversion).Should().NotContain("PrintLine");
     }
 
@@ -129,7 +130,7 @@ public class IOTests
             Close #1
             """);
 
-        GetBodyText(conversion).Should().Contain("FileClose");
+        GetBodyText(conversion).Should().Contain("Microsoft.VisualBasic.FileSystem.FileClose");
     }
 
     [TestMethod]
@@ -169,7 +170,7 @@ public class IOTests
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("LineInput(");
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.LineInput(");
         body.Should().Contain("lineText");
         body.Should().Contain("=");
     }
@@ -183,7 +184,7 @@ public class IOTests
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("Write(");
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Write(");
         body.Should().Contain("1");
     }
 
@@ -196,7 +197,7 @@ public class IOTests
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("Input(");
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Input(");
         body.Should().Contain("ref");
     }
 
@@ -220,7 +221,7 @@ public class IOTests
             Put #1, , x
             """);
 
-        GetBodyText(conversion).Should().Contain("FilePut(");
+        GetBodyText(conversion).Should().Contain("Microsoft.VisualBasic.FileSystem.FilePut(");
     }
 
     [TestMethod]
@@ -232,7 +233,7 @@ public class IOTests
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("FileGet(");
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.FileGet(");
         body.Should().Contain("ref");
     }
 
@@ -245,7 +246,7 @@ public class IOTests
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("Seek(");
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Seek(");
         body.Should().Contain("100");
     }
 
@@ -258,9 +259,223 @@ public class IOTests
             """);
 
         var body = GetBodyText(conversion);
-        body.Should().Contain("Kill(");
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Kill(");
     }
 
+
+    [TestMethod]
+    public void FileCopyStatementUsesFileSystemFileCopy()
+    {
+        var conversion = ConvertBody(
+            """
+            FileCopy "source.txt", "dest.txt"
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.FileCopy");
+    }
+
+    [TestMethod]
+    public void NameStatementUsesFileSystemRename()
+    {
+        var conversion = ConvertBody(
+            """
+            Name "old.txt" As "new.txt"
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Rename");
+    }
+
+    [TestMethod]
+    public void ResetStatementUsesFileSystemReset()
+    {
+        var conversion = ConvertBody(
+            """
+            Reset
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Reset");
+    }
+
+    [TestMethod]
+    public void WidthStatementUsesFileSystemFileWidth()
+    {
+        var conversion = ConvertBody(
+            """
+            Width #1, 80
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.FileWidth");
+        body.Should().Contain("1");
+        body.Should().Contain("80");
+    }
+
+    [TestMethod]
+    public void MkDirStatementUsesFileSystemMkDir()
+    {
+        var conversion = ConvertBody(
+            """
+            MkDir "C:\newdir"
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.MkDir");
+    }
+
+    [TestMethod]
+    public void RmDirStatementUsesFileSystemRmDir()
+    {
+        var conversion = ConvertBody(
+            """
+            RmDir "C:\olddir"
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.RmDir");
+    }
+
+    [TestMethod]
+    public void ChDirStatementUsesFileSystemChDir()
+    {
+        var conversion = ConvertBody(
+            """
+            ChDir "C:\newdir"
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.ChDir");
+    }
+
+    [TestMethod]
+    public void ChDriveStatementUsesFileSystemChDrive()
+    {
+        var conversion = ConvertBody(
+            """
+            ChDrive "D"
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.ChDrive");
+    }
+
+    [TestMethod]
+    public void SetAttrStatementUsesFileSystemSetAttr()
+    {
+        var conversion = ConvertBody(
+            """
+            SetAttr "file.txt", 1
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.SetAttr");
+    }
+
+    [TestMethod]
+    public void LockStatementUsesFileSystemLock()
+    {
+        var conversion = ConvertBody(
+            """
+            Lock #1
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Lock");
+        body.Should().Contain("1");
+    }
+
+    [TestMethod]
+    public void LockStatementWithRangePassesThreeArgs()
+    {
+        var conversion = ConvertBody(
+            """
+            Lock #1, 1 To 5
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Lock");
+        body.Should().Contain("1");
+        body.Should().Contain("5");
+    }
+
+    [TestMethod]
+    public void UnlockStatementUsesFileSystemUnlock()
+    {
+        var conversion = ConvertBody(
+            """
+            Unlock #1
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Unlock");
+    }
+
+    [TestMethod]
+    public void EofFunctionUsesFileSystemEof()
+    {
+        var conversion = ConvertBody(
+            """
+            Dim x As Boolean
+            x = EOF(1)
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.EOF");
+    }
+
+    [TestMethod]
+    public void LofFunctionUsesFileSystemLof()
+    {
+        var conversion = ConvertBody(
+            """
+            Dim x As Long
+            x = LOF(1)
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.LOF");
+    }
+
+    [TestMethod]
+    public void FreeFileFunctionUsesFileSystemFreeFile()
+    {
+        var conversion = ConvertBody(
+            """
+            Dim f As Integer
+            f = FreeFile()
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.FreeFile");
+    }
+
+    [TestMethod]
+    public void DirFunctionUsesFileSystemDir()
+    {
+        var conversion = ConvertBody(
+            """
+            Dim s As String
+            s = Dir("C:\*.*")
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Dir");
+    }
+
+    [TestMethod]
+    public void SeekFunctionUsesFileSystemSeek()
+    {
+        var conversion = ConvertBody(
+            """
+            Dim pos As Long
+            pos = Seek(1)
+            """);
+
+        var body = GetBodyText(conversion);
+        body.Should().Contain("Microsoft.VisualBasic.FileSystem.Seek");
+    }
 
     static VB6ToCSharpConversion ConvertBody(string vb, string? name = null)
     {

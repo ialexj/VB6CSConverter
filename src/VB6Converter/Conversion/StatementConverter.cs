@@ -70,7 +70,7 @@ public static class StatementConverter
                 return []; // nothing
             }
             else if (stmt.sendkeysStmt() is SendkeysStmtContext sendKeys) {
-                var sendExpr = QualifiedName(IdentifierName("SendKeys"), IdentifierName("Send"));
+                var sendExpr = QualifiedName(IdentifierName("System.Windows.Forms.SendKeys"), IdentifierName("Send"));
                 return sendKeys.valueStmt().Select(send => {
                     var value = GetValue(send, ctx);
                     return ExpressionStatement(
@@ -83,7 +83,7 @@ public static class StatementConverter
                 return inputCtx.valueStmt().Skip(1).Select(v =>
                     (StatementSyntax)ExpressionStatement(
                         InvocationExpression(
-                            IdentifierName("Input"),
+                            ParseExpression("Microsoft.VisualBasic.FileSystem.Input"),
                             ArgumentList(
                                 Argument(fileNum),
                                 Argument(GetValue(v, ctx)).WithRefKindKeyword(Token(SyntaxKind.RefKeyword))))));
@@ -148,7 +148,7 @@ public static class StatementConverter
                     AssignmentExpression(
                         SyntaxKind.SimpleAssignmentExpression,
                         variable,
-                        InvocationExpression(IdentifierName("LineInput"), ArgumentList(fileNum))));
+                        InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.LineInput"), ArgumentList(fileNum))));
             }
             else if (stmt.writeStmt() is WriteStmtContext writeStmt) {
                 var fileNum = GetValue(writeStmt.valueStmt(), ctx);
@@ -158,7 +158,7 @@ public static class StatementConverter
                     .ToArray() ?? [];
                 return ExpressionStatement(
                     InvocationExpression(
-                        IdentifierName("Write"),
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.Write"),
                         ArgumentList(new[] { Argument(fileNum) }.Concat(items.Select(a => Argument(a))).ToArray())));
             }
             else if (stmt.getStmt() is GetStmtContext getCtx) {
@@ -172,7 +172,7 @@ public static class StatementConverter
                 };
                 if (getRecord is not null) getArgs.Add(Argument(getRecord));
                 return ExpressionStatement(
-                    InvocationExpression(IdentifierName("FileGet"), ArgumentList(getArgs.ToArray())));
+                    InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FileGet"), ArgumentList(getArgs.ToArray())));
             }
             else if (stmt.putStmt() is PutStmtContext putCtx) {
                 var putVals = putCtx.valueStmt();
@@ -185,16 +185,93 @@ public static class StatementConverter
                 };
                 if (putRecord is not null) putArgs.Add(Argument(putRecord));
                 return ExpressionStatement(
-                    InvocationExpression(IdentifierName("FilePut"), ArgumentList(putArgs.ToArray())));
+                    InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FilePut"), ArgumentList(putArgs.ToArray())));
             }
             else if (stmt.seekStmt() is SeekStmtContext seekCtx) {
                 return ExpressionStatement(
-                    InvocationExpression(IdentifierName("Seek"), ArgumentList(
+                    InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.Seek"), ArgumentList(
                         GetValue(seekCtx.valueStmt(0), ctx),
                         GetValue(seekCtx.valueStmt(1), ctx))));
             }
             else if (stmt.killStmt() is KillStmtContext kill) {
                 return GetKill(kill, ctx);
+            }
+
+            else if (stmt.filecopyStmt() is FilecopyStmtContext filecopy) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.FileCopy"),
+                        ArgumentList(
+                            GetValue(filecopy.valueStmt(0), ctx),
+                            GetValue(filecopy.valueStmt(1), ctx))));
+            }
+            else if (stmt.nameStmt() is NameStmtContext nameSt) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.Rename"),
+                        ArgumentList(
+                            GetValue(nameSt.valueStmt(0), ctx),
+                            GetValue(nameSt.valueStmt(1), ctx))));
+            }
+            else if (stmt.resetStmt() is not null) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.Reset"),
+                        ArgumentList()));
+            }
+            else if (stmt.widthStmt() is WidthStmtContext widthSt) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.FileWidth"),
+                        ArgumentList(
+                            GetValue(widthSt.valueStmt(0), ctx),
+                            GetValue(widthSt.valueStmt(1), ctx))));
+            }
+            else if (stmt.mkdirStmt() is MkdirStmtContext mkdir) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.MkDir"),
+                        ArgumentList(GetValue(mkdir.valueStmt(), ctx))));
+            }
+            else if (stmt.rmdirStmt() is RmdirStmtContext rmdir) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.RmDir"),
+                        ArgumentList(GetValue(rmdir.valueStmt(), ctx))));
+            }
+            else if (stmt.chDirStmt() is ChDirStmtContext chdir) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.ChDir"),
+                        ArgumentList(GetValue(chdir.valueStmt(), ctx))));
+            }
+            else if (stmt.chDriveStmt() is ChDriveStmtContext chdrive) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.ChDrive"),
+                        ArgumentList(GetValue(chdrive.valueStmt(), ctx))));
+            }
+            else if (stmt.setattrStmt() is SetattrStmtContext setattr) {
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.SetAttr"),
+                        ArgumentList(
+                            GetValue(setattr.valueStmt(0), ctx),
+                            GetValue(setattr.valueStmt(1), ctx))));
+            }
+            else if (stmt.lockStmt() is LockStmtContext lockSt) {
+                var lockArgs = lockSt.valueStmt().Select(v => Argument(GetValue(v, ctx))).ToArray();
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.Lock"),
+                        ArgumentList(lockArgs)));
+            }
+            else if (stmt.unlockStmt() is UnlockStmtContext unlockSt) {
+                var unlockArgs = unlockSt.valueStmt().Select(v => Argument(GetValue(v, ctx))).ToArray();
+                return ExpressionStatement(
+                    InvocationExpression(
+                        ParseExpression("Microsoft.VisualBasic.FileSystem.Unlock"),
+                        ArgumentList(unlockArgs)));
             }
 
             else if (stmt.raiseEventStmt() is RaiseEventStmtContext raise) {
@@ -234,7 +311,7 @@ public static class StatementConverter
             }
 
             else if (stmt.beepStmt() is BeepStmtContext beepCtx) {
-                return ParseStatement("Console.Beep();");
+                return ParseStatement("System.Console.Beep();");
             }
 
             else {
@@ -509,27 +586,27 @@ public static class StatementConverter
 
         string GetMode()
         {
-            if (open.APPEND() != null) return "OpenMode.Append";
-            if (open.BINARY() != null) return "OpenMode.Binary";
-            if (open.INPUT() != null) return "OpenMode.Input";
-            if (open.OUTPUT() != null) return "OpenMode.Output";
-            return "OpenMode.Random";
+            if (open.APPEND() != null) return "Microsoft.VisualBasic.OpenMode.Append";
+            if (open.BINARY() != null) return "Microsoft.VisualBasic.OpenMode.Binary";
+            if (open.INPUT() != null) return "Microsoft.VisualBasic.OpenMode.Input";
+            if (open.OUTPUT() != null) return "Microsoft.VisualBasic.OpenMode.Output";
+            return "Microsoft.VisualBasic.OpenMode.Random";
         }
 
         string GetAccess()
         {
-            if (open.READ_WRITE() != null) return "OpenAccess.ReadWrite";
-            if (open.READ() != null) return "OpenAccess.Read";
-            if (open.WRITE() != null) return "OpenAccess.Write";
+            if (open.READ_WRITE() != null) return "Microsoft.VisualBasic.OpenAccess.ReadWrite";
+            if (open.READ() != null) return "Microsoft.VisualBasic.OpenAccess.Read";
+            if (open.WRITE() != null) return "Microsoft.VisualBasic.OpenAccess.Write";
             return null;
         }
 
         string GetShare()
         {
-            if (open.LOCK_READ_WRITE() != null) return "OpenShare.LockReadWrite";
-            if (open.LOCK_WRITE() != null) return "OpenShare.LockWrite";
-            if (open.LOCK_READ() != null) return "OpenShare.LockRead";
-            if (open.SHARED() != null) return "OpenShare.Shared";
+            if (open.LOCK_READ_WRITE() != null) return "Microsoft.VisualBasic.OpenShare.LockReadWrite";
+            if (open.LOCK_WRITE() != null) return "Microsoft.VisualBasic.OpenShare.LockWrite";
+            if (open.LOCK_READ() != null) return "Microsoft.VisualBasic.OpenShare.LockRead";
+            if (open.SHARED() != null) return "Microsoft.VisualBasic.OpenShare.Shared";
             return null;
         }
 
@@ -542,7 +619,7 @@ public static class StatementConverter
         var access = GetAccess();
         var share = GetShare();
         if (access is not null || share is not null) {
-            args.Add(Argument(ParseName(access ?? "OpenAccess.Default")));
+            args.Add(Argument(ParseName(access ?? "Microsoft.VisualBasic.OpenAccess.Default")));
             if (share is not null) args.Add(Argument(ParseName(share)));
         }
 
@@ -569,18 +646,18 @@ public static class StatementConverter
             if (o.SPC() is not null) {
                 var spcArgs = o.argsCall();
                 if (spcArgs?.argCall().Length > 0) {
-                    return InvocationExpression(IdentifierName("SPC"),
+                    return InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.SPC"),
                         ArgumentList(GetValue(spcArgs.argCall(0).valueStmt(), ctx)));
                 }
-                return InvocationExpression(IdentifierName("SPC"), ArgumentList());
+                return InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.SPC"), ArgumentList());
             }
             if (o.TAB() is not null) {
                 var tabArgs = o.argsCall();
                 if (tabArgs?.argCall().Length > 0) {
-                    return InvocationExpression(IdentifierName("TAB"),
+                    return InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.TAB"),
                         ArgumentList(GetValue(tabArgs.argCall(0).valueStmt(), ctx)));
                 }
-                return InvocationExpression(IdentifierName("TAB"), ArgumentList());
+                return InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.TAB"), ArgumentList());
             }
             if (o.valueStmt() is ValueStmtContext value) {
                 return GetValue(value, ctx);
@@ -599,7 +676,7 @@ public static class StatementConverter
 
         return ExpressionStatement(
             InvocationExpression(
-                IdentifierName(methodName),
+                ParseExpression($"Microsoft.VisualBasic.FileSystem.{methodName}"),
                 ArgumentList(new[] { Argument(fileNum) }.Concat(items.Select(a => Argument(a))).ToArray())));
     }
 
@@ -619,14 +696,14 @@ public static class StatementConverter
     {
         var fileNums = close.valueStmt().Select(v => GetValue(v, ctx)).ToArray();
         return ExpressionStatement(
-            InvocationExpression(IdentifierName("FileClose"), ArgumentList(fileNums)));
+            InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FileClose"), ArgumentList(fileNums)));
     }
 
     public static StatementSyntax GetKill(KillStmtContext kill, CallContext ctx)
     {
         var value = GetValue(kill.valueStmt(), ctx);
         return ExpressionStatement(
-            InvocationExpression(IdentifierName("Kill"), ArgumentList(value)));
+            InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.Kill"), ArgumentList(value)));
     }
 
 

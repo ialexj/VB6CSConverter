@@ -97,6 +97,17 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         ["Mid"]   = ConvertMid,
         ["Space"] = ConvertSpace,
         ["InStr"] = ConvertInStr,
+
+        // FileSystem
+        ["EOF"]          = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.EOF"),          node.ArgumentList),
+        ["LOF"]          = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.LOF"),          node.ArgumentList),
+        ["FreeFile"]     = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FreeFile"),     node.ArgumentList),
+        ["FileLen"]      = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FileLen"),      node.ArgumentList),
+        ["Seek"]         = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.Seek"),         node.ArgumentList),
+        ["Dir"]          = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.Dir"),          node.ArgumentList),
+        ["FileAttr"]     = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FileAttr"),     node.ArgumentList),
+        ["FileDateTime"] = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FileDateTime"), node.ArgumentList),
+        ["GetAttr"]      = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.GetAttr"),      node.ArgumentList),
     };
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
