@@ -99,6 +99,41 @@ public class TypeConversionRewriter(SemanticModel semantics) : LoggedRewriter
             : null;
     }
 
+    public override SyntaxNode VisitBinaryExpression(BinaryExpressionSyntax node)
+        => Rewrite(node, node => {
+            if (!IsComparisonOperator(node.Kind())) {
+                return base.VisitBinaryExpression(node);
+            }
+
+            var leftType = semantics.GetTypeInfo(node.Left).Type;
+            var rightType = semantics.GetTypeInfo(node.Right).Type;
+
+            if (leftType?.SpecialType == SpecialType.System_String
+                && rightType is not null
+                && rightType.SpecialType != SpecialType.System_String) {
+                if (ShouldConvert(node.Left, rightType, out var methodName)) {
+                    return node.WithLeft(ApplyConvert(node.Left, methodName));
+                }
+            }
+            else if (rightType?.SpecialType == SpecialType.System_String
+                && leftType is not null
+                && leftType.SpecialType != SpecialType.System_String) {
+                if (ShouldConvert(node.Right, leftType, out var methodName)) {
+                    return node.WithRight(ApplyConvert(node.Right, methodName));
+                }
+            }
+
+            return base.VisitBinaryExpression(node);
+        });
+
+    private static bool IsComparisonOperator(SyntaxKind kind) => kind is
+        SyntaxKind.EqualsExpression or
+        SyntaxKind.NotEqualsExpression or
+        SyntaxKind.LessThanExpression or
+        SyntaxKind.LessThanOrEqualExpression or
+        SyntaxKind.GreaterThanExpression or
+        SyntaxKind.GreaterThanOrEqualExpression;
+
     public override SyntaxNode VisitReturnStatement(ReturnStatementSyntax node)
         => Rewrite(node, node => {
             if (node.Expression is null) {

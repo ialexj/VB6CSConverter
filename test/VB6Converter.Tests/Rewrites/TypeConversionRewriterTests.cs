@@ -76,6 +76,57 @@ public class TypeConversionRewriterTests
             "class T { string M() { return System.Convert.ToString(System.Convert.ToBoolean(default)); } }");
 
     [TestMethod]
+    public void ConvertsStringToIntInEqualityComparison()
+        => CheckRewrites(
+            "class T { void M() { int i = 1; string s = \"1\"; bool b = i == s; } }",
+            "class T { void M() { int i = 1; string s = \"1\"; bool b = i == System.Convert.ToInt32(s); } }");
+
+    [TestMethod]
+    public void ConvertsStringToDoubleInLessThanComparison()
+        => CheckRewrites(
+            "class T { void M() { double d = 1.0; string s = \"1\"; bool b = s < d; } }",
+            "class T { void M() { double d = 1.0; string s = \"1\"; bool b = System.Convert.ToDouble(s) < d; } }");
+
+    [TestMethod]
+    public void ConvertsStringToIntInNotEqualsComparison()
+        => CheckRewrites(
+            "class T { void M() { int i = 1; string s = \"1\"; bool b = i != s; } }",
+            "class T { void M() { int i = 1; string s = \"1\"; bool b = i != System.Convert.ToInt32(s); } }");
+
+    [TestMethod]
+    public void LeavesStringToStringComparisonUnchanged()
+        => CheckRewrites(
+            "class T { void M() { string s1 = \"a\"; string s2 = \"b\"; bool b = s1 == s2; } }");
+
+    [TestMethod]
+    public void LeavesIntToIntComparisonUnchanged()
+        => CheckRewrites(
+            "class T { void M() { int i = 1; int j = 2; bool b = i == j; } }");
+
+    [TestMethod]
+    public void LeavesNonComparisonBinaryExpressionUnchanged()
+        => CheckRewrites(
+            "class T { void M() { int i = 1; string s = \"1\"; var x = i + s; } }");
+
+    [TestMethod]
+    public void LeavesExistingConvertInComparisonUnchanged()
+        => CheckRewrites(
+            "class T { void M() { int i = 1; string s = \"1\"; bool b = i == System.Convert.ToInt32(s); } }");
+
+    [TestMethod]
+    public void StringComparisonIsIdempotentAcrossPasses()
+    {
+        const string source = "class T { void M() { int i = 1; string s = \"1\"; bool b = i == s; } }";
+
+        var firstPass = RewriteWithFreshSemantics(source);
+        var secondPass = RewriteWithFreshSemantics(firstPass);
+        var thirdPass = RewriteWithFreshSemantics(secondPass);
+
+        secondPass.Should().Be(firstPass);
+        thirdPass.Should().Be(firstPass);
+    }
+
+    [TestMethod]
     public void DoesNotChainToBooleanAcrossPasses()
     {
         const string source = "class T { string M() { return System.Convert.ToString(System.Convert.ToBoolean(System.Convert.ToBoolean(System.Convert.ToBoolean(default)))); } }";

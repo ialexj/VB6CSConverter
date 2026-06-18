@@ -148,14 +148,23 @@ internal static class RoslynHelpers
     }
 
     public static TypeSyntax ToTypeSyntax(this TypeInfo typeInfo)
-        => !string.IsNullOrEmpty(typeInfo.ConvertedType?.Name)
-            ? ParseTypeName(typeInfo.ConvertedType.ToString())
+    {
+        var t = typeInfo.ConvertedType;
+        if (t?.TypeKind == TypeKind.Dynamic)
+            return IdentifierName("dynamic");
+        return !string.IsNullOrEmpty(t?.Name)
+            ? ParseTypeName(t.ToString())
             : PredefinedType(Token(SyntaxKind.ObjectKeyword));
+    }
 
     public static TypeSyntax ToTypeSyntax(this ITypeSymbol typeSymbol)
-        => !string.IsNullOrEmpty(typeSymbol?.Name)
+    {
+        if (typeSymbol?.TypeKind == TypeKind.Dynamic)
+            return IdentifierName("dynamic");
+        return !string.IsNullOrEmpty(typeSymbol?.Name)
             ? ParseTypeName(typeSymbol.ToString())
             : PredefinedType(Token(SyntaxKind.ObjectKeyword));
+    }
 
     public static bool IsEquivalentSyntax(object oldValue, object newValue)
     {
