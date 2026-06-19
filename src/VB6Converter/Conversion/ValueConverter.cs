@@ -274,7 +274,7 @@ public static class ValueConverter
 
 
         if (oper is VsPowContext pow) {
-            return InvocationExpression(ParseName("Math.Pow"), ArgumentList(values));
+            return InvocationExpression(ParseName("System.Math.Pow"), ArgumentList(values));
         }
 
         SyntaxKind? kind = oper switch {

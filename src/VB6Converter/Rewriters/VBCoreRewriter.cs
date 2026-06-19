@@ -146,7 +146,9 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
     static SyntaxNode ConvertIsMissing(InvocationExpressionSyntax node)
     {
         var arg = node.ArgumentList.Arguments[0].Expression;
-        return BinaryExpression(SyntaxKind.EqualsExpression, arg, LiteralExpression(SyntaxKind.DefaultLiteralExpression));
+        return ParenthesizedExpression(
+            BinaryExpression(SyntaxKind.EqualsExpression, arg, 
+                LiteralExpression(SyntaxKind.DefaultLiteralExpression)));
     }
 
     public override SyntaxNode VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
