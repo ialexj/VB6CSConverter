@@ -50,9 +50,9 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         ["Len"] = ConvertLen,
         ["Left"] = ConvertLeft,
 
-        ["CStr"] = node => ConvertToMemberAccess(node, "Convert.ToString"),
-        ["CLng"] = node => ConvertToMemberAccess(node, "Convert.ToInt32"),
-        ["CDbl"] = node => ConvertToMemberAccess(node, "Convert.ToDouble"),
+        ["CStr"] = node => ConvertToMemberAccess(node, "System.Convert.ToString"),
+        ["CLng"] = node => ConvertToMemberAccess(node, "System.Convert.ToInt32"),
+        ["CDbl"] = node => ConvertToMemberAccess(node, "System.Convert.ToDouble"),
         ["Val"] = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Conversion.Val"),
 
         ["IIf"] = ConvertIIf,
@@ -65,27 +65,27 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         ["IsMissing"] = ConvertIsMissing,
 
         // Math
-        ["Abs"]   = node => ConvertToMemberAccess(node, "Math.Abs"),
-        ["Sin"]   = node => ConvertToMemberAccess(node, "Math.Sin"),
-        ["Cos"]   = node => ConvertToMemberAccess(node, "Math.Cos"),
-        ["Tan"]   = node => ConvertToMemberAccess(node, "Math.Tan"),
-        ["Atn"]   = node => ConvertToMemberAccess(node, "Math.Atan"),
-        ["Sqr"]   = node => ConvertToMemberAccess(node, "Math.Sqrt"),
-        ["Log"]   = node => ConvertToMemberAccess(node, "Math.Log"),
-        ["Exp"]   = node => ConvertToMemberAccess(node, "Math.Exp"),
-        ["Sgn"]   = node => ConvertToMemberAccess(node, "Math.Sign"),
+        ["Abs"]   = node => ConvertToMemberAccess(node, "System.Math.Abs"),
+        ["Sin"]   = node => ConvertToMemberAccess(node, "System.Math.Sin"),
+        ["Cos"]   = node => ConvertToMemberAccess(node, "System.Math.Cos"),
+        ["Tan"]   = node => ConvertToMemberAccess(node, "System.Math.Tan"),
+        ["Atn"]   = node => ConvertToMemberAccess(node, "System.Math.Atan"),
+        ["Sqr"]   = node => ConvertToMemberAccess(node, "System.Math.Sqrt"),
+        ["Log"]   = node => ConvertToMemberAccess(node, "System.Math.Log"),
+        ["Exp"]   = node => ConvertToMemberAccess(node, "System.Math.Exp"),
+        ["Sgn"]   = node => ConvertToMemberAccess(node, "System.Math.Sign"),
         ["Int"]   = ConvertInt,
         ["Fix"]   = ConvertFix,
         ["Round"] = ConvertRound,
 
         // Type conversions
-        ["CInt"]   = node => ConvertToMemberAccess(node, "Convert.ToInt32"),
-        ["CShort"] = node => ConvertToMemberAccess(node, "Convert.ToInt16"),
-        ["CSng"]   = node => ConvertToMemberAccess(node, "Convert.ToSingle"),
-        ["CBool"]  = node => ConvertToMemberAccess(node, "Convert.ToBoolean"),
-        ["CByte"]  = node => ConvertToMemberAccess(node, "Convert.ToByte"),
-        ["CDate"]  = node => ConvertToMemberAccess(node, "Convert.ToDateTime"),
-        ["CCur"]   = node => ConvertToMemberAccess(node, "Convert.ToDecimal"),
+        ["CInt"]   = node => ConvertToMemberAccess(node, "System.Convert.ToInt32"),
+        ["CShort"] = node => ConvertToMemberAccess(node, "System.Convert.ToInt16"),
+        ["CSng"]   = node => ConvertToMemberAccess(node, "System.Convert.ToSingle"),
+        ["CBool"]  = node => ConvertToMemberAccess(node, "System.Convert.ToBoolean"),
+        ["CByte"]  = node => ConvertToMemberAccess(node, "System.Convert.ToByte"),
+        ["CDate"]  = node => ConvertToMemberAccess(node, "System.Convert.ToDateTime"),
+        ["CCur"]   = node => ConvertToMemberAccess(node, "System.Convert.ToDecimal"),
 
         // Strings
         ["Trim"]  = node => ConvertStringMethod(node, "Trim"),
@@ -147,7 +147,7 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
     {
         var arg = node.ArgumentList.Arguments[0].Expression;
         return ParenthesizedExpression(
-            BinaryExpression(SyntaxKind.EqualsExpression, arg, 
+            BinaryExpression(SyntaxKind.EqualsExpression, arg,
                 LiteralExpression(SyntaxKind.DefaultLiteralExpression)));
     }
 
@@ -258,7 +258,7 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         var day = node.ArgumentList.Arguments[2];
 
         return ObjectCreationExpression(
-            IdentifierName("DateTime"),
+            IdentifierName("System.DateTime"),
             ArgumentList(year, month, day),
             null);
     }

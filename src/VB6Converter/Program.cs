@@ -187,11 +187,6 @@ public static class Program
                     return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
                 }));
 
-            // Reload from disk before splitting: parallel saves during conversion leave
-            // the in-memory Project stale (last-writer wins), so documents converted by
-            // earlier threads are not found in the workspace and would be re-created empty.
-            await ws.ReloadProject();
-
             // Split Form/Control designer code into separate *.designer.cs partial classes
             var formControlTargets = targetsThatNeedTransform
                 .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
