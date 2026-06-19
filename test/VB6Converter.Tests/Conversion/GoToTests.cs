@@ -104,4 +104,73 @@ public class GoToTests
         handler_End:
             return;
         """);
+
+    [TestMethod]
+    public void OnErrorGotoWithGotoToRootLabelUsesCatchGotoFallback() => ValidateBodyMatches(
+        """
+        On Error GoTo handler
+        x = 1
+        GoTo done
+        handler:
+        x = 0
+        done:
+        x = 2
+        Exit Sub
+        """,
+        """
+        try
+        {
+            x = 1;
+            goto done;
+        }
+        catch
+        {
+            goto handler;
+        }
+        handler:
+            x = 0;
+        done:
+            x = 2;
+        return;
+        """);
+
+    [TestMethod]
+    public void MultipleOnErrorClausesAreRewritten() => ValidateBodyMatches(
+        """
+        On Error GoTo first_Err
+        a = 1
+        GoTo first_End
+        first_Err:
+        a = 0
+        first_End:
+        b = 10
+
+        On Error GoTo second_Err
+        b = 1
+        second_Err:
+        b = 0
+        """,
+        """
+        try
+        {
+            a = 1;
+            goto first_End;
+        }
+        catch
+        {
+            goto first_Err;
+        }
+        first_Err:
+            a = 0;
+        first_End:
+            b = 10;
+        try
+        {
+            b = 1;
+        }
+        catch
+        {
+            b = 0;
+        }
+        """);
 }

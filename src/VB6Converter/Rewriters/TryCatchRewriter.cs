@@ -16,21 +16,95 @@ public class TryCatchRewriter : LoggedRewriter
 
     public override SyntaxNode VisitBlock(BlockSyntax node)
     {
-        var onErrorGoto = node.GetAnnotatedNodes("OnErrorGoto").FirstOrDefault();
-        if (onErrorGoto is null)
-            return base.VisitBlock(node);
+        var rewritten = RewriteOnErrorBlocks(node);
+        return base.VisitBlock(rewritten);
+    }
 
-        var errLabelName = onErrorGoto.GetAnnotations("OnErrorGoto").First().Data!;
+    private static BlockSyntax RewriteOnErrorBlocks(BlockSyntax node)
+    {
+        var current = node;
 
-        // Find the error-handler labeled statement by name (not just the first label in the block)
-        var errLabeledStmt = node.Statements
-            .OfType<LabeledStatementSyntax>()
-            .FirstOrDefault(l => string.Equals(l.Identifier.Text, errLabelName, StringComparison.OrdinalIgnoreCase));
+        while (TryRewriteFirstOnError(current, out var next)) {
+            current = next;
+        }
 
-        if (errLabeledStmt is null)
-            return base.VisitBlock(node);
+        return current;
+    }
 
-        // Split the block into: before the OnError, the try region, and the catch region
+    private static bool TryRewriteFirstOnError(BlockSyntax node, out BlockSyntax rewritten)
+    {
+        rewritten = node;
+
+        if (!TryGetFirstOnError(node, out var onErrorGoto, out var onErrorIndex, out var errLabelName)) {
+            return false;
+        }
+
+        var errLabelIndex = FindLabelIndex(node, errLabelName, onErrorIndex + 1);
+        if (errLabelIndex < 0) {
+            return false;
+        }
+
+        var errLabeledStmt = (LabeledStatementSyntax)node.Statements[errLabelIndex];
+        var (beforeStatements, tryStatements, catchStatements) = Partition(node, onErrorGoto, errLabeledStmt);
+
+        // Preserve current inline-catch behavior for simple/structured control flow.
+        if (TryBuildInlineTryCatch(beforeStatements, tryStatements, catchStatements, out var inlineRewritten)) {
+            rewritten = inlineRewritten;
+            return true;
+        }
+
+        // General fallback: keep handler labels at root scope and jump to the handler from catch.
+        var fallbackRewritten = BuildGotoCatchFallback(node, errLabelIndex, errLabelName, beforeStatements, tryStatements);
+        if (fallbackRewritten != node) {
+            rewritten = fallbackRewritten;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetFirstOnError(BlockSyntax node, out StatementSyntax onErrorGoto, out int index, out string errLabelName)
+    {
+        for (var i = 0; i < node.Statements.Count; i++) {
+            var stmt = node.Statements[i];
+            if (!stmt.HasAnnotations("OnErrorGoto")) {
+                continue;
+            }
+
+            var annotation = stmt.GetAnnotations("OnErrorGoto").FirstOrDefault();
+            if (annotation?.Data is null) {
+                continue;
+            }
+
+            onErrorGoto = stmt;
+            index = i;
+            errLabelName = annotation.Data;
+            return true;
+        }
+
+        onErrorGoto = null!;
+        index = -1;
+        errLabelName = string.Empty;
+        return false;
+    }
+
+    private static int FindLabelIndex(BlockSyntax node, string labelName, int startIndex)
+    {
+        for (var i = startIndex; i < node.Statements.Count; i++) {
+            if (node.Statements[i] is LabeledStatementSyntax labeled
+                && string.Equals(labeled.Identifier.Text, labelName, StringComparison.OrdinalIgnoreCase)) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static (List<StatementSyntax> Before, List<StatementSyntax> Try, List<StatementSyntax> Catch) Partition(
+        BlockSyntax node,
+        StatementSyntax onErrorGoto,
+        LabeledStatementSyntax errLabeledStmt)
+    {
         List<StatementSyntax> beforeStatements = [];
         List<StatementSyntax> tryStatements = [];
         List<StatementSyntax> catchStatements = [];
@@ -39,45 +113,55 @@ public class TryCatchRewriter : LoggedRewriter
         foreach (var stmt in node.Statements) {
             if (stmt == onErrorGoto) {
                 region = ScanState.Try;
-                continue; // the OnError statement itself is consumed
-            }
-            if (stmt == errLabeledStmt) {
-                region = ScanState.Catch;
-                catchStatements.Add(errLabeledStmt.Statement); // add body, strip the label
                 continue;
             }
+
+            if (stmt == errLabeledStmt) {
+                region = ScanState.Catch;
+                catchStatements.Add(errLabeledStmt.Statement);
+                continue;
+            }
+
             switch (region) {
-                case ScanState.Before: beforeStatements.Add(stmt); break;
-                case ScanState.Try:    tryStatements.Add(stmt);    break;
-                case ScanState.Catch:  catchStatements.Add(stmt);  break;
+                case ScanState.Before:
+                    beforeStatements.Add(stmt);
+                    break;
+                case ScanState.Try:
+                    tryStatements.Add(stmt);
+                    break;
+                case ScanState.Catch:
+                    catchStatements.Add(stmt);
+                    break;
             }
         }
 
-        // "Exit labels" are labeled statements inside the try region (e.g. DeleteRegValue_End).
-        // They act as normal-exit points reached via GoTo from within the try block or via Resume
-        // from within the catch block.  In C# it is legal to goto OUT of a try/catch to an
-        // external label, so we move these labels (and everything between them and the error label)
-        // to after the try/catch.
+        return (beforeStatements, tryStatements, catchStatements);
+    }
+
+    private static bool TryBuildInlineTryCatch(
+        List<StatementSyntax> beforeStatements,
+        List<StatementSyntax> tryStatements,
+        List<StatementSyntax> catchStatements,
+        out BlockSyntax rewritten)
+    {
+        rewritten = null!;
+
         var exitLabelNames = tryStatements
             .OfType<LabeledStatementSyntax>()
             .Select(l => l.Identifier.Text)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Every goto in the try+catch region must target an exit label; anything else means the
-        // control flow is too complex to restructure safely.
         var allGotos = tryStatements.Concat(catchStatements)
             .SelectMany(s => s.DescendantNodesAndSelf().OfType<GotoStatementSyntax>())
             .ToList();
 
         foreach (var gotoStmt in allGotos) {
             var target = gotoStmt.Expression?.WithoutTrivia().ToString() ?? "";
-            if (!exitLabelNames.Contains(target))
-                return base.VisitBlock(node);
+            if (!exitLabelNames.Contains(target)) {
+                return false;
+            }
         }
 
-        // Split the try region at the first exit label:
-        //   - statements before it  → the actual try body
-        //   - the exit label and everything after it (up to the error label) → placed after try/catch
         var exitIdx = tryStatements.FindIndex(
             s => s is LabeledStatementSyntax l && exitLabelNames.Contains(l.Identifier.Text));
 
@@ -85,12 +169,11 @@ public class TryCatchRewriter : LoggedRewriter
         List<StatementSyntax> exitCluster;
 
         if (exitIdx < 0) {
-            // No exit labels — plain try/catch (original simple case)
             tryBody = tryStatements;
             exitCluster = [];
         }
         else {
-            tryBody    = tryStatements.Take(exitIdx).ToList();
+            tryBody = tryStatements.Take(exitIdx).ToList();
             exitCluster = tryStatements.Skip(exitIdx).ToList();
         }
 
@@ -100,6 +183,40 @@ public class TryCatchRewriter : LoggedRewriter
             default
         );
 
-        return Block((StatementSyntax[])[.. beforeStatements, tryStatement, .. exitCluster]);
+        rewritten = Block((StatementSyntax[])[.. beforeStatements, tryStatement, .. exitCluster]);
+        return true;
+    }
+
+    private static BlockSyntax BuildGotoCatchFallback(
+        BlockSyntax original,
+        int errLabelIndex,
+        string errLabelName,
+        List<StatementSyntax> beforeStatements,
+        List<StatementSyntax> tryStatements)
+    {
+        var firstLabelInTryIndex = tryStatements.FindIndex(s => s is LabeledStatementSyntax);
+
+        List<StatementSyntax> tryBody;
+        List<StatementSyntax> exitCluster;
+
+        if (firstLabelInTryIndex < 0) {
+            tryBody = tryStatements;
+            exitCluster = [];
+        }
+        else {
+            tryBody = tryStatements.Take(firstLabelInTryIndex).ToList();
+            exitCluster = tryStatements.Skip(firstLabelInTryIndex).ToList();
+        }
+
+        var remainder = original.Statements.Skip(errLabelIndex).ToList();
+
+        var catchGoto = GotoStatement(SyntaxKind.GotoStatement, IdentifierName(errLabelName));
+        var tryStatement = TryStatement(
+            Block(tryBody),
+            SingletonList(CatchClause(null, null, Block(catchGoto))),
+            default
+        );
+
+        return Block((StatementSyntax[])[.. beforeStatements, tryStatement, .. exitCluster, .. remainder]);
     }
 }
