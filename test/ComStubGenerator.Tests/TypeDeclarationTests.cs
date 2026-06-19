@@ -97,6 +97,54 @@ public class TypeDeclarationTests : ReferenceStubGeneratorTestBase
     }
 
     [TestMethod]
+    public void Generate_PropertyGetOnly_DefaultMode_EmitsReadWriteProperty()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("Widget", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Caption", LibraryMemberKind.PropertyGet, "string", []),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("string Caption");
+            source.Should().Contain("get;");
+            source.Should().Contain("set;", "default mode should synthesize writable properties");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_PropertyGetOnly_StrictMode_EmitsReadOnlyProperty()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("Widget", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Caption", LibraryMemberKind.PropertyGet, "string", []),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir, strictParameters: true);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("string Caption");
+            source.Should().Contain("get;");
+            source.Should().NotContain("set;", "strict mode should preserve COM read-only metadata");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void Generate_Module_EmitsStaticClass()
     {
         var library = MakeLibrary("TestLib",

@@ -1,4 +1,7 @@
+using AwesomeAssertions;
+using Microsoft.CodeAnalysis;
 using static VB6Converter.Tests.Validations;
+using VB6Parser;
 
 namespace VB6Converter.Tests.Conversion;
 
@@ -116,7 +119,7 @@ public sealed class ClassTests
         Public Property Get Test() As String
             Test = testVar
         End Property
-            
+
         Public Property Let Test(ByVal someValue As String)
             testVar = someValue
         End Property
@@ -139,7 +142,7 @@ public sealed class ClassTests
             SomeMethod
             Test = testVar
         End Property
-            
+
         Public Property Let Test(ByVal someValue As String)
             testVar = someValue
         End Property
@@ -168,7 +171,7 @@ public sealed class ClassTests
             Test = testVar
             SomeMethod
         End Property
-            
+
         Public Property Let Test(ByVal someValue As String)
             testVar = someValue
         End Property
@@ -249,5 +252,30 @@ public sealed class ClassTests
             public static event EventHandler TotalChanged;
         }
         """);
+
+    [TestMethod]
+    public void EnumerableClass_ImplementsGenericAndExplicitNonGenericIEnumerable()
+    {
+        var vb = """
+        Public Property Get NewEnum() As IUnknown
+            Set NewEnum = Nothing
+        End Property
+        """;
+
+        var conversion = VB6ToCSharpConversion.ConvertString(vb, "EnumerableClass", type: VisualBasicFileType.Class);
+
+        conversion.ParseErrors.Should().BeEmpty();
+        conversion.TransformErrors.Should().BeEmpty();
+        conversion.SyntaxErrors.Should().BeEmpty();
+
+        var actual = conversion.Class.NormalizeWhitespace().ToFullString();
+        actual.Should().Be("""
+            public partial class EnumerableClass : System.Collections.IEnumerable, System.Collections.Generic.IEnumerable<dynamic>
+            {
+                System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+                public System.Collections.Generic.IEnumerator<dynamic> GetEnumerator() => throw new System.NotImplementedException();
+            }
+            """);
+    }
 
 }

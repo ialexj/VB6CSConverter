@@ -53,9 +53,17 @@ public static class ClassConverter
                             bodyExpression = InvocationExpression(elcc.WithName(IdentifierName("GetEnumerator")), ArgumentList());
                         }
 
-                        c = c.AddBaseListTypes(SimpleBaseType(ParseName("System.Collections.IEnumerable")));
+                        c = c.AddBaseListTypes(
+                            SimpleBaseType(ParseName("System.Collections.IEnumerable")),
+                            SimpleBaseType(ParseTypeName("System.Collections.Generic.IEnumerable<dynamic>")));
                         c = c.AddMembers(
                             MethodDeclaration(ParseName("System.Collections.IEnumerator"), "GetEnumerator")
+                                .WithExplicitInterfaceSpecifier(ExplicitInterfaceSpecifier(ParseName("System.Collections.IEnumerable")))
+                                .WithExpressionBody(ArrowExpressionClause(InvocationExpression(IdentifierName("GetEnumerator"), ArgumentList())))
+                                .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))
+                        );
+                        c = c.AddMembers(
+                            MethodDeclaration(ParseTypeName("System.Collections.Generic.IEnumerator<dynamic>"), "GetEnumerator")
                                 .WithModifiers(Modifiers(isPublic: true, isStatic: false))
                                 .WithExpressionBody(ArrowExpressionClause(bodyExpression))
                                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))

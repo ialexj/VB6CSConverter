@@ -108,6 +108,15 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         ["FileAttr"]     = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FileAttr"),     node.ArgumentList),
         ["FileDateTime"] = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.FileDateTime"), node.ArgumentList),
         ["GetAttr"]      = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.FileSystem.GetAttr"),      node.ArgumentList),
+
+        // Interaction
+        ["MsgBox"]       = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Interaction.MsgBox"),       node.ArgumentList),
+        ["InputBox"]     = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Interaction.InputBox"),     node.ArgumentList),
+        ["Shell"]        = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Interaction.Shell"),        node.ArgumentList),
+        ["Beep"]         = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Interaction.Beep"),         node.ArgumentList),
+        ["Environ"]      = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Interaction.Environ"),      node.ArgumentList),
+        ["Command"]      = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Interaction.Command"),      node.ArgumentList),
+        ["AppActivate"]  = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Interaction.AppActivate"),  node.ArgumentList),
     };
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)

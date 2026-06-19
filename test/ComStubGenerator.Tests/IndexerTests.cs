@@ -446,9 +446,9 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
     }
 
     [TestMethod]
-    public void Generate_DefaultPropertyNonItem_ReadOnly_DispatchInterface_EmitsIndexerAndGetterMethod()
+    public void Generate_DefaultPropertyNonItem_ReadOnly_DispatchInterface_DefaultMode_EmitsIndexerGetterAndSetterMethod()
     {
-        // Read-only default parameterized property: indexer + getter method, no SetX.
+        // In default mode, getter-only metadata is treated as read/write.
         var library = MakeLibrary("XArrayLib",
             new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
                 Members: [
@@ -466,8 +466,35 @@ public class IndexerTests : ReferenceStubGeneratorTestBase
             source.Should().Contain("this[", "indexer must be emitted");
             source.Should().Contain("Value(", "named getter method must be emitted");
             source.Should().Contain("[IndexedProperty(\"Value\")]", "getter-only parameterized property must also be marked with IndexedProperty");
-            source.Should().NotContain("SetValue", "no setter method should be emitted for a read-only property");
+            source.Should().Contain("SetValue", "default mode should synthesize a setter method for read-only metadata");
             source.Should().NotContain("Value {", "plain property must not be emitted");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyNonItem_ReadOnly_DispatchInterface_StrictMode_EmitsIndexerAndGetterOnly()
+    {
+        // Strict mode preserves COM-required read-only metadata.
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object",
+                        [new("Index", "object", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir, strictParameters: true);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[", "indexer must be emitted");
+            source.Should().Contain("Value(", "named getter method must be emitted");
+            source.Should().NotContain("SetValue", "strict mode should not synthesize a setter method");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
