@@ -195,7 +195,7 @@ public static class ReferenceStubGenerator
                                 ArgumentList(SeparatedList(getArgs)))))
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
-                    if (setter != null) {
+                    if (setter != null || (!strictParameters && getter != null)) {
                         var setStaticName = "Set" + staticName;
                         classLevelUsed.Add(setStaticName);
                         var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
@@ -226,7 +226,7 @@ public static class ReferenceStubGenerator
                                         IdentifierName(safeName), IdentifierName(instanceName))))
                                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
                     }
-                    if (setter != null) {
+                    if (setter != null || (!strictParameters && getter != null)) {
                         accessors.Add(
                             AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
                                 .WithExpressionBody(ArrowExpressionClause(
@@ -556,7 +556,7 @@ public static class ReferenceStubGenerator
                     AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
             }
-            if (setter != null) {
+            if (setter != null || (!strictParameters && getter != null)) {
                 accessors.Add(
                     AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
@@ -584,7 +584,7 @@ public static class ReferenceStubGenerator
                         .WithParameterList(ParameterList(SeparatedList(getParams)))
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
-                    if (setter != null) {
+                    if (setter != null || !strictParameters) {
                         string setName = MakeUniqueName("Set" + MakeSafeIdentifier(group.Key), usedMemberNames);
                         var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                             .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
@@ -608,7 +608,7 @@ public static class ReferenceStubGenerator
                     .WithParameterList(ParameterList(SeparatedList(getParams)))
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
-                if (setter != null) {
+                if (setter != null || !strictParameters) {
                     var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                         .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
                         .ToArray();
@@ -772,7 +772,7 @@ public static class ReferenceStubGenerator
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
             }
 
-            if (setter != null) {
+            if (setter != null || (!strictParameters && getter != null)) {
                 accessors.Add(
                     AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
                         .WithExpressionBody(ThrowNotImplementedExprBody())
@@ -804,7 +804,7 @@ public static class ReferenceStubGenerator
                         .WithExpressionBody(ThrowNotImplementedExprBody())
                         .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
-                    if (setter != null) {
+                    if (setter != null || !strictParameters) {
                         string setName = MakeUniqueName("Set" + MakeSafeIdentifier(group.Key), usedMemberNames);
                         var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                             .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
@@ -832,7 +832,7 @@ public static class ReferenceStubGenerator
                     .WithExpressionBody(ThrowNotImplementedExprBody())
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken)));
 
-                if (setter != null) {
+                if (setter != null || !strictParameters) {
                     var setParams = BuildParameters(getter.Parameters, useDynamic, strictParameters: strictParameters)
                         .Append(BuildSetterValueParam(propType, useDynamic, strictParameters))
                         .ToArray();

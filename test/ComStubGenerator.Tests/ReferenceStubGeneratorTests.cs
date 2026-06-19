@@ -797,10 +797,10 @@ public class ReferenceStubGeneratorTests
     // ──────────────────────────────────────────────────────────────────────
 
     [TestMethod]
-    public void Generate_ParameterizedNonDefaultProperty_Interface_EmitsMethod()
+    public void Generate_ParameterizedNonDefaultProperty_Interface_DefaultMode_EmitsGetAndSetMethods()
     {
-        // XArray.Count(nDim As Integer) As Long is a read-only parameterized property.
-        // C# has no parameterized non-indexer properties, so it must be emitted as a method.
+        // XArray.Count(nDim As Integer) As Long is read-only in COM metadata.
+        // Default mode should still synthesize SetCount so all properties are writable.
         var library = MakeLibrary("XArrayLib",
             new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
                 Members: [
@@ -819,8 +819,32 @@ public class ReferenceStubGeneratorTests
             source.Should().Contain("Count(", "parameterized property must be emitted as a method");
             source.Should().NotContain("int Count {", "parameterized property must NOT be emitted as a plain property");
             source.Should().NotContain("this[", "non-default parameterized property must NOT become an indexer");
-            // No setter → no SetCount
-            source.Should().NotContain("SetCount", "read-only property must not emit a SetCount method");
+            source.Should().Contain("SetCount", "default mode should synthesize SetCount for read-only metadata");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_ParameterizedNonDefaultProperty_Interface_StrictMode_EmitsGetterOnlyMethod()
+    {
+        var library = MakeLibrary("XArrayLib",
+            new ComQueryType("XArray", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Count", LibraryMemberKind.PropertyGet, "int",
+                        [new("nDim", "short", IsOptional: false, IsOut: false)],
+                        IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir, strictParameters: true);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("Count(", "getter method must be emitted");
+            source.Should().NotContain("SetCount", "strict mode should preserve read-only metadata");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
@@ -1693,6 +1717,8 @@ public class ReferenceStubGeneratorTests
             // Read-only property forwarded to singleton
             source.Should().Contain("public static VB.Screen Screen");
             source.Should().Contain("get => Global.Screen");
+            source.Should().Contain("set => Global.Screen = value",
+                "default mode should synthesize writable forwarding properties for read-only metadata");
             // Read-write property forwarded
             source.Should().Contain("public static VB.Printer Printer");
             source.Should().Contain("get => Global.Printer");
@@ -1700,6 +1726,32 @@ public class ReferenceStubGeneratorTests
             // Method forwarded
             source.Should().Contain("public static int Load(");
             source.Should().Contain("=> Global.Load(");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateAppObjects_ReadOnlyProperty_StrictMode_RemainsReadOnly()
+    {
+        var library = MakeLibrary("VB",
+            new ComQueryType("Global", LibraryTypeKind.Class,
+                IsAppObject: true,
+                Members: [
+                    new("Screen", LibraryMemberKind.PropertyGet, "VB.Screen", [], IsDefault: false),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var result = ReferenceStubGenerator.GenerateAppObjects([library], tempDir, strictParameters: true);
+
+            result.Should().NotBeNull();
+            var source = File.ReadAllText(result!);
+            source.Should().Contain("public static VB.Screen Screen");
+            source.Should().Contain("get => Global.Screen");
+            source.Should().NotContain("set => Global.Screen = value",
+                "strict mode should not synthesize writable app-object forwarders");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
