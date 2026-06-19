@@ -37,6 +37,16 @@ public class ControlInstanceRewriter(IEnumerable<string> controls, string self) 
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
         => Rewrite(node, node => {
+            if (node.Expression is IdentifierNameSyntax callee
+                && (callee.Identifier.ValueText == "Load" || callee.Identifier.ValueText == "Unload")
+                && node.ArgumentList.Arguments.Count > 0) {
+                var firstArg = node.ArgumentList.Arguments[0];
+                var rewrittenArgument = InsertInstance(firstArg.Expression);
+                if (rewrittenArgument != firstArg.Expression) {
+                    return node.ReplaceNode(firstArg.Expression, rewrittenArgument);
+                }
+            }
+
             if (node.Expression is MemberAccessExpressionSyntax macc && macc.Name.Identifier.ValueText == "Show") {
                 var names = macc.EnumerateNames().ToArray();
                 if (IsControl(names[^1])) {
@@ -67,6 +77,23 @@ public class ControlInstanceRewriter(IEnumerable<string> controls, string self) 
                     SyntaxKind.SimpleMemberAccessExpression,
                     root, IdentifierName("_Instance")));
             }
+        }
+
+        return node;
+    }
+
+    ExpressionSyntax InsertInstance(ExpressionSyntax node)
+    {
+        if (node is IdentifierNameSyntax identifier
+            && controls.Contains(identifier.Identifier.Text)) {
+            return MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                identifier,
+                IdentifierName("_Instance"));
+        }
+
+        if (node is MemberAccessExpressionSyntax memberAccess) {
+            return InsertInstance(memberAccess);
         }
 
         return node;
