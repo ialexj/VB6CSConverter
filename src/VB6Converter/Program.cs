@@ -25,6 +25,7 @@ public static class Program
     {
         public string Project { get; set; } = null!;
         public string OutputDir { get; set; } = null!;
+        public string Root { get; set; }
         public string[] Update { get; set; } = [];
         public string[] Filter { get; set; } = [];
         public bool Show { get; set; }
@@ -77,6 +78,9 @@ public static class Program
         var pauseOpt = new Option<bool>("--pause", []) {
             Description = "Pause for user input after each diagnostics collection. Press any key to continue, Ctrl-C to stop.",
         };
+        var workspaceRootOpt = new Option<string>("--root", ["-r"]) {
+            Description = "Root directory of the VB6 workspace. Used to preserve folder structure for files referenced outside the project folder. Auto-detected from file paths when omitted.",
+        };
 
         var rootCommand = new RootCommand("Convert VB6 projects to C#.") {
             projectOpt,
@@ -90,7 +94,8 @@ public static class Program
             skipDiagnosticsOpt,
             preferNamespacesOpt,
             excludeRefsOpt,
-            pauseOpt
+            pauseOpt,
+            workspaceRootOpt
         };
 
         rootCommand.SetAction(async (ParseResult result) => {
@@ -106,7 +111,8 @@ public static class Program
                 SkipDiagnostics = result.GetValue(skipDiagnosticsOpt),
                 PreferredNamespaces = result.GetValue(preferNamespacesOpt) ?? [],
                 ExcludeReferences = result.GetValue(excludeRefsOpt) ?? [],
-                Pause = result.GetValue(pauseOpt)
+                Pause = result.GetValue(pauseOpt),
+                Root = result.GetValue(workspaceRootOpt)
             });
             return 0;
         });
@@ -124,7 +130,26 @@ public static class Program
         // Open/Create C# project
         using var ws = new ConversionWorkspace();
         var projectBasePath = Path.GetDirectoryName(Path.GetFullPath(options.Project)) ?? Directory.GetCurrentDirectory();
-        var allTargets = vbProject.Files.Select(f => ConversionTarget.Create(f, options.OutputDir, projectBasePath)).OrderBy(t => t.Name).ToArray();
+
+        var rootPath = options.Root is not null
+            ? Path.GetFullPath(options.Root)
+            : GetCommonAncestor(projectBasePath, vbProject.Files.Select(f => f.Path));
+
+        AnsiConsole.MarkupLineInterpolated($"[grey]Workspace root: {rootPath}[/]");
+
+        // Warn about files that fall outside the resolved root (only relevant when
+        // --root is specified explicitly and is narrower than the actual file tree)
+        foreach (var file in vbProject.Files) {
+            var rel = Path.GetRelativePath(rootPath, file.Path);
+            if (rel.Equals("..", StringComparison.Ordinal)
+                || rel.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                || rel.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal)) {
+                AnsiConsole.MarkupLineInterpolated(
+                    $"[yellow]Warning: {file.Name} ({file.Path}) is outside the workspace root and will be placed at the output root.[/]");
+            }
+        }
+
+        var allTargets = vbProject.Files.Select(f => ConversionTarget.Create(f, options.OutputDir, rootPath)).OrderBy(t => t.Name).ToArray();
         await ws.Open(allTargets, options.OutputDir, vbProject.Name);
 
         var conversionOptions = ConversionOptions.Default;
@@ -153,7 +178,7 @@ public static class Program
         if (!options.SkipTransform && targetsThatNeedTransform.Length > 0) {
             await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
                 ws.WithCompilationUnit(t, cancel, cu => {
-                    var sourceRelativePath = Path.GetRelativePath(projectBasePath, t.File.Path).Replace('\\', '/');
+                    var sourceRelativePath = Path.GetRelativePath(rootPath, t.File.Path).Replace('\\', '/');
                     var conversion = VB6ToCSharpConversion.ConvertFile(
                         t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions,
                         sourceRelativePath);
@@ -396,6 +421,50 @@ public static class Program
         if (!pause) return;
         AnsiConsole.MarkupLine("[grey]Press any key to continue (Ctrl-C to stop)...[/]");
         Console.ReadKey(intercept: true);
+    }
+
+    /// <summary>
+    /// Returns the deepest common ancestor directory of all supplied paths plus
+    /// <paramref name="projectBasePath"/>.  Falls back to <paramref name="projectBasePath"/>
+    /// when paths span multiple drive roots (Windows) or share no common prefix.
+    /// </summary>
+    static string GetCommonAncestor(string projectBasePath, IEnumerable<string> filePaths)
+    {
+        var allDirs = filePaths
+            .Select(p => Path.GetDirectoryName(Path.GetFullPath(p)) ?? Path.GetFullPath(p))
+            .Prepend(projectBasePath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (allDirs.Length == 1)
+            return allDirs[0];
+
+        var segments = allDirs
+            .Select(d => d.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                                  StringSplitOptions.RemoveEmptyEntries))
+            .ToArray();
+
+        var first = segments[0];
+        var commonCount = first.Length;
+
+        foreach (var seg in segments.Skip(1)) {
+            var i = 0;
+            while (i < commonCount && i < seg.Length &&
+                   string.Equals(first[i], seg[i], StringComparison.OrdinalIgnoreCase))
+                i++;
+            commonCount = i;
+        }
+
+        if (commonCount == 0)
+            return projectBasePath; // paths span different drives — fall back
+
+        var ancestor = string.Join(Path.DirectorySeparatorChar, first.Take(commonCount));
+
+        // Restore root separator for bare drive letters ("C:" → "C:\")
+        if (ancestor.EndsWith(':'))
+            ancestor += Path.DirectorySeparatorChar;
+
+        return ancestor;
     }
 }
 

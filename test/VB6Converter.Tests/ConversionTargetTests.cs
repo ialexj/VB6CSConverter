@@ -46,8 +46,10 @@ public class ConversionTargetTests
     }
 
     [TestMethod]
-    public void Create_FileOutsideProjectRoot_FlattensToOutputRoot()
+    public void Create_FileOutsideRoot_FlattensToOutputRoot()
     {
+        // When --root is specified too narrowly (or auto-detected root doesn't
+        // cover a file), the file falls back to the output root by filename only.
         var file = new VisualBasicProjectFile(
             Path.Combine("C:\\", "Shared", "Common.bas"),
             "Common",
@@ -56,5 +58,23 @@ public class ConversionTargetTests
         var target = ConversionTarget.Create(file, Path.Combine("C:\\", "Out"), Path.Combine("C:\\", "Project"));
 
         target.OutputPath.Should().Be(Path.Combine("C:\\", "Out", "Common.cs"));
+    }
+
+    [TestMethod]
+    public void Create_FileOutsideProjectButInsideRoot_PreservesRootRelativePath()
+    {
+        // The key scenario: project at \Root\Optiware\, library file at \Root\Libraries\LibA\
+        // When root is \Root\, the library file should land at Out\Libraries\LibA\Foo.cs
+        var file = new VisualBasicProjectFile(
+            Path.Combine("C:\\", "OptiwareVB6", "Libraries", "LibA", "Foo.bas"),
+            "Foo",
+            VisualBasicFileType.Module);
+
+        var target = ConversionTarget.Create(
+            file,
+            Path.Combine("C:\\", "Out"),
+            Path.Combine("C:\\", "OptiwareVB6"));
+
+        target.OutputPath.Should().Be(Path.Combine("C:\\", "Out", "Libraries", "LibA", "Foo.cs"));
     }
 }
