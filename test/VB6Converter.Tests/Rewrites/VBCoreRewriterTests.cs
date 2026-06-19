@@ -264,19 +264,4 @@ public class VBCoreRewriterTests
                 DoSomething();
         }
         """);
-
-    [TestMethod]
-    public void IsMissing_Negated_DefaultValue_ParamName() => ValidateMemberMatches(
-        """
-        Public Sub Test(Optional DefaultValue As Variant)
-            If Not IsMissing(DefaultValue) Then DoSomething
-        End Sub
-        """,
-        """
-        public static void Test(dynamic DefaultValue = default)
-        {
-            if (DefaultValue != default)
-                DoSomething();
-        }
-        """);
 }

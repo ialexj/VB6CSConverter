@@ -255,19 +255,6 @@ public static class ValueConverter
                     }
                 }
             }
-
-            // Not IsMissing(x) → x != default
-            // Handled here rather than in VBCoreRewriter so the `!` never enters the tree,
-            // preventing downstream rewriters (DefaultToNullRewriter, BitwiseOrRewriter) from
-            // misinterpreting the negation as a bitwise operation on an untyped operand.
-            if (values[0] is InvocationExpressionSyntax isMissingCall
-                && isMissingCall.Expression is IdentifierNameSyntax isMissingName
-                && isMissingName.Identifier.Text.Equals("IsMissing", StringComparison.OrdinalIgnoreCase)
-                && isMissingCall.ArgumentList.Arguments.Count == 1)
-            {
-                var arg = isMissingCall.ArgumentList.Arguments[0].Expression;
-                return BinaryExpression(SyntaxKind.NotEqualsExpression, arg, LiteralExpression(SyntaxKind.DefaultLiteralExpression));
-            }
         }
 
         // is null
