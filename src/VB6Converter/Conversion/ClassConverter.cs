@@ -522,9 +522,11 @@ public static class ClassConverter
                 .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
                 .WithParameterList(parameters)
                 .WithBody(body);
+
             getter = (MemberDeclarationSyntax)ReturnValueRewriter.Default.Visit(getter);
             getter = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(getter);
             getter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(getter);
+
             var getTrivia = getter.GetLeadingTrivia().Insert(0, Comment("// VB6 multi-value property getter"));
             getter = getter.WithLeadingTrivia(getTrivia);
             var propertyLine = (propCtx as ParserRuleContext)?.Start?.Line;
@@ -537,8 +539,10 @@ public static class ClassConverter
                 .WithModifiers(GetModifiers(propCtx.visibility(), ctx.Static || propCtx.STATIC() is not null))
                 .WithParameterList(parameters)
                 .WithBody(body);
+
             setter = (MemberDeclarationSyntax)LabelCollapsingRewriter.Default.Visit(setter);
             setter = (MemberDeclarationSyntax)TryCatchRewriter.Default.Visit(setter);
+
             var setTrivia = setter.GetLeadingTrivia().Insert(0, Comment("// VB6 multi-value property setter"));
             setter = setter.WithLeadingTrivia(setTrivia);
             var propertyLine = (propCtx as ParserRuleContext)?.Start?.Line;

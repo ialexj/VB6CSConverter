@@ -204,6 +204,7 @@ public static class Program
                         }
                         return ValueTask.FromResult(mainCu);
                     }));
+
                 ws.AddToActiveTargets(newDesignerTargets);
             }
         }

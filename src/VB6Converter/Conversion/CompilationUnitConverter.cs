@@ -14,10 +14,8 @@ public static class CompilationUnitConverter
         new VBLiteralRewriter(file),
         new VBCoreRewriter(file),
 
-        //new CursorRewriter(file),
-        //new KeysRewriter(file),
-        //new MsgBoxRewriter(file),
-        //new CheckStateRewriter(file),
+        new ErrRaiseRewriter(file),
+
         new KeywordEscapeRewriter(file),
 
         new UsingsRewriter(file)

@@ -108,7 +108,7 @@ public class VBLiteralRewriter(string file = null) : LoggedRewriter(file)
 
     static readonly Dictionary<string, MemberAccessExpressionSyntax> _constants =
         typeof(Microsoft.VisualBasic.Constants).GetFields()
-            .ToDictionary(f => f.Name, f => EnumMember("Microsoft.VisualBasic.Constants", f.Name));
+            .ToDictionary(f => f.Name, f => EnumMember("Constants", f.Name));
 
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
         => Rewrite(node, node => {
