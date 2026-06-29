@@ -19,6 +19,8 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
                 return base.VisitIdentifierName(node);
             }
 
+
+
             return node.Identifier.Text switch {
                 "Now"  => ParseExpression("System.DateTime.Now"),
                 "Date" => ParseExpression("System.DateTime.Now.Date"),
@@ -35,6 +37,7 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         ["IsArray"] = node => ConvertIs(node, IdentifierName(nameof(Array))),
 
         ["UBound"] = ConvertUBound,
+        ["LBound"] = ConvertLBound,
 
         ["DateSerial"] = ConvertDateSerial,
 
@@ -58,7 +61,9 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         ["IIf"] = ConvertIIf,
 
         ["Asc"] = ConvertAsc,
+        ["AscW"] = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Strings.AscW"),
         ["Chr"] = ConvertChr,
+        ["ChrW"] = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Strings.ChrW"),
 
         ["Str"] = ConvertStr,
 
@@ -198,9 +203,20 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
 
     static SyntaxNode ConvertString(InvocationExpressionSyntax node)
     {
-        var charExpr = CastExpression(
-            PredefinedType(Token(SyntaxKind.CharKeyword)),
-            node.ArgumentList.Arguments[1].Expression);
+        var charArg = node.ArgumentList.Arguments[1].Expression;
+        ExpressionSyntax charExpr;
+        if (charArg is LiteralExpressionSyntax literal
+            && literal.IsKind(SyntaxKind.StringLiteralExpression)
+            && literal.Token.ValueText.Length == 1) {
+            charExpr = LiteralExpression(
+                SyntaxKind.CharacterLiteralExpression,
+                Literal(literal.Token.ValueText[0]));
+        }
+        else {
+            charExpr = CastExpression(
+                PredefinedType(Token(SyntaxKind.CharKeyword)),
+                charArg);
+        }
         return ObjectCreationExpression(
             PredefinedType(Token(SyntaxKind.StringKeyword)),
             ArgumentList(
@@ -289,12 +305,40 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
 
     static SyntaxNode ConvertUBound(InvocationExpressionSyntax node)
     {
-        var array = node.ArgumentList.Arguments[0];
+        var args = node.ArgumentList.Arguments;
+        var array = args[0];
+        // VB6 dimensions are 1-based; subtract 1 to convert to GetUpperBound's 0-based rank.
+        ExpressionSyntax rank = args.Count >= 2
+            ? BinaryExpression(SyntaxKind.SubtractExpression,
+                args[1].Expression,
+                LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(1)))
+            : LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0));
 
-        return MemberAccessExpression(
-            SyntaxKind.SimpleMemberAccessExpression,
-            ParenthesizedExpression(CastExpression(IdentifierName("Array"), array.Expression)),
-            IdentifierName("Length"));
+        return InvocationExpression(
+            MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                ParenthesizedExpression(CastExpression(IdentifierName("Array"), array.Expression)),
+                IdentifierName("GetUpperBound")),
+            ArgumentList(rank));
+    }
+
+    static SyntaxNode ConvertLBound(InvocationExpressionSyntax node)
+    {
+        var args = node.ArgumentList.Arguments;
+        var array = args[0];
+        // VB6 dimensions are 1-based; subtract 1 to convert to GetLowerBound's 0-based rank.
+        ExpressionSyntax rank = args.Count >= 2
+            ? BinaryExpression(SyntaxKind.SubtractExpression,
+                args[1].Expression,
+                LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(1)))
+            : LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0));
+
+        return InvocationExpression(
+            MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                ParenthesizedExpression(CastExpression(IdentifierName("Array"), array.Expression)),
+                IdentifierName("GetLowerBound")),
+            ArgumentList(rank));
     }
 
     static SyntaxNode ConvertReplace(InvocationExpressionSyntax node)

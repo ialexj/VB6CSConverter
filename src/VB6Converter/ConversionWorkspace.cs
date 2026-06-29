@@ -160,17 +160,6 @@ public sealed class ConversionWorkspace : IDisposable
 
     public IEnumerable<string> GetForms() => Targets.Where(t => t.File.Type == VisualBasicFileType.Form).Select(t => t.File.Name);
 
-    public void ReplaceWithSplitParts(ConversionTarget original, IReadOnlyList<ConversionTarget> parts)
-    {
-        var list = ActiveTargets.ToList();
-        int idx = list.IndexOf(original);
-        if (idx >= 0) {
-            list.RemoveAt(idx);
-            list.InsertRange(idx, parts);
-        }
-        ActiveTargets = list.AsReadOnly();
-    }
-
     public void AddToActiveTargets(IEnumerable<ConversionTarget> targets)
     {
         ActiveTargets = [.. ActiveTargets, .. targets];

@@ -24,9 +24,7 @@ public class UsingsRewriter(string file = null) : LoggedRewriter(file)
                     var cid = IdentifierName(c.Identifier);
                     NameSyntax classFullName = ns != null ? QualifiedName(ns.Name, cid) : cid;
 
-                    if (c.Modifiers.Any(m => m.IsKind(SyntaxKind.StaticKeyword))) {
-                        yield return classFullName;
-                    }
+                    yield return classFullName;
 
                     var enums = c.DescendantNodes().OfType<EnumDeclarationSyntax>()
                         .Select(e => QualifiedName(classFullName, IdentifierName(e.Identifier)));

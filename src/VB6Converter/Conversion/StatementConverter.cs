@@ -397,7 +397,7 @@ public static class StatementConverter
                 return InvocationExpression(
                     MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        IdentifierName("Array"),
+                        IdentifierName("System.Array"),
                         IdentifierName("Resize")),
                     ArgumentList(
                         Argument(variable).WithRefKindKeyword(Token(SyntaxKind.RefKeyword)),

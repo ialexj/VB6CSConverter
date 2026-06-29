@@ -43,6 +43,12 @@ public class LocalDeclarationCollapseRewriterTests
         pass2.Should().Be(pass1);
     }
 
+    [TestMethod]
+    public void RecurseAfterOuterRewrite_DoesNotThrowAndConverges()
+        => Check(
+            "class T { void M() { int i = default; i = 1; if (true) { int j = default; j = 2; } } }",
+            "class T { void M() { int i = 1; if (true) { int j = 2; } } }");
+
     private static void Check(string cs, string? expected = null)
     {
         // Converge like the real pipeline does — rewrite until stable.

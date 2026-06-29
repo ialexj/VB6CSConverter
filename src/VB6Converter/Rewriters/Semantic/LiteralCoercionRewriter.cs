@@ -137,7 +137,12 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
     private ExpressionSyntax CoerceByType(ExpressionSyntax expr, ITypeSymbol targetType)
     {
         if (targetType.TypeKind == TypeKind.Enum && targetType is INamedTypeSymbol enumType)
+        {
+            var coerced = CoerceEnumToEnum(expr, enumType);
+            if (!ReferenceEquals(coerced, expr))
+                return coerced;
             return CoerceToEnumMember(expr, enumType);
+        }
 
         return targetType.SpecialType switch
         {
@@ -328,6 +333,42 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
         leadingTrivia  = TriviaList();
         trailingTrivia = TriviaList();
         return false;
+    }
+
+    /// <summary>
+    /// Rewrites a member-access expression whose type is a different enum than <paramref name="targetType"/>
+    /// to use the target enum's member of the same name (case-insensitive, per VB6 rules).
+    /// The emitted member name uses the target enum's canonical casing.
+    /// Returns <paramref name="expr"/> unchanged when no case-insensitive name match exists,
+    /// the source is already <paramref name="targetType"/>, or the expression is not a member access.
+    /// </summary>
+    private ExpressionSyntax CoerceEnumToEnum(ExpressionSyntax expr, INamedTypeSymbol targetType)
+    {
+        if (expr is not MemberAccessExpressionSyntax memberAccess)
+            return expr;
+
+        var sourceType = semantics.GetTypeInfo(expr).Type;
+        if (sourceType is null || sourceType.TypeKind != TypeKind.Enum)
+            return expr;
+
+        if (SymbolEqualityComparer.Default.Equals(sourceType, targetType))
+            return expr;
+
+        var sourceMemberName = memberAccess.Name.Identifier.Text;
+        var targetMember = targetType.GetMembers()
+            .OfType<IFieldSymbol>()
+            .FirstOrDefault(f => string.Equals(f.Name, sourceMemberName, StringComparison.OrdinalIgnoreCase));
+
+        if (targetMember is null)
+            return expr;
+
+        var leading  = expr.GetFirstToken().LeadingTrivia;
+        var trailing = expr.GetLastToken().TrailingTrivia;
+
+        return MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+            IdentifierName(Identifier(leading, targetType.Name, TriviaList())),
+            IdentifierName(Identifier(TriviaList(), targetMember.Name, trailing)));
     }
 
     /// <summary>

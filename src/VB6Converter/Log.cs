@@ -1,19 +1,16 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.Extensions.Options;
 using Serilog;
-using System.Text.Json;
-using Serilog.Core;
 using Serilog.Sinks.Spectre;
 using System;
-using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 
 namespace VB6Converter;
 
 internal static class Log
 {
+    const int AsyncQueueSize = 65_536;
+
     public static void Init(string outputDir)
     {
         Default = new LoggerConfiguration()
@@ -24,13 +21,30 @@ internal static class Log
         Conversion = new LoggerConfiguration()
             .MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose)
             .WriteTo.Spectre(restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Warning)
-            .WriteTo.File(Path.Combine(outputDir, "_Conversion.log"))
+            .WriteTo.Async(cfg => cfg.File(
+                Path.Combine(outputDir, "_Conversion.log"),
+                buffered: true),
+                bufferSize: AsyncQueueSize,
+                blockWhenFull: true)
             .CreateLogger();
 
         Rewriting = new LoggerConfiguration()
             .MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose)
-            .WriteTo.File(Path.Combine(outputDir, "_Rewriting.log"), outputTemplate: "{Message:lj}{NewLine}")
+            .WriteTo.Async(cfg => cfg.File(
+                Path.Combine(outputDir, "_Rewriting.log"),
+                outputTemplate: "{Message:lj}{NewLine}",
+                buffered: true),
+                bufferSize: AsyncQueueSize,
+                blockWhenFull: true)
             .CreateLogger();
+    }
+
+    public static void Shutdown()
+    {
+        (Rewriting as IDisposable)?.Dispose();
+        (Conversion as IDisposable)?.Dispose();
+        (Default as IDisposable)?.Dispose();
+        global::Serilog.Log.CloseAndFlush();
     }
 
 

@@ -181,6 +181,40 @@ public class LiteralCoercionTests
             "enum E { A = 0, B = 0, C = 1 } class T { E X { get; set; } void M() { this.X = 0; } }",
             "enum E { A = 0, B = 0, C = 1 } class T { E X { get; set; } void M() { this.X = E.A; } }");
 
+    [TestMethod]
+    public void CoercesWrongEnumMemberToTargetEnumAssignment()
+        => CheckCoercion(
+            "enum E1 { ValueA, ValueB } enum E2 { ValueB, ValueC } class T { E1 Mode { get; set; } void M() { this.Mode = E2.ValueB; } }",
+            "enum E1 { ValueA, ValueB } enum E2 { ValueB, ValueC } class T { E1 Mode { get; set; } void M() { this.Mode = E1.ValueB; } }");
+
+    [TestMethod]
+    public void CoercesWrongEnumMemberToTargetEnumArgument()
+        => CheckCoercion(
+            "enum E1 { ValueA, ValueB } enum E2 { ValueB, ValueC } class T { void Take(E1 e) { } void M() { Take(E2.ValueB); } }",
+            "enum E1 { ValueA, ValueB } enum E2 { ValueB, ValueC } class T { void Take(E1 e) { } void M() { Take(E1.ValueB); } }");
+
+    [TestMethod]
+    public void CoercesWrongEnumMemberToTargetEnumReturn()
+        => CheckCoercion(
+            "enum E1 { ValueA, ValueB } enum E2 { ValueB, ValueC } class T { E1 M() { return E2.ValueB; } }",
+            "enum E1 { ValueA, ValueB } enum E2 { ValueB, ValueC } class T { E1 M() { return E1.ValueB; } }");
+
+    [TestMethod]
+    public void CoercesWrongEnumMemberCaseInsensitive()
+        => CheckCoercion(
+            "enum E1 { ValueA, ValueB } enum E2 { VALUEB, ValueC } class T { E1 Mode { get; set; } void M() { this.Mode = E2.VALUEB; } }",
+            "enum E1 { ValueA, ValueB } enum E2 { VALUEB, ValueC } class T { E1 Mode { get; set; } void M() { this.Mode = E1.ValueB; } }");
+
+    [TestMethod]
+    public void LeavesWrongEnumMemberUnchangedWhenNameMissingInTarget()
+        => CheckCoercion(
+            "enum E1 { ValueA, ValueB } enum E2 { ValueB, ValueC } class T { E1 Mode { get; set; } void M() { this.Mode = E2.ValueC; } }");
+
+    [TestMethod]
+    public void LeavesCorrectEnumMemberAccessUnchanged()
+        => CheckCoercion(
+            "enum E1 { ValueA, ValueB } class T { E1 Mode { get; set; } void M() { this.Mode = E1.ValueB; } }");
+
     // ── parameter defaults ───────────────────────────────────────────────────
 
     [TestMethod]

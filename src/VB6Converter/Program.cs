@@ -269,9 +269,10 @@ public static class Program
                 }
 
                 if (count == 0) {
-                    // These rewrites work first time
+                    // Structural rewrites, should work first time
                     await RunRewriter(false, "Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
                     await RunRewriter(false, "Fixing Foreach Variable", async(t, sm) => new ForEachVariableRewriter());
+                    await RunRewriter(true, "Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
                 }
 
                 await RunRewriter(true, "Finding Types", async (t, sm) => new TypeFinder(sm));
@@ -283,7 +284,6 @@ public static class Program
                 await RunRewriter(true, "Rewriting DateTime arithmetic", async (t, sm) => new DateTimeArithmeticRewriter(sm));
                 await RunRewriter(true, "Disambiguate Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
                 await RunRewriter(true, "Rewriting parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
-                await RunRewriter(true, "Collapsing local declaration + first assignment", async (t, sm) => new LocalDeclarationCollapseRewriter(sm));
 
                 await RunRewriter(true, "Refining Array Declarations", async (t, sm) => {
                     var declaratorTypes = new Dictionary<VariableDeclaratorSyntax, ArrayTypeSyntax>();
@@ -302,6 +302,10 @@ public static class Program
                 await RunRewriter(true, "Casting Enums to Numbers", async (t, sm) => new EnumToNumberCastRewriter(sm));
                 await RunRewriter(true, "Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
                 await RunRewriter(true, "Applying Type Conversions", async (t, sm) => new TypeConversionRewriter(sm));
+
+                // Cosmetic - shouldn't change program meaning or reduce errors
+                //await RunRewriter(true, "Collapsing local declaration + first assignment", async (t, sm) => new LocalDeclarationCollapseRewriter(sm));
+                await RunRewriter(false, "Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter());
 
                 //await RunRewriter(true, "Rewriting DAO", async (t, sm) => new DAORewriter(sm));
 
