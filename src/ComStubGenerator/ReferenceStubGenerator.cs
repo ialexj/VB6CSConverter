@@ -684,6 +684,13 @@ public static class ReferenceStubGenerator
         decl = decl.WithBaseList(BaseList(SeparatedList(
             new[] { ifaceMarkerBase }.Concat(baseInterfaces).ToArray())));
 
+        var ifaceDefaultMemberName = (type.Members ?? [])
+            .Where(m => m.IsDefault && m.Parameters.Count == 0)
+            .Select(m => m.Name)
+            .FirstOrDefault();
+        if (ifaceDefaultMemberName is not null)
+            decl = decl.WithAttributeLists(SingletonList(DefaultMemberAttributeList(ifaceDefaultMemberName)));
+
         return decl;
     }
 
@@ -940,6 +947,13 @@ public static class ReferenceStubGenerator
 
             decl = decl.WithBaseList(BaseList(SeparatedList(
                 new[] { markerBase }.Concat(controlBase).Concat(baseInterfaces).ToArray())));
+
+            var defaultMemberName = (type.Members ?? [])
+                .Where(m => m.IsDefault && m.Parameters.Count == 0)
+                .Select(m => m.Name)
+                .FirstOrDefault();
+            if (defaultMemberName is not null)
+                decl = decl.WithAttributeLists(SingletonList(DefaultMemberAttributeList(defaultMemberName)));
         }
 
         return decl;

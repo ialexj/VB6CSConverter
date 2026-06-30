@@ -490,6 +490,94 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
+    public void Generate_DefaultPropertyWithoutParams_Interface_EmitsDefaultMemberAttribute()
+    {
+        // A parameterless DISPID 0 property (e.g. DAO.Field.Value) must cause the generated
+        // interface to carry [System.Reflection.DefaultMember("Value")] so that the C# compiler
+        // and runtime honour the default-member contract without an explicit indexer.
+        var library = MakeLibrary("DAO",
+            new ComQueryType("Field", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object", [], IsDefault: true),
+                    new("Value", LibraryMemberKind.PropertySet, "void",
+                        [new("value", "object", false, false)], IsDefault: true),
+                    new("Name", LibraryMemberKind.PropertyGet, "string", [], IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("[System.Reflection.DefaultMember(\"Value\")]",
+                "a parameterless DISPID 0 member must be annotated on the interface");
+            source.Should().Contain("object Value");
+            source.Should().Contain("string Name");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyWithoutParams_Class_EmitsDefaultMemberAttribute()
+    {
+        // Same check as the interface variant, but for a concrete class stub.
+        var library = MakeLibrary("DAO",
+            new ComQueryType("Field", LibraryTypeKind.Class,
+                Members: [
+                    new("Value", LibraryMemberKind.PropertyGet, "object", [], IsDefault: true),
+                    new("Value", LibraryMemberKind.PropertySet, "void",
+                        [new("value", "object", false, false)], IsDefault: true),
+                    new("Name", LibraryMemberKind.PropertyGet, "string", [], IsDefault: false),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("[System.Reflection.DefaultMember(\"Value\")]",
+                "a parameterless DISPID 0 member must be annotated on the class");
+            source.Should().Contain("object Value");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_DefaultPropertyWithParams_DoesNotEmitDefaultMemberAttribute()
+    {
+        // Parameterized DISPID 0 members become C# indexers; the C# compiler automatically
+        // adds [DefaultMember("Item")] for any type that exposes an indexer — an explicit
+        // [System.Reflection.DefaultMember] annotation must not be emitted.
+        var library = MakeLibrary("DAO",
+            new ComQueryType("Recordset", LibraryTypeKind.DispatchInterface,
+                Members: [
+                    new("Fields", LibraryMemberKind.PropertyGet, "object",
+                        [new("Name", "string", IsOptional: false, IsOut: false)],
+                        IsDefault: true),
+                ],
+                EnumValues: []));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            var source = File.ReadAllText(written[0]);
+            source.Should().Contain("this[", "indexer must still be emitted");
+            source.Should().NotContain("System.Reflection.DefaultMember",
+                "parameterized default becomes an indexer; compiler provides [DefaultMember(\"Item\")] implicitly");
+        }
+        finally {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void Generate_DefaultPropertyForwardsThroughCollection_EmitsForwardingIndexer()
     {
         // Models the DAO.Recordset / DAO.Fields pattern:
