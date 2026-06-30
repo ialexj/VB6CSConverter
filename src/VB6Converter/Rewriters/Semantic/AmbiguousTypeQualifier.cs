@@ -52,7 +52,11 @@ public class AmbiguousTypeQualifier(SemanticModel sem, IEnumerable<string> prefe
 
         // If any candidate is a non-type symbol (e.g. a static member brought in by
         // 'using static'), qualify it via its containing type to resolve the ambiguity.
-        var nonTypeSymbol = info.CandidateSymbols.FirstOrDefault(s => s is not ITypeSymbol);
+        // Prefer the most accessible candidate (Public beats Private, etc.).
+        var nonTypeSymbol = info.CandidateSymbols
+            .Where(s => s is not ITypeSymbol)
+            .OrderByDescending(s => s.DeclaredAccessibility)
+            .FirstOrDefault();
         if (nonTypeSymbol?.ContainingType is { } containingType) {
             var memberFqn = $"{containingType.ToDisplayString()}.{nonTypeSymbol.Name}";
             if (memberFqn != node.ToString()) {
