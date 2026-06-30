@@ -512,7 +512,7 @@ public class ReferenceStubGeneratorTests
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("[System.Reflection.DefaultMember(\"Value\")]",
                 "a parameterless DISPID 0 member must be annotated on the interface");
-            source.Should().Contain("object Value");
+            source.Should().Contain("dynamic Value");
             source.Should().Contain("string Name");
         }
         finally {
@@ -541,7 +541,7 @@ public class ReferenceStubGeneratorTests
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("[System.Reflection.DefaultMember(\"Value\")]",
                 "a parameterless DISPID 0 member must be annotated on the class");
-            source.Should().Contain("object Value");
+            source.Should().Contain("dynamic Value");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
@@ -1630,11 +1630,11 @@ public class ReferenceStubGeneratorTests
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // IsControl extender property injection
+    // IsControl behavior (no manual extender property injection)
     // ──────────────────────────────────────────────────────────────────────
 
     [TestMethod]
-    public void Generate_ControlClass_InjectsExtenderProperties()
+    public void Generate_ControlClass_DoesNotInjectExtenderProperties()
     {
         var library = MakeLibrary("TestLib",
             new ComQueryType("MyCtrl", LibraryTypeKind.Class, IsControl: true));
@@ -1647,11 +1647,8 @@ public class ReferenceStubGeneratorTests
             foreach (var name in new[] { "Left", "Top", "Width", "Height", "TabIndex",
                                          "_ExtentX", "_ExtentY", "_StockProps",
                                          "ToolTipText", "HelpContextID", "WhatsThisHelpID", "DragMode" }) {
-                source.Should().Contain(name, $"extender property {name} should be injected");
+                source.Should().NotContain(name, $"class stub should not manually inject extender property {name}");
             }
-
-            // Each injected property must have both get and set accessors
-            source.Should().Contain("get =>").And.Contain("set =>");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
@@ -1703,7 +1700,7 @@ public class ReferenceStubGeneratorTests
                 count++;
                 pos++;
             }
-            count.Should().Be(1, "Width defined in the type library must not be duplicated by extender injection");
+            count.Should().Be(1, "Width defined in the type library must be emitted exactly once");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
@@ -1725,6 +1722,96 @@ public class ReferenceStubGeneratorTests
             foreach (var name in new[] { "TabIndex", "_ExtentX", "_StockProps", "ToolTipText" }) {
                 source.Should().NotContain(name, $"static module should not have extender property {name}");
             }
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_Class_WithTopLeftFloatProperties_IsTreatedAsControl()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("MyCtrl", LibraryTypeKind.Class,
+                Members: [
+                    new ComQueryMember("Top", LibraryMemberKind.PropertyGet, "float", []),
+                    new ComQueryMember("Left", LibraryMemberKind.PropertyGet, "float", []),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("IControlStub<MyCtrl>", "Top/Left float should infer control stub marker");
+            source.Should().NotContain("ToolTipText", "inferred controls should not manually inject extender properties into class stubs");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_Interface_WithTopLeftFloatProperties_IsTreatedAsControl()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("IWidget", LibraryTypeKind.Interface,
+                Members: [
+                    new ComQueryMember("Top", LibraryMemberKind.PropertyGet, "float", []),
+                    new ComQueryMember("Left", LibraryMemberKind.PropertyGet, "float", []),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().Contain("IControlStub<IWidget>", "Top/Left float should infer control interfaces");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_Class_WithTopLeftIntProperties_IsNotTreatedAsControl()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("MyClass", LibraryTypeKind.Class,
+                Members: [
+                    new ComQueryMember("Top", LibraryMemberKind.PropertyGet, "int", []),
+                    new ComQueryMember("Left", LibraryMemberKind.PropertyGet, "int", []),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().NotContain("IControlStub<MyClass>", "Top/Left must be float to infer control");
+            source.Should().NotContain("ToolTipText", "non-controls should not receive extender properties");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Generate_Class_MissingLeftFloatProperty_IsNotTreatedAsControl()
+    {
+        var library = MakeLibrary("TestLib",
+            new ComQueryType("MyClass", LibraryTypeKind.Class,
+                Members: [
+                    new ComQueryMember("Top", LibraryMemberKind.PropertyGet, "float", []),
+                ]));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+            var source = File.ReadAllText(written[0]);
+
+            source.Should().NotContain("IControlStub<MyClass>", "both Top and Left float properties are required");
+            source.Should().NotContain("ToolTipText", "non-controls should not receive extender properties");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);

@@ -6,6 +6,51 @@ namespace ComStubGenerator.Tests;
 [TestClass]
 public class MarkerInterfaceTests : ReferenceStubGeneratorTestBase
 {
+    [TestMethod]
+    public void GenerateVB6Extensions_WritesRootLevelFile()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var filePath = ReferenceStubGenerator.GenerateVB6Extensions(tempDir);
+
+            filePath.Should().Be(Path.Combine(tempDir, "_VB6Extensions.cs"));
+            File.Exists(filePath).Should().BeTrue();
+            Path.GetDirectoryName(filePath).Should().Be(tempDir, "file must be written at output root");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void GenerateVB6Extensions_ContainsDesignerInjectedPropertiesOnly()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var filePath = ReferenceStubGenerator.GenerateVB6Extensions(tempDir);
+            var source = File.ReadAllText(filePath);
+
+            source.Should().Contain("public static class _VB6Extensions");
+            source.Should().Contain("extension(IComStub stub)");
+            source.Should().Contain("public int _Version");
+            source.Should().Contain("public float _ExtentX");
+            source.Should().Contain("public float _ExtentY");
+            source.Should().Contain("public int _StockProps");
+            source.Should().Contain("public dynamic Bindings");
+            source.Should().Contain("public dynamic OleObjectBlob");
+            source.Should().Contain("throw new System.NotImplementedException()",
+                "generated extension properties should be placeholders");
+
+            source.Should().NotContain("public int Left");
+            source.Should().NotContain("public int Top");
+            source.Should().NotContain("public float Width");
+            source.Should().NotContain("public float Height");
+        }
+        finally {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // GenerateMarkerInterfaces
     // ──────────────────────────────────────────────────────────────────────

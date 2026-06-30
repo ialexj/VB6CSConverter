@@ -7,7 +7,7 @@ namespace ComStubGenerator.Tests;
 public class ExtenderTests : ReferenceStubGeneratorTestBase
 {
     [TestMethod]
-    public void Generate_ControlClass_InjectsExtenderProperties()
+    public void Generate_ControlClass_DoesNotInjectExtenderProperties()
     {
         var library = MakeLibrary("TestLib",
             new ComQueryType("MyCtrl", LibraryTypeKind.Class, IsControl: true));
@@ -20,11 +20,8 @@ public class ExtenderTests : ReferenceStubGeneratorTestBase
             foreach (var name in new[] { "Left", "Top", "Width", "Height", "TabIndex",
                                          "_ExtentX", "_ExtentY", "_StockProps",
                                          "ToolTipText", "HelpContextID", "WhatsThisHelpID", "DragMode" }) {
-                source.Should().Contain(name, $"extender property {name} should be injected");
+                source.Should().NotContain(name, $"class stub should not manually inject extender property {name}");
             }
-
-            // Each injected property must have both get and set accessors
-            source.Should().Contain("get =>").And.Contain("set =>");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
@@ -76,7 +73,7 @@ public class ExtenderTests : ReferenceStubGeneratorTestBase
                 count++;
                 pos++;
             }
-            count.Should().Be(1, "Width defined in the type library must not be duplicated by extender injection");
+            count.Should().Be(1, "Width defined in the type library must be emitted exactly once");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
@@ -247,9 +244,9 @@ public class ExtenderTests : ReferenceStubGeneratorTestBase
             var source = File.ReadAllText(extensionPath);
 
             source.Should().Contain("public string Caption");
+            source.Should().Contain("public string ToolTipText");
             source.Should().Contain("public void Move(");
             source.Should().Contain("public dynamic this[dynamic index]");
-            source.Should().Contain("public int Left", "injected extender property should be present on extension block as well");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);

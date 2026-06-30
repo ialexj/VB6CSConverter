@@ -183,6 +183,8 @@ public static class Program
 
         ReferenceStubGenerator.GenerateMarkerInterfaces(outputDir);
 
+        var vb6ExtensionsPath = ReferenceStubGenerator.GenerateVB6Extensions(outputDir);
+
         var allAliases = merged.SelectMany(m => ReferenceStubGenerator.CollectAliases(m));
         var referenceUsingsPath = ReferenceUsingsGenerator.Generate(merged, outputDir, allAliases);
 
@@ -190,6 +192,7 @@ public static class Program
         await File.WriteAllLinesAsync(reportPath, new[] {
             $"Reference stubs generated: {generated}",
             $"Libraries resolved:        {resolved}",
+            $"VB6 extension stubs file:  {vb6ExtensionsPath}",
             $"Reference usings file:     {referenceUsingsPath}",
             string.Empty,
         }.Concat(reportLines));

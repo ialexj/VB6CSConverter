@@ -22,12 +22,6 @@
   {
     "Targets": [ "VB.Form" ],
     "Members": [
-      // VB6.OLB exposes Form.Show but does not mark its two parameters optional.
-      // Inject the VB6-facing signature so generated stubs emit default values.
-      { "Name": "Show", "Kind": "Method", "ReturnType": "void", "Parameters": [
-        { "Name": "Modal", "Type": "object", "IsOptional": true, "IsOut": false },
-        { "Name": "OwnerForm", "Type": "object", "IsOptional": true, "IsOut": false }
-      ] },
 
       { "Name": "Close", "Kind": "Method", "ReturnType": "void", "Parameters": [] },
 
@@ -39,13 +33,6 @@
 
       { "Name": "MDIChild", "Kind": "PropertyGet", "ReturnType": "bool", "Parameters": [] },
       { "Name": "MDIChild", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] }
-    ]
-  },
-  {
-    "Targets": [ "VB.Control" ],
-    "Members": [
-      { "Name": "Index", "Kind": "PropertyGet", "ReturnType": "int", "Parameters": [] },
-      { "Name": "Index", "Kind": "PropertySet", "ReturnType": "void", "Parameters": [] }
     ]
   }
 ]

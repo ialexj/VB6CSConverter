@@ -91,8 +91,13 @@ public static class ReferenceUsingsGenerator
             builder.AppendLine("global using static __AppObjects;");
         }
 
+        if (enumTypeUsings.Count > 0 || hasAppObjects) {
+            builder.AppendLine();
+        }
+        builder.AppendLine("global using static _VB6Extensions;");
+
         if (dedupedAliases.Count > 0) {
-            if (enumTypeUsings.Count > 0 || hasAppObjects) builder.AppendLine();
+            builder.AppendLine();
             foreach (var (name, csType) in dedupedAliases) {
                 builder.AppendLine($"global using {name} = {csType};");
             }

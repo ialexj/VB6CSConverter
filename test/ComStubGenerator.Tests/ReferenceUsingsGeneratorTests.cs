@@ -33,6 +33,7 @@ public class ReferenceUsingsGeneratorTests : ReferenceStubGeneratorTestBase
             source.Should().Contain("global using MSComctlLib;");
             source.Should().Contain("global using static ADODB.CursorTypeEnum;");
             source.Should().Contain("global using static MSComctlLib.ListViewConstants;");
+            source.Should().Contain("global using static _VB6Extensions;");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
@@ -58,6 +59,7 @@ public class ReferenceUsingsGeneratorTests : ReferenceStubGeneratorTestBase
             lines.Count(l => l == "global using AALib;").Should().Be(1);
             lines.Count(l => l == "global using ZZLib;").Should().Be(1);
             lines.Count(l => l == "global using static ZZLib.Constants;").Should().Be(1);
+            lines.Count(l => l == "global using static _VB6Extensions;").Should().Be(1);
 
             var aaUsingIndex = Array.IndexOf(lines, "global using AALib;");
             var zzUsingIndex = Array.IndexOf(lines, "global using ZZLib;");
