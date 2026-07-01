@@ -272,7 +272,7 @@ public static class Program
                     // Structural rewrites, should work first time
                     await RunRewriter(true, "Expanding FRX-backed indexed designer assignments", async (t, sm) => new FrxExpansionRewriter(sm));
                     await RunRewriter(false, "Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
-                    await RunRewriter(false, "Fixing Foreach Variable", async(t, sm) => new ForEachVariableRewriter());
+                    await RunRewriter(true, "Fixing Foreach Variable", async (t, sm) => new ForEachVariableRewriter(sm));
                     await RunRewriter(true, "Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
                 }
 
