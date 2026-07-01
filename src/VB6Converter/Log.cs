@@ -11,7 +11,7 @@ internal static class Log
 {
     const int AsyncQueueSize = 65_536;
 
-    public static void Init(string outputDir)
+    public static void Init(string outputDir, bool verbose = false)
     {
         Default = new LoggerConfiguration()
             .MinimumLevel.Is(Serilog.Events.LogEventLevel.Information)
@@ -19,7 +19,7 @@ internal static class Log
             .CreateLogger();
 
         Conversion = new LoggerConfiguration()
-            .MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose)
+            .MinimumLevel.Is(verbose ? Serilog.Events.LogEventLevel.Verbose : Serilog.Events.LogEventLevel.Information)
             .WriteTo.Spectre(restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Warning)
             .WriteTo.Async(cfg => cfg.File(
                 Path.Combine(outputDir, "_Conversion.log"),
@@ -29,7 +29,7 @@ internal static class Log
             .CreateLogger();
 
         Rewriting = new LoggerConfiguration()
-            .MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose)
+            .MinimumLevel.Is(verbose ? Serilog.Events.LogEventLevel.Verbose : Serilog.Events.LogEventLevel.Information)
             .WriteTo.Async(cfg => cfg.File(
                 Path.Combine(outputDir, "_Rewriting.log"),
                 outputTemplate: "{Message:lj}{NewLine}",

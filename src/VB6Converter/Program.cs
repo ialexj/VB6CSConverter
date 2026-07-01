@@ -36,6 +36,7 @@ public static class Program
         public string[] PreferredNamespaces { get; set; } = [];
         public string[] ExcludeReferences { get; set; } = [];
         public bool Pause { get; set; }
+        public bool Verbose { get; set; }
     }
 
     public static Task<int> Main(string[] args)
@@ -81,6 +82,9 @@ public static class Program
         var workspaceRootOpt = new Option<string>("--root", ["-r"]) {
             Description = "Root directory of the VB6 workspace. Used to preserve folder structure for files referenced outside the project folder. Auto-detected from file paths when omitted.",
         };
+        var verboseOpt = new Option<bool>("--verbose", ["-v"]) {
+            Description = "Enable verbose logging.",
+        };
 
         var rootCommand = new RootCommand("Convert VB6 projects to C#.") {
             projectOpt,
@@ -95,7 +99,8 @@ public static class Program
             preferNamespacesOpt,
             excludeRefsOpt,
             pauseOpt,
-            workspaceRootOpt
+            workspaceRootOpt,
+            verboseOpt
         };
 
         rootCommand.SetAction(async (ParseResult result) => {
@@ -112,7 +117,8 @@ public static class Program
                 PreferredNamespaces = result.GetValue(preferNamespacesOpt) ?? [],
                 ExcludeReferences = result.GetValue(excludeRefsOpt) ?? [],
                 Pause = result.GetValue(pauseOpt),
-                Root = result.GetValue(workspaceRootOpt)
+                Root = result.GetValue(workspaceRootOpt),
+                Verbose = result.GetValue(verboseOpt),
             });
             return 0;
         });
@@ -123,7 +129,7 @@ public static class Program
     static async Task Run(CommandLineOptions options)
     {
         Directory.CreateDirectory(options.OutputDir);
-        Log.Init(options.OutputDir);
+        Log.Init(options.OutputDir, options.Verbose);
 
         var vbProject = VisualBasicProject.Load(options.Project);
 
