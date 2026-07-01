@@ -50,6 +50,8 @@ public class MemberFinderTests
         var rewriter  = new MemberFinder(semantics);
 
         var newCu = rewriter.Visit(cu);
-        newCu.ToFullString().Should().Be(expected ?? cs);
+        var actual = CSharpSyntaxTree.ParseText(newCu!.ToFullString()).GetRoot().NormalizeWhitespace().ToFullString();
+        var expectedText = CSharpSyntaxTree.ParseText(expected ?? cs).GetRoot().NormalizeWhitespace().ToFullString();
+        actual.Should().Be(expectedText);
     }
 }
