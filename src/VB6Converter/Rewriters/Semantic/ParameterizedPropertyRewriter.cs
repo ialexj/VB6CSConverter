@@ -15,15 +15,44 @@ namespace VB6Converter.Rewriters.Semantic;
 /// </summary>
 public class ParameterizedPropertyRewriter(SemanticModel model) : LoggedRewriter
 {
+    static bool IsMethodLike(SymbolInfo symbol)
+    {
+        if (symbol.Symbol is IMethodSymbol) {
+            return true;
+        }
+
+        if (!symbol.CandidateSymbols.IsEmpty && symbol.CandidateSymbols.All(s => s is IMethodSymbol)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    static bool IsDefinitelyIndexableStorage(SymbolInfo symbol)
+    {
+        if (symbol.Symbol is ILocalSymbol or IFieldSymbol or IParameterSymbol) {
+            return true;
+        }
+
+        if (symbol.Symbol is IPropertySymbol property) {
+            return property.IsIndexer || property.Type is IArrayTypeSymbol;
+        }
+
+        if (!symbol.CandidateSymbols.IsEmpty && symbol.CandidateSymbols.Any(s => s is ILocalSymbol or IFieldSymbol or IParameterSymbol)) {
+            return true;
+        }
+
+        if (!symbol.CandidateSymbols.IsEmpty && symbol.CandidateSymbols.Any(s => s is IPropertySymbol)) {
+            return true;
+        }
+
+        return false;
+    }
+
     public override SyntaxNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
         => Rewrite(node, node =>
         {
             if (node.Left is not ElementAccessExpressionSyntax ea)
-                return base.VisitAssignmentExpression(node);
-
-            // If the expression already resolves (e.g. a real array field), leave it alone.
-            var symbol = model.GetSymbolInfo(ea.Expression);
-            if (symbol.Symbol is not null || !symbol.CandidateSymbols.IsEmpty)
                 return base.VisitAssignmentExpression(node);
 
             // Extract receiver and member name.
@@ -41,6 +70,17 @@ public class ParameterizedPropertyRewriter(SemanticModel model) : LoggedRewriter
             }
             else
             {
+                return base.VisitAssignmentExpression(node);
+            }
+
+            // Do not rewrite true array/indexer/property-backed element access.
+            var symbol = model.GetSymbolInfo(ea.Expression);
+            if (IsDefinitelyIndexableStorage(symbol)) {
+                return base.VisitAssignmentExpression(node);
+            }
+
+            // This rewrite targets unresolved/method-backed pseudo-properties.
+            if (!IsMethodLike(symbol) && symbol.Symbol is not null) {
                 return base.VisitAssignmentExpression(node);
             }
 
