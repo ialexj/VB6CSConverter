@@ -12,6 +12,48 @@ namespace VB6Converter.Rewriters.Semantic;
 /// <param name="sem">The semantic model used to retrieve type and symbol information.</param>
 public class SymbolCapitalizationRewriter(SemanticModel sem) : LoggedRewriter
 {
+    public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
+        => Rewrite(node, node => {
+            if (!IsTypeUsage(node, sem)) {
+                return base.VisitIdentifierName(node);
+            }
+
+            if (sem.GetSymbolInfo(node).Symbol is ITypeSymbol) {
+                return base.VisitIdentifierName(node);
+            }
+
+            var type = RoslynHelpers.FindTypeByName(sem, node.Identifier.Text);
+            if (type != null && !string.Equals(type.ToString(), node.Identifier.Text, StringComparison.Ordinal)) {
+                return SyntaxFactory.ParseName(type.ToString()).WithTriviaFrom(node);
+            }
+
+            return base.VisitIdentifierName(node);
+        });
+
+    /// <summary>
+    /// Determines whether <paramref name="node"/> sits in a syntactic position where it is
+    /// expected to name a type (as opposed to a variable, method, or member name). VB6
+    /// identifiers are case-insensitive, so a class/form may be declared with one casing (e.g.
+    /// "frmclientesmain") and referenced elsewhere with another (e.g. "frmClientesMain");
+    /// this lets those references be corrected to the declared casing.
+    /// </summary>
+    static bool IsTypeUsage(IdentifierNameSyntax node, SemanticModel sem)
+        => node.Parent switch {
+            ObjectCreationExpressionSyntax oce => oce.Type == node,
+            ArrayTypeSyntax at => at.ElementType == node,
+            BaseTypeSyntax bts => bts.Type == node,
+            CastExpressionSyntax ce => ce.Type == node,
+            MethodDeclarationSyntax mds => mds.ReturnType == node,
+            PropertyDeclarationSyntax pds => pds.Type == node,
+            IndexerDeclarationSyntax ids => ids.Type == node,
+            // Bare identifier used as a static-member qualifier (e.g. frmClientesMain.SharedField)
+            // that doesn't resolve to anything at all - a strong signal of a mis-cased type name
+            // rather than an ordinary unresolved variable/method reference.
+            MemberAccessExpressionSyntax maes when maes.Expression == node
+                => sem.GetSymbolInfo(node) is { Symbol: null, CandidateSymbols.IsEmpty: true },
+            _ => false,
+        };
+
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
         => Rewrite(node, node => {
             var type = sem.GetTypeInfo(node.Expression).ConvertedType;

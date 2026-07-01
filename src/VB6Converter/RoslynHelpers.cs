@@ -21,6 +21,34 @@ internal static class RoslynHelpers
                         : cls))
             .NormalizeWhitespace();
 
+    /// <summary>
+    /// Recursively searches the compilation's namespaces for a type whose name (or fully
+    /// qualified name) matches <paramref name="name"/> case-insensitively. Used to recover
+    /// the correct casing for VB6 type references (VB6 identifiers are case-insensitive, so
+    /// a form/class may be declared as "frmclientesmain" but referenced as "frmClientesMain").
+    /// </summary>
+    public static ITypeSymbol FindTypeByName(SemanticModel sem, string name, INamespaceSymbol nss = null)
+    {
+        nss ??= sem.Compilation.GlobalNamespace;
+
+        foreach (var m in nss.GetTypeMembers()) {
+            if (string.Equals(m.ToString(), name, StringComparison.OrdinalIgnoreCase)) {
+                return m;
+            }
+            if (string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)) {
+                return m;
+            }
+        }
+
+        foreach (var nested in nss.GetNamespaceMembers()) {
+            if (FindTypeByName(sem, name, nested) is ITypeSymbol ts) {
+                return ts;
+            }
+        }
+
+        return null;
+    }
+
     public static SyntaxTokenList Modifiers(
         bool isPublic = false, bool isInternal = false, bool isProtected = false,
         bool isStatic = false,
