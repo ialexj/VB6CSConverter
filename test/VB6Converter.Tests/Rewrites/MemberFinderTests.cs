@@ -47,7 +47,7 @@ public class MemberFinderTests
             [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
 
         var semantics = comp.GetSemanticModel(cu.SyntaxTree, true);
-        var rewriter  = new MemberFinder(semantics);
+        var rewriter  = new SymbolCapitalizationRewriter(semantics);
 
         var newCu = rewriter.Visit(cu);
         var actual = CSharpSyntaxTree.ParseText(newCu!.ToFullString()).GetRoot().NormalizeWhitespace().ToFullString();

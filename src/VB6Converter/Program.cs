@@ -278,7 +278,7 @@ public static class Program
 
                 await RunRewriter(true, "Finding Types", async (t, sm) => new TypeFinder(sm));
                 await RunRewriter(true, "Qualifying Ambiguous Types", async (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
-                await RunRewriter(true, "Finding Members", async (t, sm) => new MemberFinder(sm));
+                await RunRewriter(true, "Finding Members", async (t, sm) => new SymbolCapitalizationRewriter(sm));
                 await RunRewriter(true, "Expanding default member usages", async (t, sm) => new DefaultMemberRewriter(sm));
                 await RunRewriter(true, "Rewriting parameterless method-backed member access", async (t, sm) => new ParameterlessMethodCallRewriter(sm));
 

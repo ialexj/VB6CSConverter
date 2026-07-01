@@ -10,7 +10,7 @@ namespace VB6Converter.Rewriters.Semantic;
 /// Attempts to find the correct casing for member accesses and named arguments based on the semantic model.
 /// </summary>
 /// <param name="sem">The semantic model used to retrieve type and symbol information.</param>
-public class MemberFinder(SemanticModel sem) : LoggedRewriter
+public class SymbolCapitalizationRewriter(SemanticModel sem) : LoggedRewriter
 {
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
         => Rewrite(node, node => {

@@ -50,7 +50,7 @@ public class ParameterlessMethodCallRewriterTests
             [cu.SyntaxTree],
             [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
 
-        var memberFinder = new MemberFinder(comp.GetSemanticModel(cu.SyntaxTree, true));
+        var memberFinder = new SymbolCapitalizationRewriter(comp.GetSemanticModel(cu.SyntaxTree, true));
         var memberFixed = (CompilationUnitSyntax)memberFinder.Visit(cu)!;
 
         var updatedComp = CSharpCompilation.Create("Test2",
@@ -72,7 +72,7 @@ public class ParameterlessMethodCallRewriterTests
             [cu.SyntaxTree],
             [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
 
-        var firstMemberFinder = new MemberFinder(comp.GetSemanticModel(cu.SyntaxTree, true));
+        var firstMemberFinder = new SymbolCapitalizationRewriter(comp.GetSemanticModel(cu.SyntaxTree, true));
         var memberFixed = (CompilationUnitSyntax)firstMemberFinder.Visit(cu)!;
 
         var secondComp = CSharpCompilation.Create("Test2",
