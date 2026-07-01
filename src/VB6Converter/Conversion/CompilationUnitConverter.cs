@@ -15,6 +15,7 @@ public static class CompilationUnitConverter
         new VBCoreRewriter(file),
 
         new ErrRaiseRewriter(file),
+        new ErrObjectRewriter(file),
 
         new KeywordEscapeRewriter(file),
 
@@ -54,30 +55,7 @@ public static class CompilationUnitConverter
 
         var vb6Class = ClassDeclaration("VB6")
             .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword)))
-            .WithMembers(List<MemberDeclarationSyntax>([
-                FieldDeclaration(
-                        VariableDeclaration(ParseTypeName("Microsoft.VisualBasic.ErrObject"))
-                            .WithVariables(SingletonSeparatedList(
-                                VariableDeclarator("Err")
-                                    .WithInitializer(EqualsValueClause(
-                                        InvocationExpression(
-                                            MemberAccessExpression(
-                                                SyntaxKind.SimpleMemberAccessExpression,
-                                                ParseName("Microsoft.VisualBasic.Information"),
-                                                IdentifierName("Err"))))))))
-                    .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword), Token(SyntaxKind.ReadOnlyKeyword))),
-                FieldDeclaration(
-                        VariableDeclaration(PredefinedType(Token(SyntaxKind.IntKeyword)))
-                            .WithVariables(SingletonSeparatedList(
-                                VariableDeclarator("Erl")
-                                    .WithInitializer(EqualsValueClause(
-                                        InvocationExpression(
-                                            MemberAccessExpression(
-                                                SyntaxKind.SimpleMemberAccessExpression,
-                                                ParseName("Microsoft.VisualBasic.Information"),
-                                                IdentifierName("Erl"))))))))
-                    .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword), Token(SyntaxKind.ReadOnlyKeyword)))
-            ]));
+            .WithMembers(List<MemberDeclarationSyntax>([]));
 
         return CompilationUnit([], List(usings), [], SingletonList<MemberDeclarationSyntax>(vb6Class));
     }
