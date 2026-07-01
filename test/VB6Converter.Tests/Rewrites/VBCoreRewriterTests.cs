@@ -10,104 +10,104 @@ public class VBCoreRewriterTests
     [TestMethod]
     public void Abs() => ValidateBodyMatches(
         "y = Abs(x)",
-        "y = Math.Abs(x);");
+        "y = System.Math.Abs(x);");
 
     [TestMethod]
     public void Sin() => ValidateBodyMatches(
         "y = Sin(x)",
-        "y = Math.Sin(x);");
+        "y = System.Math.Sin(x);");
 
     [TestMethod]
     public void Cos() => ValidateBodyMatches(
         "y = Cos(x)",
-        "y = Math.Cos(x);");
+        "y = System.Math.Cos(x);");
 
     [TestMethod]
     public void Tan() => ValidateBodyMatches(
         "y = Tan(x)",
-        "y = Math.Tan(x);");
+        "y = System.Math.Tan(x);");
 
     [TestMethod]
     public void Atn() => ValidateBodyMatches(
         "y = Atn(x)",
-        "y = Math.Atan(x);");
+        "y = System.Math.Atan(x);");
 
     [TestMethod]
     public void Sqr() => ValidateBodyMatches(
         "y = Sqr(x)",
-        "y = Math.Sqrt(x);");
+        "y = System.Math.Sqrt(x);");
 
     [TestMethod]
     public void Log() => ValidateBodyMatches(
         "y = Log(x)",
-        "y = Math.Log(x);");
+        "y = System.Math.Log(x);");
 
     [TestMethod]
     public void Exp() => ValidateBodyMatches(
         "y = Exp(x)",
-        "y = Math.Exp(x);");
+        "y = System.Math.Exp(x);");
 
     [TestMethod]
     public void Sgn() => ValidateBodyMatches(
         "y = Sgn(x)",
-        "y = Math.Sign(x);");
+        "y = System.Math.Sign(x);");
 
     [TestMethod]
     public void Int() => ValidateBodyMatches(
         "y = Int(x)",
-        "y = (int)Math.Floor((double)x);");
+        "y = (int)System.Math.Floor((double)x);");
 
     [TestMethod]
     public void Fix() => ValidateBodyMatches(
         "y = Fix(x)",
-        "y = (int)Math.Truncate((double)x);");
+        "y = (int)System.Math.Truncate((double)x);");
 
     [TestMethod]
     public void Round1() => ValidateBodyMatches(
         "y = Round(x)",
-        "y = Math.Round(x);");
+        "y = System.Math.Round(x);");
 
     [TestMethod]
     public void Round2() => ValidateBodyMatches(
         "y = Round(x, 2)",
-        "y = Math.Round(x, 2);");
+        "y = System.Math.Round(x, 2);");
 
     // ── Type conversions ──────────────────────────────────────────────────────
 
     [TestMethod]
     public void CInt() => ValidateBodyMatches(
         "y = CInt(x)",
-        "y = Convert.ToInt32(x);");
+        "y = System.Convert.ToInt32(x);");
 
     [TestMethod]
     public void CShort() => ValidateBodyMatches(
         "y = CShort(x)",
-        "y = Convert.ToInt16(x);");
+        "y = System.Convert.ToInt16(x);");
 
     [TestMethod]
     public void CSng() => ValidateBodyMatches(
         "y = CSng(x)",
-        "y = Convert.ToSingle(x);");
+        "y = System.Convert.ToSingle(x);");
 
     [TestMethod]
     public void CBool() => ValidateBodyMatches(
         "y = CBool(x)",
-        "y = Convert.ToBoolean(x);");
+        "y = System.Convert.ToBoolean(x);");
 
     [TestMethod]
     public void CByte() => ValidateBodyMatches(
         "y = CByte(x)",
-        "y = Convert.ToByte(x);");
+        "y = System.Convert.ToByte(x);");
 
     [TestMethod]
     public void CDate() => ValidateBodyMatches(
         "y = CDate(x)",
-        "y = Convert.ToDateTime(x);");
+        "y = System.Convert.ToDateTime(x);");
 
     [TestMethod]
     public void CCur() => ValidateBodyMatches(
         "y = CCur(x)",
-        "y = Convert.ToDecimal(x);");
+        "y = System.Convert.ToDecimal(x);");
 
     [TestMethod]
     public void Format() => ValidateBodyMatches(
@@ -233,6 +233,14 @@ public class VBCoreRewriterTests
         "y = Timer",
         "y = Microsoft.VisualBasic.DateAndTime.Timer;");
 
+    // A qualified type name whose rightmost segment matches a rewritten runtime identifier
+    // (e.g. "Timer") must not be rewritten to a member access — it's a type reference, not an
+    // expression. Regression test for a cast crash in VisitQualifiedName.
+    [TestMethod]
+    public void QualifiedTypeName_MatchingRuntimeIdentifier_IsNotRewritten() => ValidateMemberMatches(
+        "Dim x As VB.Timer",
+        "public static VB.Timer x;");
+
     // ── Parameterless calls without parentheses ──────────────────────────────
 
     [TestMethod]
@@ -272,7 +280,7 @@ public class VBCoreRewriterTests
         """
         public static void Test(int x = default)
         {
-            if (x != default)
+            if (!(x == default))
                 DoSomething();
         }
         """);
@@ -287,7 +295,7 @@ public class VBCoreRewriterTests
         """
         public static void Test(dynamic x = default)
         {
-            if (x != default)
+            if (!(x == default))
                 DoSomething();
         }
         """);

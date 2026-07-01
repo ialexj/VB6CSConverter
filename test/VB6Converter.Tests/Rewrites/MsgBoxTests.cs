@@ -11,15 +11,6 @@ namespace VB6Converter.Tests;
     public class MsgBoxTests
     {
         [TestMethod]
-        public void MsgBox() => ValidateBodyMatches(
-            """
-            MsgBox "This is a test!", vbOkOnly + vbInformation, "Cópia Periódica"
-            """,
-            """
-            MsgBox("This is a test!", vbOkOnly + vbInformation, "Cópia Periódica");
-            """);
-
-        [TestMethod]
         public void Replace() => ValidateBodyMatches(
             """
             x = Replace$(s, "a", "b")

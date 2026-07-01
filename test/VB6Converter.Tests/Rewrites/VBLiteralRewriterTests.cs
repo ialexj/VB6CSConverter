@@ -121,15 +121,15 @@ public class VBLiteralRewriterTests
     [TestMethod]
     public void VarTypeInteger() => ValidateBodyMatches(
         "x = vbInteger",
-        "x = 2 /* vbInteger */;");
+        "x = Microsoft.VisualBasic.Constants.vbInteger;");
 
     [TestMethod]
     public void VarTypeString() => ValidateBodyMatches(
         "x = vbString",
-        "x = 8 /* vbString */;");
+        "x = Microsoft.VisualBasic.Constants.vbString;");
 
     [TestMethod]
     public void VarTypeArray() => ValidateBodyMatches(
         "x = vbArray",
-        "x = 8192 /* vbArray */;");
+        "x = Microsoft.VisualBasic.Constants.vbArray;");
 }

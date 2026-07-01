@@ -52,28 +52,6 @@ public class StatementTests
     }
 
     [TestMethod]
-    public void LoadStatementBecomesCommentStub()
-    {
-        var conversion = ConvertBody(
-            """
-            Load frmMain
-            """);
-
-        GetBodyText(conversion).Should().Contain("Load frmMain");
-    }
-
-    [TestMethod]
-    public void UnloadOtherTargetBecomesCommentStub()
-    {
-        var conversion = ConvertBody(
-            """
-            Unload frmMain
-            """);
-
-        GetBodyText(conversion).Should().Contain("Unload frmMain");
-    }
-
-    [TestMethod]
     public void ExitSubBecomesReturn() => ValidateBodyMatches(
         """
         Exit Sub

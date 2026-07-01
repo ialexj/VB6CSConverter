@@ -29,7 +29,8 @@ public partial class VisualBasic6Parser
             lockStmt() as IIOStatementContext ??
             unlockStmt() as IIOStatementContext ??
             inputStmt() as IIOStatementContext ??
-            eraseStmt() as IIOStatementContext
+            eraseStmt() as IIOStatementContext ??
+            widthStmt() as IIOStatementContext
         );
     }
 
@@ -76,4 +77,6 @@ public partial class VisualBasic6Parser
     public partial class InputStmtContext : IIOStatementContext { }
 
     public partial class EraseStmtContext : IIOStatementContext { }
+
+    public partial class WidthStmtContext : IIOStatementContext { }
 }

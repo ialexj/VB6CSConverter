@@ -21,8 +21,13 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
 
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
         => Rewrite(node, node => {
-            if (node.Parent is MemberAccessExpressionSyntax memberAccess
-                && memberAccess.Name == node) {
+            if ((node.Parent is MemberAccessExpressionSyntax memberAccess
+                    && memberAccess.Name == node)
+                || node.Parent is QualifiedNameSyntax) {
+                // Member/qualified-name positions are type or namespace references (e.g. the
+                // "Timer" in `VB.Timer`, or a control/type field of that name), not value
+                // expressions. Rewriting them to a MemberAccessExpressionSyntax here would
+                // produce an invalid SimpleNameSyntax slot and crash the base rewriter.
                 return base.VisitIdentifierName(node);
             }
 
@@ -406,7 +411,7 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         return CastExpression(
             PredefinedType(Token(SyntaxKind.IntKeyword)),
             InvocationExpression(
-                ParseExpression("Math.Floor"),
+                ParseExpression("System.Math.Floor"),
                 ArgumentList(CastExpression(PredefinedType(Token(SyntaxKind.DoubleKeyword)), n))));
     }
 
@@ -416,12 +421,12 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         return CastExpression(
             PredefinedType(Token(SyntaxKind.IntKeyword)),
             InvocationExpression(
-                ParseExpression("Math.Truncate"),
+                ParseExpression("System.Math.Truncate"),
                 ArgumentList(CastExpression(PredefinedType(Token(SyntaxKind.DoubleKeyword)), n))));
     }
 
     static SyntaxNode ConvertRound(InvocationExpressionSyntax node)
-        => InvocationExpression(ParseExpression("Math.Round"), node.ArgumentList);
+        => InvocationExpression(ParseExpression("System.Math.Round"), node.ArgumentList);
 
     // ── Strings ──────────────────────────────────────────────────────────────────
 

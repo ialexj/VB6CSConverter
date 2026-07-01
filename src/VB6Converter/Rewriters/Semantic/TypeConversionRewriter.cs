@@ -177,7 +177,7 @@ public class TypeConversionRewriter(SemanticModel semantics) : LoggedRewriter
         }
 
         var sourceType = semantics.GetTypeInfo(expression).Type;
-        if (sourceType is null || IsEnumLike(sourceType)) {
+        if (sourceType is null || sourceType.TypeKind == TypeKind.Error || IsEnumLike(sourceType)) {
             return false;
         }
 
@@ -265,17 +265,25 @@ public class TypeConversionRewriter(SemanticModel semantics) : LoggedRewriter
 
         expression = (ExpressionSyntax)Visit(expression);
 
+        // The wrapped expression's own leading/trailing trivia (e.g. spacing around an
+        // operator) belongs outside the new wrapper, not inside the Convert(...) call.
+        var leadingTrivia = expression.GetLeadingTrivia();
+        var trailingTrivia = expression.GetTrailingTrivia();
+        expression = expression.WithoutTrivia();
+
         if (isBoolToInt) {
             // Optimise literal cases: emit the integer constant directly.
             if (expression.IsKind(SyntaxKind.FalseLiteralExpression)) {
                 return LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0))
-                    .WithTriviaFrom(expression);
+                    .WithLeadingTrivia(leadingTrivia)
+                    .WithTrailingTrivia(trailingTrivia);
             }
             if (expression.IsKind(SyntaxKind.TrueLiteralExpression)) {
                 return PrefixUnaryExpression(
                     SyntaxKind.UnaryMinusExpression,
-                    LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(1))
-                        .WithTriviaFrom(expression));
+                    LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(1)))
+                    .WithLeadingTrivia(leadingTrivia)
+                    .WithTrailingTrivia(trailingTrivia);
             }
 
             // Non-literal bool expression: -(System.Convert.ToXxx(expr))
@@ -291,7 +299,9 @@ public class TypeConversionRewriter(SemanticModel semantics) : LoggedRewriter
 
             return PrefixUnaryExpression(
                 SyntaxKind.UnaryMinusExpression,
-                ParenthesizedExpression(convertCall));
+                ParenthesizedExpression(convertCall))
+                .WithLeadingTrivia(leadingTrivia)
+                .WithTrailingTrivia(trailingTrivia);
         }
 
         return InvocationExpression(
@@ -302,6 +312,8 @@ public class TypeConversionRewriter(SemanticModel semantics) : LoggedRewriter
                     IdentifierName("System"),
                     IdentifierName("Convert")),
                 IdentifierName(methodName)),
-            ArgumentList(SingletonSeparatedList(Argument(expression))));
+            ArgumentList(SingletonSeparatedList(Argument(expression))))
+            .WithLeadingTrivia(leadingTrivia)
+            .WithTrailingTrivia(trailingTrivia);
     }
 }

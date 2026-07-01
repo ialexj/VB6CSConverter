@@ -142,6 +142,68 @@ public class DiagnosticTests
     }
 
     [TestMethod]
+    public void FrxOffset_UsesNextSiblingControlOffset_NotEndOfFile()
+    {
+        // Regression test: the byteLength for a control's FRX-referenced property must be
+        // computed from ALL offsets referenced anywhere in the form (sorted globally), not
+        // just the offsets referenced by that control's own subtree. Previously, each control
+        // was processed with its own, narrowly-scoped offset map, so a control whose own
+        // properties happened to reference only one FRX offset would have that offset treated
+        // as "the last one" and its byteLength would incorrectly extend all the way to
+        // end-of-file, sweeping in unrelated data belonging to later sibling controls.
+        var vb = """
+            Begin VB.Form frmEditorMain
+                Begin VB.ComboBox cboFirst
+                    List            =   "frmEditorMain.frx":0000
+                End
+                Begin VB.ComboBox cboSecond
+                    ItemData        =   "frmEditorMain.frx":0002
+                    List            =   "frmEditorMain.frx":0004
+                End
+            End
+            """;
+
+        var sourceDir = Path.Combine(Path.GetTempPath(), $"vb6_src_{Guid.NewGuid():N}");
+        var outputDir = Path.Combine(Path.GetTempPath(), $"vb6_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sourceDir);
+        Directory.CreateDirectory(outputDir);
+
+        try {
+            var frxPath = Path.Combine(sourceDir, "frmEditorMain.frx");
+            var frxBytes = new byte[] {
+                0x00, 0x00,                                // 0x0000 cboFirst.List: empty StringList (count = 0)
+                0x00, 0x00,                                // 0x0002 cboSecond.ItemData: empty StringList (count = 0)
+                0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x41,  // 0x0004 cboSecond.List: count=1, maxLen=1, item "A"
+            };
+            File.WriteAllBytes(frxPath, frxBytes);
+
+            var output = ConvertFormWithFrx(vb, sourceDir, outputDir);
+
+            // cboFirst.List must resolve as an empty StringList (byteLength 2, the offset of
+            // cboSecond.ItemData minus the offset of cboFirst.List) — exported as JSON "[]".
+            // With the bug, byteLength was computed as (fileSize - 0) = 9, which fails
+            // StringList validation and falls back to an unresolved/raw ".dat" resource.
+            var firstResourcePath = Path.Combine(outputDir, "_Resources", "frmEditorMain_0000.json");
+            File.Exists(firstResourcePath).Should().BeTrue();
+            File.ReadAllText(firstResourcePath).Should().Be("[]");
+            output.Should().Contain("Resource: _Resources/frmEditorMain_0000.json");
+
+            // cboSecond.List (the true last item) resolves to its real content.
+            var secondResourcePath = Path.Combine(outputDir, "_Resources", "frmEditorMain_0004.json");
+            File.Exists(secondResourcePath).Should().BeTrue();
+            File.ReadAllText(secondResourcePath).Should().Be("[\"A\"]");
+        }
+        finally {
+            if (Directory.Exists(sourceDir)) {
+                Directory.Delete(sourceDir, recursive: true);
+            }
+            if (Directory.Exists(outputDir)) {
+                Directory.Delete(outputDir, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void TrailingColon() => ConversionShouldSucceed(
         """
         Sub Test()

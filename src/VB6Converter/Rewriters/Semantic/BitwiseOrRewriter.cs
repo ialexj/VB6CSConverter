@@ -13,10 +13,11 @@ public class BitwiseOrRewriter(SemanticModel semantics) : LoggedRewriter
             // VB6 enum flag combining: enum + enum → enum | enum
             if (node.IsKind(SyntaxKind.AddExpression))
             {
-                var leftType  = semantics.GetTypeInfo(node.Left).Type;
-                var rightType = semantics.GetTypeInfo(node.Right).Type;
-
-                if (leftType?.TypeKind == TypeKind.Enum && rightType?.TypeKind == TypeKind.Enum)
+                // Chained "A + B + C" parses as "(A + B) + C". Since "enum + enum" has no
+                // valid operator in real C#, the semantic model can't type the inner
+                // "(A + B)" node directly, so recurse through nested Add expressions to
+                // find the underlying enum operands.
+                if (IsEnumTyped(node.Left) && IsEnumTyped(node.Right))
                 {
                     var newOperator = Token(
                         node.OperatorToken.LeadingTrivia,
@@ -82,4 +83,19 @@ public class BitwiseOrRewriter(SemanticModel semantics) : LoggedRewriter
 
             return PrefixUnaryExpression(SyntaxKind.BitwiseNotExpression, newToken, visitedOperand);
         });
+
+    // Determines whether an expression is enum-typed, recursing through nested
+    // "A + B" chains whose intermediate nodes the semantic model can't type directly
+    // (since "enum + enum" has no valid operator in real C#).
+    private bool IsEnumTyped(ExpressionSyntax expr)
+    {
+        var type = semantics.GetTypeInfo(expr).Type;
+        if (type?.TypeKind == TypeKind.Enum)
+            return true;
+
+        return expr is BinaryExpressionSyntax binary
+            && binary.IsKind(SyntaxKind.AddExpression)
+            && IsEnumTyped(binary.Left)
+            && IsEnumTyped(binary.Right);
+    }
 }
