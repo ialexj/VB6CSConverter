@@ -35,7 +35,8 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
 
     protected SyntaxNode Rewrite<T>(T node, Func<T, SyntaxNode> change, Func<SyntaxNode, object> value = null) where T : SyntaxNode
     {
-        string path = _file ?? node.SyntaxTree.FilePath;
+        string path = _file ?? node?.SyntaxTree.FilePath;
+
         var file = Path.GetFileNameWithoutExtension(path);
         var log = Log.Rewriting
             .ForContext("file", file)
@@ -62,7 +63,7 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
                         sequence = RewriterSequence,
                         rewriter = GetType().Name,
                         file = file,
-                        line = node.GetLocation()?.GetLineSpan().StartLinePosition.Line,
+                        line = node?.GetLocation()?.GetLineSpan().StartLinePosition.Line,
                         from = oldValue?.ToString(),
                         to   = newValue?.ToString()
                     }));
@@ -72,9 +73,13 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
             return @new;
         }
         catch (Exception ex) when (!Debugger.IsAttached) {
+            var location = node?.GetLocation()?.GetLineSpan();
             log.ForContext("error", ex.Message)
-                .ForContext("method", ex.TargetSite.Name)
-                .Error("Failed to rewrite {node} ({method}): {error:nq}");
+                .ForContext("method", ex.TargetSite?.Name)
+                .ForContext("nodeType", node?.GetType().Name)
+                .ForContext("filePath", location?.Path)
+                .ForContext("line", location.HasValue ? location.Value.StartLinePosition.Line + 1 : (int?)null)
+                .Error("Failed to rewrite {nodeType} at {filePath}:{line} ({method}): {error:nq}");
 
             throw;
         }

@@ -51,53 +51,53 @@ public class TypeCastRewriter(SemanticModel semantics) : LoggedRewriter
         });
 
     public override SyntaxNode VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
-    {
-        if (node.IsKind(SyntaxKind.LogicalNotExpression) || node.IsKind(SyntaxKind.LogicalOrExpression) || node.IsKind(SyntaxKind.LogicalAndExpression)) {
-            var valueType = semantics.GetTypeInfo(node.Operand);
-            if (valueType.Type.SpecialType == SpecialType.System_Object) {
-                return node.WithOperand(ApplyCast(node.Operand, PredefinedType(Token(SyntaxKind.BoolKeyword))));
+        => Rewrite(node, node => {
+            if (node.IsKind(SyntaxKind.LogicalNotExpression) || node.IsKind(SyntaxKind.LogicalOrExpression) || node.IsKind(SyntaxKind.LogicalAndExpression)) {
+                var valueType = semantics.GetTypeInfo(node.Operand);
+                if (valueType.Type?.SpecialType == SpecialType.System_Object) {
+                    return node.WithOperand(ApplyCast(node.Operand, PredefinedType(Token(SyntaxKind.BoolKeyword))));
+                }
             }
-        }
-        return base.VisitPrefixUnaryExpression(node);
-    }
+            return base.VisitPrefixUnaryExpression(node);
+        });
 
     public override SyntaxNode VisitArgument(ArgumentSyntax node)
-    {
-        if (node.DescendantNodes(n => n is not CastExpressionSyntax).OfType<CastExpressionSyntax>().Any()) {
-            return base.VisitArgument(node);
-        }
+        => Rewrite(node, node => {
+            if (node.DescendantNodes(n => n is not CastExpressionSyntax).OfType<CastExpressionSyntax>().Any()) {
+                return base.VisitArgument(node);
+            }
 
-        // For arguments that are objects
-        // that try to be inserted into parameters which are not objects
-        // add a cast.
+            // For arguments that are objects
+            // that try to be inserted into parameters which are not objects
+            // add a cast.
 
-        if (node.Parent is ArgumentListSyntax list && list.Parent is InvocationExpressionSyntax invocation) {
-            int index = list.Arguments.IndexOf(node);
+            if (node.Parent is ArgumentListSyntax list && list.Parent is InvocationExpressionSyntax invocation) {
+                int index = list.Arguments.IndexOf(node);
 
-            var argumentType = semantics.GetTypeInfo(node.Expression).Type;
-            if (argumentType is ITypeSymbol ts && ts.SpecialType == SpecialType.System_Object) {
-                var symbol = semantics.GetSymbolInfo(invocation);
-                var methodSymbol = symbol.Symbol ?? symbol.CandidateSymbols.FirstOrDefault();
+                var argumentType = semantics.GetTypeInfo(node.Expression).Type;
+                if (argumentType is ITypeSymbol ts && ts.SpecialType == SpecialType.System_Object) {
+                    var symbol = semantics.GetSymbolInfo(invocation);
+                    var methodSymbol = symbol.Symbol ?? symbol.CandidateSymbols.FirstOrDefault();
 
-                if (methodSymbol is IMethodSymbol method) {
-                    IParameterSymbol parameterSymbol = null;
-                    if (node.NameColon != null) {
-                        var name = node.NameColon.Name.Identifier.Text;
-                        parameterSymbol = method.Parameters.FirstOrDefault(p => p.Name == name);
-                    }
-                    else if (index >= 0 && index < method.Parameters.Length) {
-                        parameterSymbol = method.Parameters[index];
-                    }
+                    if (methodSymbol is IMethodSymbol method) {
+                        IParameterSymbol parameterSymbol = null;
+                        if (node.NameColon != null) {
+                            var name = node.NameColon.Name.Identifier.Text;
+                            parameterSymbol = method.Parameters.FirstOrDefault(p => p.Name == name);
+                        }
+                        else if (index >= 0 && index < method.Parameters.Length) {
+                            parameterSymbol = method.Parameters[index];
+                        }
 
-                    if (parameterSymbol != null && parameterSymbol.Type.SpecialType != SpecialType.System_Object) {
-                        return node.WithExpression(ApplyCast(node.Expression, parameterSymbol.Type));
+                        if (parameterSymbol != null && parameterSymbol.Type?.SpecialType != SpecialType.System_Object) {
+                            return node.WithExpression(ApplyCast(node.Expression, parameterSymbol.Type));
+                        }
                     }
                 }
             }
-        }
 
-        return base.VisitArgument(node);
-    }
+            return base.VisitArgument(node);
+        });
 
     ExpressionSyntax ApplyCast(ExpressionSyntax expression, ITypeSymbol target) => ApplyCast(expression, target.ToTypeSyntax());
 
