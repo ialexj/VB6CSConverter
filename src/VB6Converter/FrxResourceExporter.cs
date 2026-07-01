@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using VB6Parser.Frx;
 
@@ -37,6 +38,18 @@ public static class FrxResourceExporter
         if (item is FrxStringList stringList) {
             File.WriteAllText(fullPath, JsonSerializer.Serialize(stringList.Strings));
         }
+        else if (item is FrxBindings bindings) {
+            File.WriteAllText(fullPath, JsonSerializer.Serialize(new {
+                DataSource = bindings.DataSource,
+                DataField = bindings.DataField,
+            }));
+        }
+        else if (item is FrxOleObjectBlob oleBlob) {
+            File.WriteAllText(fullPath, JsonSerializer.Serialize(new {
+                version = oleBlob.Version,
+                properties = oleBlob.Properties.Select(p => new { id = p.Id, type = p.Type, value = p.Value }),
+            }));
+        }
         else {
             File.WriteAllBytes(fullPath, item.GetPayloadData());
         }
@@ -49,6 +62,15 @@ public static class FrxResourceExporter
     {
         if (item is FrxStringList)
             return ".json";
+
+        if (item is FrxBindings)
+            return ".bindings.json";
+
+        if (item is FrxRtfText)
+            return ".rtf";
+
+        if (item is FrxOleObjectBlob)
+            return ".msoleps.json";
 
         if (item is FrxBinaryBlob blob && blob.Payload is FrxImagePayload img)
             return DetectImageExtension(img.ImageBytes);

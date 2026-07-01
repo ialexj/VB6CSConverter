@@ -138,15 +138,30 @@ public static class ClassConverter
 
     public static ClassControlInfo GetControl(ControlPropertiesContext control, string sourceDirectory = null, string outputDirectory = null)
     {
+        // Build the FRX offset → byteLength map once from the whole form's control
+        // tree (root), then thread it unchanged through every recursive call below.
+        // Building it per-control instead would scope the offset sort to only that
+        // control's own properties, making the last offset within that narrow view
+        // incorrectly extend to end-of-file instead of to the next sibling/child
+        // control's offset elsewhere in the form.
+        var frxOffsetMap = FrxOffsetScanner.BuildOffsetMap(control, sourceDirectory);
+        return GetControl(control, frxOffsetMap, sourceDirectory, outputDirectory);
+    }
+
+    private static ClassControlInfo GetControl(
+        ControlPropertiesContext control,
+        IReadOnlyDictionary<(string filename, int offset), int> frxOffsetMap,
+        string sourceDirectory,
+        string outputDirectory)
+    {
         var name = GetIdentifierName(control.cp_ControlIdentifier().ambiguousIdentifier());
         var type = control.cp_ControlType().complexType().ToTypeSyntax();
 
-        var frxOffsetMap = FrxOffsetScanner.BuildOffsetMap(control, sourceDirectory);
         var properties = GetProperties(control.cp_Properties()).ToArray();
 
         var children = control.cp_Properties().Select(c => c.controlProperties())
             .OfType<ControlPropertiesContext>()
-            .Select(c => GetControl(c, sourceDirectory, outputDirectory))
+            .Select(c => GetControl(c, frxOffsetMap, sourceDirectory, outputDirectory))
             .ToArray();
 
         return new ClassControlInfo(type, name) {

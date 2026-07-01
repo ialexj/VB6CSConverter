@@ -29,6 +29,14 @@ The FRM supplies the `startOffset` only.  The `byteLength` of each item must be 
 sorting all referenced offsets in ascending order and computing the difference to the next offset.
 The last item extends to end-of-file.
 
+> **Pitfall — do not read "to EOF" for every item.**  Naively dumping from `startOffset` to the
+> end of the file (instead of to the *next sorted offset*) will silently swallow every subsequent
+> property's data too.  Adjacent items are frequently empty `StringList`s (`00 00`, byteLength 2)
+> for design-time-empty `ComboBox`/`ListBox` controls, so a wrongly-bounded dump looks like a run
+> of "padding" zero bytes followed by unrelated (but individually valid) structures — e.g. a
+> `List` blob immediately followed by a completely unrelated grid control's `OleObjectBlob`. Always
+> bound reads with the next sorted offset, never EOF, unless the item genuinely is the last one.
+
 (The VB6 IDE writes the FRX in order of appearance in the FRM, but this shouldn't be assumed.)
 
 ```
@@ -141,6 +149,13 @@ Offset  Size  Field
 pre-allocation hint written by the VB6 IDE; it carries no type information and should not be used
 for item enumeration.
 
+> **Confirmed stale in practice:** for a `ComboBox`'s `ItemData` property (which stores the
+> per-item `Long` value as its decimal string, e.g. `"0"`), `maxItemLength` has been observed to
+> read `3` in multiple instances within the same form even though every current item was only
+> 1 byte long (`"0"`). The field is written once and not necessarily recomputed when items are
+> edited down, so it must never be trusted as authoritative — always derive item boundaries by
+> walking the length-prefixed items themselves.
+
 Each item is a 2-byte little-endian length followed by exactly that many bytes of CP1252-encoded
 text.  There is no null terminator and no padding between items.
 
@@ -165,19 +180,78 @@ Offset  Size  Field
 > The `FE FF` byte order mark is the standard header for the OLE Property Set binary format
 > (`IPropertyStorage` / MS-OLEPS). 
 
-### Bindings — `C5/C6 FA 01 00` magic
+### Bindings — `C5/C6 FA 01/02/… 00` magic
 
-Used by data-aware controls to record which ADO/DAO recordset each control is bound to.
+Used by data-aware controls to record which ADO/DAO recordset (and optionally which field) each
+control is bound to. The 3rd magic byte is an entry **count** `N` — the item is `N` consecutive
+`(flags, name)` tuples followed by a fixed 6-byte zero trailer. `N == 1` is by far the most common
+case (a single DataSource binding); `N == 2` has been observed for controls that also persist a
+bound field name (e.g. a grid column's `DataField` alongside its `DataSource`).
+
+```
+Offset      Size  Field
+──────────  ────  ──────────────────────────────────────────────────────────────────
++0          4     C6 FA 0N 00  magic (C6 or C5 in low byte; N = entry count, usually 1)
++4          …     entry × N    see below
++4+Σentries 6     0x00 × 6     fixed reserved trailer, always zero (not variable padding)
+
+each entry:
++0      4     int32   flags / binding type  (observed: 3, 9 = 0x09, 16 = 0x10)
++4      1     byte    nameLen — byte length of the name
++5      N     CP1252  name (no null terminator)
+```
+
+**Validation:** `byteLength == 4 + 6 + N×5 + Σ(nameLen)`. For the common `N == 1` case this
+simplifies to `byteLength == 15 + nameLen`. Confirmed across 182 real-world instances scanned
+from a single project's exported `.frx` blobs (180 with `N == 1`, 2 with `N == 2`) — every one
+satisfied the formula with zero mismatches. Observed flag values across that scan: `3` (1
+instance), `9` (101 instances), `16` (80 instances); the trailing 6 zero bytes were present and
+zero in all 182 instances.
+
+### ClsidStream — bare CLSID header, no length-prefix wrapper
+
+Used by some third-party ActiveX controls to persist a collection-valued property (e.g. a tab
+control's per-tab caption/icon data, or a Coolbar-style control's `Bands` collection). Unlike the
+CLSID-prefixed BinaryBlob payload described above, this item has **no leading 4-byte
+`payloadLength` field** — the CLSID sits directly at `startOffset`, and the size field comes
+*after* it instead of before it.
 
 ```
 Offset  Size  Field
 ──────  ────  ──────────────────────────────────────────────────────────────────
-+0      4     C6 FA 01 00  magic (C6 or C5 in low byte; exact significance unknown)
-+4      4     int32        flags / binding type  (observed values: 9 = 0x09, 16 = 0x10)
-+8      1     byte         nameLen — byte length of the datasource name
-+9      N     CP1252       datasource name (no null terminator)
-+9+N    …     0x00…        null padding to the next blob boundary
++0      16    guid (little-endian)   CLSID of the component/collection type
++16     4     int32                  contentSize == byteLength − 20
++20     …     byte[]                 component-specific content (may itself embed
+                                      further structures, e.g. raw BMP images)
 ```
+
+**Validation:** `contentSize == byteLength − 20` exactly. Confirmed across 34 real-world
+instances (sizes ranging from 380 bytes to 121,444 bytes) with zero mismatches — including the
+largest instance, whose content embeds multiple raw BMP images (`42 4D` / "BM" magic) back to
+back, one per collection element.
+
+The same CLSID (`{F6F07540-42EC-11CE-8135-00AA004BB851}`) was observed for two structurally
+different properties (a tab control's `TabCaption` and an unrelated control's `Bands` property),
+suggesting this is a generic collection-persistence stream shared by multiple third-party
+controls rather than a format tied to one specific `ProgID`. The CLSID was not resolvable via the
+local COM registry (control not installed on the analysis machine), so its owning component could
+not be identified by name.
+
+### RTF text — `{\rtf1` magic
+
+Used by `RichTextBox`-style controls to persist a formatted-text (`TextRTF`) property. The item
+is simply the literal RTF document (per the public RTF spec — 7-bit-clean, so CP1252/ASCII
+decoding is safe) with **no length prefix and no wrapper** — `byteLength` is the exact size of the
+RTF document, which is self-delimiting via its own balanced `{ … }` braces.
+
+```
+Offset  Size          Field
+──────  ────────────  ──────────────────────────────────────────────────────
++0      byteLength    CP1252/ASCII text, starting with the literal `{\rtf1`
+```
+
+Confirmed across 10 real-world instances (byteLength 121–135), all well-formed RTF documents
+ending in a balanced `\par }`.
 
 ### Other Item Types
 
@@ -193,11 +267,13 @@ When writing a component-agnostic parser, the following heuristic can be used:
 
 Given a blob at a FRM-provided offset with a known `byteLength`:
 
-1. Read 4 bytes at `startOffset` as int32 `candidate`.
-2. If `candidate == byteLength − 4` → parse as **BinaryBlob**.
-3. Otherwise → attempt **StringList**: validate that `count` is plausible and all items fit within
+1. Scan for known magic bytes at `startOffset` (`4C 42` → OleObjectBlob, `C5/C6 FA` → Bindings,
+   a known CLSID → ClsidStream, `{\rtf1` → RTF text). If any match, parse the special type.
+2. Otherwise, read 4 bytes at `startOffset` as int32 `candidate`.
+3. If `candidate == byteLength − 4` → parse as **BinaryBlob**.
+4. Otherwise → attempt **StringList**: validate that `count` is plausible and all items fit within
    `byteLength` without overflow.
-4. Scan for known magic bytes. If any match, parse the special type (if relevant)
+5. Otherwise → preserve as raw bytes (unknown item type).
 
 > **Edge case:** a zero-length BinaryBlob (`payloadLen == 0`, `byteLength == 4`) and an empty
 > StringList (`count == 0`, `byteLength == 2`) are structurally distinct only by `byteLength`.
@@ -231,17 +307,62 @@ XX XX XX XX   imageLen  (byteLength − 28 ✓)
 …             image payload
 ```
 
-### Opaque component blob — BinaryBlob / OpaquePayload
+### Picture — BinaryBlob / ImagePayload, no CLSID, BMP
 
-(Sheridan SSTab / vaTabPro, tab-caption data):
+(`frmPosMain.frx`, offset `0x14A2`, `CommandButton.Picture`, byteLength = 1090):
 
 ```
-XX XX XX XX   payloadLen
+3E 04 00 00   payloadLen = 1086  (1090 − 4 = 1086 ✓)
+6C 74 00 00   magic
+36 04 00 00   imageLen  = 1078  (1090 − 12 = 1078 ✓)
+42 4D 36 04 00 00   ← BMP header "BM", file size 0x436 = 1078
+…
+```
+
+### ClsidStream — `TabproLib.vaTabPro` tab-caption data, no length-prefix wrapper
+
+(`frmEncomendasInserir.frx`, offset `0x0019`, `tabEncomendasInserir.TabCaption`, byteLength = 380):
+
+```
 40 75 F0 F6
-EC 42 CE 11   CLSID {F6F07540-42EC-11CE-8135-00AA004BB851} (Sheridan vaTabPro / SSTab)
+EC 42 CE 11   CLSID {F6F07540-42EC-11CE-8135-00AA004BB851}   ← no leading length prefix
 81 35 00 AA
 00 4B B8 51
-…             opaque serialised component state (no magic marker)
+68 01 00 00   contentSize = 360  (380 − 20 = 360 ✓)
+CA 00 FF FF   control-specific header
+A0 5B 02 00   ← trailing int16 = 2 (plausibly a tab/item count)
+…             opaque per-tab caption data
+```
+
+### ClsidStream — Coolbar-style `Bands` collection with embedded BMPs
+
+(`mdiOptiware98.frx`, offset `0xE2E70`, `<coolbar>.Bands`, byteLength = 121444 — the *same* CLSID
+as the example above, on an entirely different property, supporting the theory that this is a
+shared generic collection-persistence format rather than one tied to a specific control):
+
+```
+40 75 F0 F6
+EC 42 CE 11   CLSID {F6F07540-42EC-11CE-8135-00AA004BB851}
+81 35 00 AA
+00 4B B8 51
+50 DA 01 00   contentSize = 121424  (121444 − 20 = 121424 ✓)
+FF FF FF FF   control-specific header (differs from the TabCaption example above)
+00 00 00 00
+B7 B0 00 00
+…
+42 4D 36 30 00 00   ← embedded "BM" BMP header for the first band's image, further in
+…                      (additional BMPs follow back-to-back for subsequent bands)
+```
+
+### RTF text — `RichTextBox`-style `TextRTF` property
+
+(byteLength = 121, multiple independent instances across different forms — always ends in a
+balanced `\par }`):
+
+```
+7B 5C 72 74 66 31 5C 61 6E 73 69 5C 61 6E 73 69   "{\rtf1\ansi\ansi…"
+…                                                  full RTF document, no wrapper/prefix
+64 5C 66 30 5C 66 73 31 37 20 0A 5C 70 61 72 20 7D   "…d\f0\fs17\n\par }"
 ```
 
 ### StringList
@@ -254,6 +375,18 @@ ListBox / ComboBox `ItemData` property, 3 items:
 01 00  31                    "1"
 02 00  32 32                 "22"
 03 00  33 33 33              "333"
+```
+
+Real-world `ItemData` example (`frmPosMain.frx`, offset `0x134E`, `cboVenda(1).ItemData`,
+byteLength = 13) — every item's `Long` value is the unset default of `0`, and `maxItemLength`
+is stale at `3` even though every current item is 1 byte:
+
+```
+03 00         count = 3          (matches the paired List property's item count)
+03 00         maxItemLength = 3  (STALE — every item below is only 1 byte long)
+01 00  30                    "0"
+01 00  30                    "0"
+01 00  30                    "0"
 ```
 
 ListBox / ComboBox `List` property, 3 items with varying length:
@@ -293,7 +426,58 @@ FE FF 00 00   ← OLE Property Set header (MS-OLEPS): ByteOrder = 0xFFFE
 ```
 C6 FA 01 00   magic
 09 00 00 00   flags / binding type
-0B            nameLen = 11
-64 61 74 44 6F 63   "datDoc" … (11 bytes total, CP1252, no terminator)
-00 00 00 00 00 00   null padding to next blob boundary
+06            nameLen = 6
+64 61 74 44 6F 63   "datDoc" (6 bytes, CP1252, no terminator)
+00 00 00 00 00 00   fixed 6-byte reserved trailer (always zero)
+```
+
+Three more instances from the same file (`dbcVenda` DBCombo controls), all satisfying
+`byteLength == 15 + nameLen`:
+
+```
+offset 0x1305, byteLength 22:  C6 FA 01 00  10 00 00 00  07 "datUser"      00×6
+offset 0x131B, byteLength 25:  C6 FA 01 00  10 00 00 00  0A "datArmazem"   00×6
+offset 0x1334, byteLength 26:  C6 FA 01 00  10 00 00 00  0B "datClientes"  00×6
+```
+
+A fourth independent instance from a different file/form (`frmPOSDocumento.frx`, offset `0x980D`,
+`dbcCliente.Bindings`, byteLength 26 — confirmed via the next FRM-referenced offset `0x9827`,
+`0x9827 − 0x980D == 15 + 11`):
+
+```
+offset 0x980D, byteLength 26:  C6 FA 01 00  10 00 00 00  0B "datClientes"  00×6
+```
+
+### Bindings — two-entry (`N == 2`) variant
+
+Two independent instances (`frmclientesmain.frx`, offsets `0x15B69` and `0xE2F7`, byteLength 38
+each), showing a `DataField`-like name (`"Defs"`) paired with a `DataSource`-like name
+(`"datClientes(7)"`, referencing element 7 of a control array) inside a single item:
+
+```
+C6 FA 02 00        magic, N = 2 entries
+02 00 00 00        entry 1: flags = 2
+04                 entry 1: nameLen = 4
+44 65 66 73        entry 1: "Defs"
+10 00 00 00        entry 2: flags = 16       (same flag value seen in single-entry Bindings)
+0E                 entry 2: nameLen = 14
+64 61 74 43 6C 69 65 6E 74 65 73 28 37 29   entry 2: "datClientes(7)"
+00 00 00 00 00 00  fixed 6-byte reserved trailer
+```
+
+`byteLength == 4 + 6 + 2×5 + (4 + 14) == 38` ✓ — matches the generalised formula.
+
+### StringList + adjacent OleObjectBlob — `frmPOSDocumento.frx`
+
+A `ComboBox` pair (`lstField` / `cboCopias`) illustrating an empty `StringList`, a stale
+`ItemData` `maxItemLength`, a populated `List`, and an unrelated grid blob sitting immediately
+afterward — all four are separate, correctly-bounded items once offsets are sorted properly:
+
+```
+offset 0x26BC, byteLength 2   lstField.List        00 00                        (empty, count=0)
+offset 0x26BE, byteLength 16  cboCopias.ItemData    count=4  maxItemLength=3 (STALE)
+                                                     "0" "0" "0" "0"
+offset 0x26CE, byteLength 52  cboCopias.List        count=4  maxItemLength=13
+                                                     "Original" "Duplicado" "Triplicado" "Quadriplicado"
+offset 0x2702, byteLength 6777  tdbgTotais.OleObjectBlob   "LB" v13, contentSize=6753
 ```

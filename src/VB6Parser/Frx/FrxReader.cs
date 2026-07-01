@@ -14,6 +14,9 @@ public static class FrxReader
     // Magic marker that identifies an image payload inside a BinaryBlob.
     private static readonly byte[] ImageMagic = [0x6C, 0x74, 0x00, 0x00];
 
+    // Magic marker that identifies an RTF text item ("{\rtf1").
+    private static readonly byte[] RtfMagic = [0x7B, 0x5C, 0x72, 0x74, 0x66, 0x31];
+
     // CP1252 is not available by default in .NET; register the provider once.
     private static readonly System.Text.Encoding Cp1252 = GetCp1252();
     private static System.Text.Encoding GetCp1252()
@@ -40,6 +43,18 @@ public static class FrxReader
         if (length == 0)
             return new FrxRawItem(filename, offset, length, data);
 
+        // ── 0. Attempt Bindings (magic-based) ───────────────────────────────
+        if (TryParseBindings(data, length, out var entries))
+            return new FrxBindings(filename, offset, length, entries!);
+
+        // ── 0.5 Attempt RTF text (magic-based) ──────────────────────────────
+        if (length >= RtfMagic.Length && data.AsSpan(0, RtfMagic.Length).SequenceEqual(RtfMagic))
+            return new FrxRtfText(filename, offset, length, data);
+
+        // ── 0.7 Attempt OleObjectBlob (magic-based) ─────────────────────────
+        if (TryParseOleObjectBlob(data, length, out var oleVersion, out var oleProperties))
+            return new FrxOleObjectBlob(filename, offset, length, oleVersion, data, oleProperties!);
+
         // ── 1. Attempt BinaryBlob ─────────────────────────────────────────────
         if (length >= 4) {
             var candidate = BitConverter.ToInt32(data, 0);
@@ -55,6 +70,31 @@ public static class FrxReader
 
         // ── 3. Fallback: raw bytes ────────────────────────────────────────────
         return new FrxRawItem(filename, offset, length, data);
+    }
+
+    // ── OleObjectBlob (LB magic) parsing ────────────────────────────────────────
+
+    private static bool TryParseOleObjectBlob(byte[] data, int byteLength, out int version, out FrxOleObjectBlobProperty[]? properties)
+    {
+        version = 0;
+        properties = null;
+
+        // Header: "LB" magic (+0), int16 version (+2), int32 contentSize (+4).
+        // contentSize must equal byteLength - 24 (the 24-byte LB header itself).
+        if (byteLength < 24) return false;
+        if (data[0] != 0x4C || data[1] != 0x42) return false;
+
+        var blobVersion = BitConverter.ToInt16(data, 2);
+        var contentSize = BitConverter.ToInt32(data, 4);
+        if (contentSize != byteLength - 24) return false;
+
+        // +8..+23: 16 bytes of control-specific position/size fields — not needed here.
+        var olepsData = data[24..byteLength];
+        if (!MsOlePropertySetReader.TryParse(olepsData, out _, out var parsedProperties)) return false;
+
+        version = blobVersion;
+        properties = parsedProperties;
+        return true;
     }
 
     // ── Payload parsing ───────────────────────────────────────────────────────
@@ -98,6 +138,53 @@ public static class FrxReader
     }
 
     // ── StringList parsing ────────────────────────────────────────────────────
+
+    private static bool TryParseBindings(byte[] data, int byteLength, out FrxBindingsEntry[] entries)
+    {
+        entries = null;
+
+        // Header: C5/C6 FA N 00
+        if (byteLength < 10) return false;
+        if (data[1] != 0xFA || data[3] != 0x00) return false;
+        if (data[0] != 0xC5 && data[0] != 0xC6) return false;
+
+        var count = data[2];
+        var pos = 4;
+        var parsed = new FrxBindingsEntry[count];
+        var totalNameLen = 0;
+
+        for (var i = 0; i < count; i++) {
+            // flags (int32) + nameLen (byte)
+            if (pos + 5 > byteLength) return false;
+
+            var flags = BitConverter.ToInt32(data, pos);
+            pos += 4;
+
+            var nameLen = data[pos];
+            pos += 1;
+
+            if (pos + nameLen > byteLength) return false;
+
+            var name = Cp1252.GetString(data, pos, nameLen);
+            pos += nameLen;
+            totalNameLen += nameLen;
+
+            parsed[i] = new FrxBindingsEntry(flags, name);
+        }
+
+        // Fixed 6-byte zero trailer.
+        if (pos + 6 != byteLength) return false;
+        for (var i = 0; i < 6; i++) {
+            if (data[pos + i] != 0x00) return false;
+        }
+
+        // Exact size formula: 4 + 6 + N*5 + sum(nameLen)
+        var expectedLength = 4 + 6 + (count * 5) + totalNameLen;
+        if (expectedLength != byteLength) return false;
+
+        entries = parsed;
+        return true;
+    }
 
     private static bool TryParseStringList(byte[] data, int byteLength, out string[] strings)
     {
