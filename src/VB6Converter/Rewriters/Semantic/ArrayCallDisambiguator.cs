@@ -12,6 +12,9 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
     static bool HasIndexer(ITypeSymbol type)
         => type?.GetMembers().Any(m => m is IPropertySymbol { IsIndexer: true }) == true;
 
+    static bool IsCallSynthesisContext(SyntaxNode node)
+        => node.Parent is ExpressionStatementSyntax;
+
     // Correct calls that should actually be array access
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
         => Rewrite(node, node => {
@@ -65,7 +68,7 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
 
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
         => Rewrite(node, node => {
-            if (node.Parent is not InvocationExpressionSyntax) {
+            if (node.Parent is not InvocationExpressionSyntax && IsCallSynthesisContext(node)) {
                 var symbol = model.GetSymbolInfo(node.Name);
                 if (symbol.Symbol is null && symbol.CandidateSymbols.Any(c => c.Kind == SymbolKind.Method)) {
                     return InvocationExpression(node);
@@ -80,6 +83,10 @@ public class ArrayCallDisambiguator(SemanticModel model) : LoggedRewriter
         => Rewrite(node, node => {
             var parents = node.Ancestors().SkipWhile(a => a is MemberAccessExpressionSyntax or NameSyntax);
             if (parents.FirstOrDefault() is InvocationExpressionSyntax) {
+                return base.VisitIdentifierName(node);
+            }
+
+            if (parents.FirstOrDefault() is not ExpressionStatementSyntax) {
                 return base.VisitIdentifierName(node);
             }
 
