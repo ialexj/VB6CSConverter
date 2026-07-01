@@ -12,6 +12,13 @@ namespace VB6Converter.Rewriters;
 
 public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
 {
+    // VB6 runtime functions that are legal to call without parentheses (e.g. `iFile = FreeFile`)
+    // and whose converters in `_funcs` only touch `node.ArgumentList` (never index into
+    // `Arguments[0]`), so they can be safely re-invoked with a synthesized empty argument list.
+    static readonly HashSet<string> _zeroArgFuncs = new(StringComparer.OrdinalIgnoreCase) {
+        "FreeFile", "Command",
+    };
+
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
         => Rewrite(node, node => {
             if (node.Parent is MemberAccessExpressionSyntax memberAccess
@@ -19,14 +26,30 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
                 return base.VisitIdentifierName(node);
             }
 
+            switch (node.Identifier.Text) {
+                case "Now":     return ParseExpression("System.DateTime.Now");
+                case "Date":    return ParseExpression("System.DateTime.Now.Date");
+                case "Time":    return ParseExpression("System.DateTime.Now.TimeOfDay");
+                case "DateStr": return ParseExpression("Microsoft.VisualBasic.DateAndTime.DateString");
+                case "TimeStr": return ParseExpression("Microsoft.VisualBasic.DateAndTime.TimeString");
+                case "Timer":   return ParseExpression("Microsoft.VisualBasic.DateAndTime.Timer");
+            }
 
+            // A handful of VB6 runtime functions (FreeFile, Command, ...) are commonly called
+            // without parentheses when used as an expression value. When this identifier isn't
+            // already the target of an explicit invocation (VisitInvocationExpression handles
+            // that case), synthesize a zero-argument call for those.
+            bool isInvocationTarget = node.Parent is InvocationExpressionSyntax invocation && invocation.Expression == node;
+            if (!isInvocationTarget
+                && _zeroArgFuncs.Contains(node.Identifier.Text)
+                && _funcs.TryGetValue(node.Identifier.Text, out var converter)) {
+                var call = converter(InvocationExpression(node, ArgumentList()));
+                if (call?.IsEquivalentTo(node) == false) {
+                    return Visit(call);
+                }
+            }
 
-            return node.Identifier.Text switch {
-                "Now"  => ParseExpression("System.DateTime.Now"),
-                "Date" => ParseExpression("System.DateTime.Now.Date"),
-                "Time" => ParseExpression("System.DateTime.Now.TimeOfDay"),
-                _ => base.VisitIdentifierName(node),
-            };
+            return base.VisitIdentifierName(node);
         });
 
     static readonly Dictionary<string, Func<InvocationExpressionSyntax, SyntaxNode>> _funcs = new(StringComparer.OrdinalIgnoreCase) {

@@ -218,6 +218,33 @@ public class VBCoreRewriterTests
         "y = Date.Year",
         "y = System.DateTime.Now.Date.Year;");
 
+    [TestMethod]
+    public void DateStrIdentifier() => ValidateBodyMatches(
+        "y = DateStr",
+        "y = Microsoft.VisualBasic.DateAndTime.DateString;");
+
+    [TestMethod]
+    public void TimeStrIdentifier() => ValidateBodyMatches(
+        "y = TimeStr",
+        "y = Microsoft.VisualBasic.DateAndTime.TimeString;");
+
+    [TestMethod]
+    public void TimerIdentifier() => ValidateBodyMatches(
+        "y = Timer",
+        "y = Microsoft.VisualBasic.DateAndTime.Timer;");
+
+    // ── Parameterless calls without parentheses ──────────────────────────────
+
+    [TestMethod]
+    public void FreeFile_NoParens() => ValidateBodyMatches(
+        "iFile = FreeFile",
+        "iFile = Microsoft.VisualBasic.FileSystem.FreeFile();");
+
+    [TestMethod]
+    public void Command_NoParens() => ValidateBodyMatches(
+        "y = Command",
+        "y = Microsoft.VisualBasic.Interaction.Command();");
+
     // ── IsMissing ─────────────────────────────────────────────────────────────
 
     [TestMethod]
