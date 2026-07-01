@@ -31,8 +31,8 @@ public static class ConsoleHelpers
                         await task(target, progress, cancel);
                     }
                     catch (Exception ex) when (!Debugger.IsAttached) {
-                        Log.ForFile(target.Name).Error(ex, "{file}: {operation} failed.");
-                        progress.Description = $"[red]Failed: {ex.Message}[/]";
+                        Log.ForFile(target.Name).ForContext("operation", oper).Error(ex, "{file}: {operation} failed.");
+                        progress.Description = $"[red]Failed[/]";
                     }
                     finally {
                         progress.StopTask();

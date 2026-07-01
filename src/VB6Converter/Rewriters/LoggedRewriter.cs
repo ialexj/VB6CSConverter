@@ -7,6 +7,15 @@ using System.IO;
 using System.Text.Json;
 
 namespace VB6Converter.Rewriters;
+
+
+public class RewriteException : Exception
+{
+    public RewriteException(string message, Exception innerException = null) : base(message, innerException)
+    {
+    }
+}
+
 public class LoggedRewriter() : CSharpSyntaxRewriter
 {
     readonly string _file;
@@ -30,7 +39,31 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
             Progress(node.Span.End, node.SyntaxTree.Length);
         }
 
-        return base.Visit(node);
+        try {
+            return base.Visit(node);
+        }
+        catch (RewriteException) {
+            throw;
+        }
+        catch (Exception ex) when (!Debugger.IsAttached) {
+            var location = node?.GetLocation()?.GetLineSpan();
+            var file = location?.Path ?? _file;
+            var line = location.HasValue ? location.Value.StartLinePosition.Line + 1 : (int?)null;
+
+            Log.Default
+                .ForContext("file", file)
+                .ForContext("rewriter", GetType().Name)
+                .ForContext("sequence", RewriterSequence)
+                .ForContext("node", node)
+                .ForContext("error", ex.Message)
+                .ForContext("method", ex.TargetSite?.Name)
+                .ForContext("nodeType", node?.GetType().Name)
+                .ForContext("filePath", location?.Path)
+                .ForContext("line", location.HasValue ? location.Value.StartLinePosition.Line + 1 : (int?)null)
+                .Error("Failed to rewrite {nodeType} at {filePath}:{line} ({method}): {error:nq}");
+
+            throw new RewriteException($"{GetType().Name} failed to visit {node?.GetType().Name} at {file}:{line}.", ex);
+        }
     }
 
     protected SyntaxNode Rewrite<T>(T node, Func<T, SyntaxNode> change, Func<SyntaxNode, object> value = null) where T : SyntaxNode
@@ -44,44 +77,31 @@ public class LoggedRewriter() : CSharpSyntaxRewriter
             .ForContext("sequence", RewriterSequence)
             .ForContext("node", node);
 
-        try {
-            var @new = change(node);
+        var @new = change(node);
 
-            if (log.IsEnabled(Serilog.Events.LogEventLevel.Verbose)) {
-                var oldValue = value?.Invoke(node) ?? node;
-                if (oldValue is SyntaxNode oldNode) {
-                    oldValue = oldNode.NormalizeWhitespace();
-                }
-
-                var newValue = value?.Invoke(@new) ?? @new;
-                if (newValue is SyntaxNode newNode) {
-                    newValue = newNode.NormalizeWhitespace();
-                }
-
-                if (!RoslynHelpers.IsEquivalentSyntax(oldValue, newValue)) {
-                    log.Verbose("{json:l}", JsonSerializer.Serialize(new {
-                        sequence = RewriterSequence,
-                        rewriter = GetType().Name,
-                        file = file,
-                        line = node?.GetLocation()?.GetLineSpan().StartLinePosition.Line,
-                        from = oldValue?.ToString(),
-                        to   = newValue?.ToString()
-                    }));
-                }
+        if (log.IsEnabled(Serilog.Events.LogEventLevel.Verbose)) {
+            var oldValue = value?.Invoke(node) ?? node;
+            if (oldValue is SyntaxNode oldNode) {
+                oldValue = oldNode.NormalizeWhitespace();
             }
 
-            return @new;
-        }
-        catch (Exception ex) when (!Debugger.IsAttached) {
-            var location = node?.GetLocation()?.GetLineSpan();
-            log.ForContext("error", ex.Message)
-                .ForContext("method", ex.TargetSite?.Name)
-                .ForContext("nodeType", node?.GetType().Name)
-                .ForContext("filePath", location?.Path)
-                .ForContext("line", location.HasValue ? location.Value.StartLinePosition.Line + 1 : (int?)null)
-                .Error("Failed to rewrite {nodeType} at {filePath}:{line} ({method}): {error:nq}");
+            var newValue = value?.Invoke(@new) ?? @new;
+            if (newValue is SyntaxNode newNode) {
+                newValue = newNode.NormalizeWhitespace();
+            }
 
-            throw;
+            if (!RoslynHelpers.IsEquivalentSyntax(oldValue, newValue)) {
+                log.Verbose("{json:l}", JsonSerializer.Serialize(new {
+                    sequence = RewriterSequence,
+                    rewriter = GetType().Name,
+                    file = file,
+                    line = node?.GetLocation()?.GetLineSpan().StartLinePosition.Line,
+                    from = oldValue?.ToString(),
+                    to   = newValue?.ToString()
+                }));
+            }
         }
+
+        return @new;
     }
 }
