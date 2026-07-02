@@ -285,6 +285,33 @@ public class FrxReaderTests
         finally { File.Delete(path); }
     }
 
+    // ── RTF text: length-prefixed BinaryBlob wrapper (real-world variant) ────
+
+    [TestMethod]
+    public void Read_RtfText_WrappedInBinaryBlob_DetectedByPayloadMagic()
+    {
+        // Real-world RichTextBox TextRTF storage observed to wrap the RTF document
+        // in the standard 4-byte length-prefixed BinaryBlob format, rather than
+        // persisting it unwrapped (confirmed against frmPosConsultaVenda.frx,
+        // offset 0x2AD2: "79 00 00 00" length prefix immediately followed by
+        // "7B 5C 72 74 66 31" — "{\rtf1").
+        var rtfBytes = Encoding.ASCII.GetBytes("{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\f0\\fs17 hello\\par }");
+
+        var buf = new MemoryStream();
+        buf.Write(Int32Le(rtfBytes.Length)); // payloadLen == byteLength - 4
+        buf.Write(rtfBytes);
+
+        var path = WriteTempFile(buf.ToArray());
+        try {
+            var item = FrxReader.Read(path, 0, (int)buf.Length);
+            item.Should().BeOfType<FrxBinaryBlob>();
+            var blob = (FrxBinaryBlob)item;
+            blob.Payload.Should().BeOfType<FrxRtfPayload>();
+            blob.GetPayloadData().Should().Equal(rtfBytes);
+        }
+        finally { File.Delete(path); }
+    }
+
     // ── OleObjectBlob: detected by "LB" magic, MS-OLEPS properties decoded ────
 
     private static byte[] BuildOlePropertySetBlob()

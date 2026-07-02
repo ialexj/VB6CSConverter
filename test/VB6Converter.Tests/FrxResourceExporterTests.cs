@@ -101,6 +101,37 @@ public class FrxResourceExporterTests
     }
 
     [TestMethod]
+    public void Export_RtfPayload_WrappedInBinaryBlob_WritesRtfFile()
+    {
+        var outputDir = Path.Combine(Path.GetTempPath(), $"vb6_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputDir);
+
+        try {
+            // Real-world RichTextBox TextRTF storage: length-prefixed BinaryBlob whose
+            // payload is the RTF document (confirmed against frmPosConsultaVenda.frx).
+            var rtfBytes = System.Text.Encoding.ASCII.GetBytes("{\\rtf1\\ansi\\deff0 hello\\par }");
+            var item = new FrxBinaryBlob(
+                Filename: "Form1.frx",
+                Offset: 0x2AD2,
+                Length: rtfBytes.Length + 4,
+                DataLength: rtfBytes.Length,
+                Payload: new FrxRtfPayload(rtfBytes));
+
+            var relativePath = FrxResourceExporter.Export(item, "Form1", outputDir);
+            relativePath.Should().EndWith(".rtf");
+
+            var fullPath = Path.Combine(outputDir, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            File.Exists(fullPath).Should().BeTrue();
+            File.ReadAllBytes(fullPath).Should().Equal(rtfBytes);
+        }
+        finally {
+            if (Directory.Exists(outputDir)) {
+                Directory.Delete(outputDir, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void Export_OleObjectBlob_WritesMsOlepsJson()
     {
         var outputDir = Path.Combine(Path.GetTempPath(), $"vb6_out_{Guid.NewGuid():N}");

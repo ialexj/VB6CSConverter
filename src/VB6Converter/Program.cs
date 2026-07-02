@@ -37,6 +37,7 @@ public static class Program
         public string[] ExcludeReferences { get; set; } = [];
         public bool Pause { get; set; }
         public bool Verbose { get; set; }
+        public bool Git { get; set; }
     }
 
     public static Task<int> Main(string[] args)
@@ -85,6 +86,9 @@ public static class Program
         var verboseOpt = new Option<bool>("--verbose", ["-v"]) {
             Description = "Enable verbose logging.",
         };
+        var gitOpt = new Option<bool>("--git", []) {
+            Description = "Commit to git after each rewriter pass. The output directory must already be a git repository.",
+        };
 
         var rootCommand = new RootCommand("Convert VB6 projects to C#.") {
             projectOpt,
@@ -100,7 +104,8 @@ public static class Program
             excludeRefsOpt,
             pauseOpt,
             workspaceRootOpt,
-            verboseOpt
+            verboseOpt,
+            gitOpt
         };
 
         rootCommand.SetAction(async (ParseResult result) => {
@@ -119,6 +124,7 @@ public static class Program
                 Pause = result.GetValue(pauseOpt),
                 Root = result.GetValue(workspaceRootOpt),
                 Verbose = result.GetValue(verboseOpt),
+                Git = result.GetValue(gitOpt),
             });
             return 0;
         });
@@ -130,6 +136,10 @@ public static class Program
     {
         Directory.CreateDirectory(options.OutputDir);
         Log.Init(options.OutputDir, options.Verbose);
+
+        if (options.Git) {
+            await EnsureGitAvailable(options.OutputDir);
+        }
 
         var vbProject = VisualBasicProject.Load(options.Project);
 
@@ -182,7 +192,7 @@ public static class Program
         // ────────────────────────────────────────────────────────────────────
 
         if (!options.SkipTransform && targetsThatNeedTransform.Length > 0) {
-            await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
+            var transformChanged = await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
                 ws.WithCompilationUnit(t, cancel, cu => {
                     var sourceRelativePath = Path.GetRelativePath(rootPath, t.File.Path).Replace('\\', '/');
                     var conversion = VB6ToCSharpConversion.ConvertFile(
@@ -192,6 +202,10 @@ public static class Program
                     var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
                     return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
                 }));
+
+            if (options.Git && transformChanged) {
+                await GitCommit(options.OutputDir, "Convert VB6 to C#");
+            }
 
             // Reload from disk before splitting: parallel saves during conversion leave
             // the in-memory Project stale (last-writer wins), so documents converted by
@@ -205,7 +219,7 @@ public static class Program
 
             if (formControlTargets.Length > 0) {
                 var newDesignerTargets = new ConcurrentBag<ConversionTarget>();
-                await RunOperations(ws, "Splitting designer files", formControlTargets, (t, ctx, cancel) =>
+                var designerSplitChanged = await RunOperations(ws, "Splitting designer files", formControlTargets, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
                         var (mainCu, designerCu) = DesignerFileSplitter.Split(cu);
                         if (designerCu is not null) {
@@ -216,6 +230,10 @@ public static class Program
                         return ValueTask.FromResult(mainCu);
                     }));
                 ws.AddToActiveTargets(newDesignerTargets);
+
+                if (options.Git && designerSplitChanged) {
+                    await GitCommit(options.OutputDir, "Split designer files");
+                }
             }
         }
 
@@ -242,7 +260,10 @@ public static class Program
                 async Task RunRewriter(bool compile, string title, Func<ConversionTarget, SemanticModel, Task<LoggedRewriter>> rewriter)
                 {
                     bool hasRewriterChanges = false;
+                    int iteration = 0;
                     do {
+                        iteration++;
+
                         if (compile && compilation is null) {
                             compilation = await CollectDiagnostics(ws, options.OutputDir);
                             PauseIfRequested(options.Pause);
@@ -269,6 +290,10 @@ public static class Program
                         if (hasRewriterChanges) {
                             hasChanges = true;
                             compilation = null;
+
+                            if (options.Git) {
+                                await GitCommit(options.OutputDir, $"Fixup: {title} (pass {count + 1}, iteration {iteration})");
+                            }
                         }
                     }
                     while (hasRewriterChanges);
@@ -429,6 +454,74 @@ public static class Program
     {
         string baseDir = AppContext.BaseDirectory;
         return Path.Combine(baseDir, "stubs", "ComStubGenerator.exe");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Git integration — commits the output directory after each rewriter pass
+    // when --git is specified. Repository initialization and .gitignore setup
+    // are the caller's responsibility; the output directory must already be
+    // inside a git repository.
+    // ─────────────────────────────────────────────────────────────────────
+
+    static async Task EnsureGitAvailable(string outputDir)
+    {
+        (int ExitCode, string StdOut, string StdErr) versionResult;
+        try {
+            versionResult = await RunGitProcess(null, "--version");
+        }
+        catch (System.ComponentModel.Win32Exception ex) {
+            throw new InvalidOperationException("--git was specified but 'git' was not found on PATH.", ex);
+        }
+
+        if (versionResult.ExitCode != 0) {
+            throw new InvalidOperationException($"--git was specified but 'git --version' failed: {versionResult.StdErr}");
+        }
+
+        var repoCheck = await RunGitProcess(outputDir, "rev-parse", "--is-inside-work-tree");
+        if (repoCheck.ExitCode != 0 || !repoCheck.StdOut.Trim().Equals("true", StringComparison.OrdinalIgnoreCase)) {
+            throw new InvalidOperationException(
+                $"--git was specified but '{outputDir}' is not inside a git repository. " +
+                $"Initialize one (e.g. 'git init \"{outputDir}\"') before running with --git.");
+        }
+    }
+
+    static async Task GitCommit(string outputDir, string message)
+    {
+        var add = await RunGitProcess(outputDir, "add", "-A");
+        if (add.ExitCode != 0) {
+            throw new InvalidOperationException($"git add failed in '{outputDir}': {add.StdErr}");
+        }
+
+        var commit = await RunGitProcess(outputDir, "commit", "--quiet", "-m", message);
+        if (commit.ExitCode != 0) {
+            throw new InvalidOperationException($"git commit failed in '{outputDir}': {commit.StdErr}{commit.StdOut}");
+        }
+    }
+
+    static async Task<(int ExitCode, string StdOut, string StdErr)> RunGitProcess(string workingDir, params string[] args)
+    {
+        var psi = new ProcessStartInfo {
+            FileName = "git",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        if (workingDir is not null) {
+            psi.ArgumentList.Add("-C");
+            psi.ArgumentList.Add(workingDir);
+        }
+        foreach (var arg in args) {
+            psi.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(psi)!;
+
+        var stdOutTask = process.StandardOutput.ReadToEndAsync();
+        var stdErrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        return (process.ExitCode, await stdOutTask, await stdErrTask);
     }
 
     static void PauseIfRequested(bool pause)

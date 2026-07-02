@@ -14,7 +14,8 @@ public static class FrxReader
     // Magic marker that identifies an image payload inside a BinaryBlob.
     private static readonly byte[] ImageMagic = [0x6C, 0x74, 0x00, 0x00];
 
-    // Magic marker that identifies an RTF text item ("{\rtf1").
+    // Magic marker that identifies an RTF text item ("{\rtf1"), either as a standalone
+    // unwrapped item or as the payload of a length-prefixed BinaryBlob.
     private static readonly byte[] RtfMagic = [0x7B, 0x5C, 0x72, 0x74, 0x66, 0x31];
 
     // CP1252 is not available by default in .NET; register the provider once.
@@ -102,6 +103,13 @@ public static class FrxReader
     private static IFrxBinaryPayload ParsePayload(byte[] data, int byteLength)
     {
         // Payload starts at byte 4 (after the 4-byte length prefix).
+        // Check for RTF text magic at payload[0..5] — observed in practice for
+        // RichTextBox-style controls that wrap TextRTF in the standard BinaryBlob
+        // length-prefix format rather than persisting it unwrapped.
+        if (data.Length >= 4 + RtfMagic.Length && data.AsSpan(4, RtfMagic.Length).SequenceEqual(RtfMagic)) {
+            return new FrxRtfPayload(data[4..]);
+        }
+
         // Check for image magic at payload[0..3] (no CLSID).
         if (PayloadHasMagic(data, payloadOffset: 4)) {
             // No CLSID: magic at +4, imageLength at +8, image data at +12

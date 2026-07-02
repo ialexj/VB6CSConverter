@@ -31,6 +31,16 @@ public record FrxImagePayload(int ImageLength, byte[] ImageBytes, Guid? ClsId) :
     public byte[] GetData() => ImageBytes;
 }
 
+/// <summary>
+/// RTF text payload detected by the <c>{\rtf1</c> magic marker inside a length-prefixed
+/// BinaryBlob (as opposed to the unwrapped <see cref="FrxRtfText"/> item — RichTextBox-style
+/// controls have been observed to persist <c>TextRTF</c> using either form).
+/// </summary>
+public record FrxRtfPayload(byte[] RtfBytes) : IFrxBinaryPayload
+{
+    public byte[] GetData() => RtfBytes;
+}
+
 /// <summary>Single Bindings entry: (flags, name).</summary>
 public record FrxBindingsEntry(int Flags, string Name);
 

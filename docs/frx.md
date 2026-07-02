@@ -239,19 +239,40 @@ not be identified by name.
 
 ### RTF text — `{\rtf1` magic
 
-Used by `RichTextBox`-style controls to persist a formatted-text (`TextRTF`) property. The item
-is simply the literal RTF document (per the public RTF spec — 7-bit-clean, so CP1252/ASCII
-decoding is safe) with **no length prefix and no wrapper** — `byteLength` is the exact size of the
-RTF document, which is self-delimiting via its own balanced `{ … }` braces.
+Used by `RichTextBox`-style controls to persist a formatted-text (`TextRTF`) property. The RTF
+document itself (per the public RTF spec — 7-bit-clean, so CP1252/ASCII decoding is safe) is
+self-delimiting via its own balanced `{ … }` braces, ending in a balanced `\par }`. It has been
+observed persisted in **two different forms**:
 
-```
-Offset  Size          Field
-──────  ────────────  ──────────────────────────────────────────────────────
-+0      byteLength    CP1252/ASCII text, starting with the literal `{\rtf1`
-```
+1. **Unwrapped** — no length prefix, no wrapper. `byteLength` is the exact size of the RTF
+   document.
 
-Confirmed across 10 real-world instances (byteLength 121–135), all well-formed RTF documents
-ending in a balanced `\par }`.
+   ```
+   Offset  Size          Field
+   ──────  ────────────  ──────────────────────────────────────────────────────
+   +0      byteLength    CP1252/ASCII text, starting with the literal `{\rtf1`
+   ```
+
+   Confirmed across 10 real-world instances (byteLength 121–135).
+
+2. **Wrapped in a length-prefixed BinaryBlob** — same 4-byte `payloadLength` prefix as the
+   generic BinaryBlob format (see above), with the RTF document as the payload instead of an
+   image. `payloadLength == byteLength − 4` still holds.
+
+   ```
+   Offset  Size          Field
+   ──────  ────────────  ──────────────────────────────────────────────────────
+   +0      4             int32   payloadLength   == byteLength − 4
+   +4      payloadLength CP1252/ASCII text, starting with the literal `{\rtf1`
+   ```
+
+   Confirmed against `frmPosConsultaVenda.frx` (offset `0x2AD2`): bytes `79 00 00 00` (length
+   prefix, 121) immediately followed by `7B 5C 72 74 66 31` (`{\rtf1`).
+
+   > A component-agnostic parser must check for the RTF magic **both** at `startOffset` (form 1)
+   > **and** at `startOffset + 4` (form 2, i.e. inside `ParsePayload`/BinaryBlob payload
+   > handling) — checking only `startOffset` misses form 2 and the item silently falls back to
+   > raw/opaque BinaryBlob payload handling instead of being recognised as RTF.
 
 ### Other Item Types
 
@@ -268,9 +289,12 @@ When writing a component-agnostic parser, the following heuristic can be used:
 Given a blob at a FRM-provided offset with a known `byteLength`:
 
 1. Scan for known magic bytes at `startOffset` (`4C 42` → OleObjectBlob, `C5/C6 FA` → Bindings,
-   a known CLSID → ClsidStream, `{\rtf1` → RTF text). If any match, parse the special type.
+   a known CLSID → ClsidStream, `{\rtf1` → unwrapped RTF text). If any match, parse the special
+   type.
 2. Otherwise, read 4 bytes at `startOffset` as int32 `candidate`.
-3. If `candidate == byteLength − 4` → parse as **BinaryBlob**.
+3. If `candidate == byteLength − 4` → parse as **BinaryBlob**, and additionally scan the payload
+   (`startOffset + 4`) for the `{\rtf1` magic (RTF wrapped in a BinaryBlob) before falling back to
+   the generic image-magic/raw-payload handling.
 4. Otherwise → attempt **StringList**: validate that `count` is plausible and all items fit within
    `byteLength` without overflow.
 5. Otherwise → preserve as raw bytes (unknown item type).
@@ -354,7 +378,7 @@ B7 B0 00 00
 …                      (additional BMPs follow back-to-back for subsequent bands)
 ```
 
-### RTF text — `RichTextBox`-style `TextRTF` property
+### RTF text — `RichTextBox`-style `TextRTF` property, unwrapped
 
 (byteLength = 121, multiple independent instances across different forms — always ends in a
 balanced `\par }`):
@@ -363,6 +387,16 @@ balanced `\par }`):
 7B 5C 72 74 66 31 5C 61 6E 73 69 5C 61 6E 73 69   "{\rtf1\ansi\ansi…"
 …                                                  full RTF document, no wrapper/prefix
 64 5C 66 30 5C 66 73 31 37 20 0A 5C 70 61 72 20 7D   "…d\f0\fs17\n\par }"
+```
+
+### RTF text — `RichTextBox`-style `TextRTF` property, wrapped in a length-prefixed BinaryBlob
+
+(`frmPosConsultaVenda.frx`, offset `0x2AD2`, byteLength = 125):
+
+```
+79 00 00 00   payloadLen = 121  (byteLength = 125 → 125 − 4 = 121 ✓)
+7B 5C 72 74 66 31 5C 61 6E 73 69 5C 61 6E 73 69   "{\rtf1\ansi\ansi…"
+…                                                  full RTF document
 ```
 
 ### StringList

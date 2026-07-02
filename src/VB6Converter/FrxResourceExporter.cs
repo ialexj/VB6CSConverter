@@ -72,14 +72,19 @@ public static class FrxResourceExporter
         if (item is FrxOleObjectBlob)
             return ".msoleps.json";
 
-        if (item is FrxBinaryBlob blob && blob.Payload is FrxImagePayload img)
-            return DetectImageExtension(img.ImageBytes);
+        if (item is FrxBinaryBlob blob) {
+            if (blob.Payload is FrxImagePayload img)
+                return DetectImageExtension(img.ImageBytes);
+            if (blob.Payload is FrxRtfPayload)
+                return ".rtf";
+        }
 
-        return ".dat";
+        return item.GetPayloadData().Length == 0 ? ".empty" : ".dat";
     }
 
     private static string DetectImageExtension(byte[] data)
     {
+        if (data.Length == 0) return ".empty";
         if (data.Length < 2) return ".dat";
 
         // BMP
