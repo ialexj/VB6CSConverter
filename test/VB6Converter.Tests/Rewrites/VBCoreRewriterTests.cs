@@ -299,4 +299,46 @@ public class VBCoreRewriterTests
                 DoSomething();
         }
         """);
+
+    // ── Microsoft.VisualBasic.Information ────────────────────────────────────
+
+    [TestMethod]
+    public void IsDate() => ValidateBodyMatches(
+        "y = IsDate(x)",
+        "y = Microsoft.VisualBasic.Information.IsDate(x);");
+
+    [TestMethod]
+    public void IsNumeric() => ValidateBodyMatches(
+        "y = IsNumeric(x)",
+        "y = Microsoft.VisualBasic.Information.IsNumeric(x);");
+
+    [TestMethod]
+    public void IsError() => ValidateBodyMatches(
+        "y = IsError(x)",
+        "y = Microsoft.VisualBasic.Information.IsError(x);");
+
+    [TestMethod]
+    public void IsObject() => ValidateBodyMatches(
+        "y = IsObject(x)",
+        "y = Microsoft.VisualBasic.Information.IsReference(x);");
+
+    [TestMethod]
+    public void TypeName() => ValidateBodyMatches(
+        "y = TypeName(x)",
+        "y = Microsoft.VisualBasic.Information.TypeName(x);");
+
+    [TestMethod]
+    public void VarType() => ValidateBodyMatches(
+        "y = VarType(x)",
+        "y = Microsoft.VisualBasic.Information.VarType(x);");
+
+    [TestMethod]
+    public void QBColor() => ValidateBodyMatches(
+        "y = QBColor(x)",
+        "y = Microsoft.VisualBasic.Information.QBColor(x);");
+
+    [TestMethod]
+    public void RGB() => ValidateBodyMatches(
+        "y = RGB(r, g, b)",
+        "y = Microsoft.VisualBasic.Information.RGB(r, g, b);");
 }

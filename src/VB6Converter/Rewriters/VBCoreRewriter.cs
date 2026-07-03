@@ -64,6 +64,18 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         ["IsNull"] = ConvertIsNull,
         ["IsArray"] = node => ConvertIs(node, IdentifierName(nameof(Array))),
 
+        // Microsoft.VisualBasic.Information
+        ["IsDate"]    = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Information.IsDate"),
+        ["IsNumeric"] = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Information.IsNumeric"),
+        ["IsError"]   = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Information.IsError"),
+        // VB6's IsObject has no direct Information equivalent; IsReference is the closest
+        // documented replacement (true for reference types, e.g. objects/arrays/strings).
+        ["IsObject"]  = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Information.IsReference"),
+        ["TypeName"]  = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Information.TypeName"),
+        ["VarType"]   = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Information.VarType"),
+        ["QBColor"]   = node => ConvertToMemberAccess(node, "Microsoft.VisualBasic.Information.QBColor"),
+        ["RGB"]       = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Information.RGB"), node.ArgumentList),
+
         ["UBound"] = ConvertUBound,
         ["LBound"] = ConvertLBound,
 
