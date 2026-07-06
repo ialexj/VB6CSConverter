@@ -11,11 +11,10 @@ namespace VB6Converter.Rewriters.Forms;
 
 public class KeysRewriter : LoggedRewriter
 {
-    static MemberAccessExpressionSyntax Key(string enumValue)
-        => MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("Keys"), IdentifierName(enumValue))
-        .WithUsingForms();
+    static ExpressionSyntax Key(string enumValue)
+        => ParseExpression($"System.Windows.Forms.Keys.{enumValue}");
 
-    static readonly Dictionary<string, MemberAccessExpressionSyntax> _keys = new(StringComparer.InvariantCultureIgnoreCase) {
+    static readonly Dictionary<string, ExpressionSyntax> _keys = new(StringComparer.InvariantCultureIgnoreCase) {
         ["vbKeyLButton"] = Key("LButton"),
         ["vbKeyRButton"] = Key("RButton"),
         ["vbKeyMButton"] = Key("MButton"),

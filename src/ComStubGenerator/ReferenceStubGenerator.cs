@@ -732,7 +732,7 @@ public static class ReferenceStubGenerator
             .Select(m => m.Name)
             .FirstOrDefault();
         if (ifaceDefaultMemberName is not null)
-            decl = decl.WithAttributeLists(SingletonList(DefaultMemberAttributeList(ifaceDefaultMemberName)));
+            decl = decl.WithLeadingTrivia(StubGenHelpers.DefaultMemberDocComment(ifaceDefaultMemberName));
 
         return decl;
     }
@@ -973,7 +973,7 @@ public static class ReferenceStubGenerator
                 .Select(m => m.Name)
                 .FirstOrDefault();
             if (defaultMemberName is not null)
-                decl = decl.WithAttributeLists(SingletonList(DefaultMemberAttributeList(defaultMemberName)));
+                decl = decl.WithLeadingTrivia(StubGenHelpers.DefaultMemberDocComment(defaultMemberName));
         }
 
         return decl;

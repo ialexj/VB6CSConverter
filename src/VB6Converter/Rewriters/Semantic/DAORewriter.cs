@@ -122,15 +122,15 @@ public class DAORewriter(SemanticModel semantics) : LoggedRewriter
         => Rewrite(node, node => {
             if (node.FirstAncestorOrSelf<TypeSyntax>() is TypeSyntax type) {
                 if (node.Identifier.Text.Equals("Recordset", StringComparison.CurrentCultureIgnoreCase)) {
-                    return node.WithUsingDAO();
+                    return ParseName($"{DaoNamespace}.Recordset");
                 }
 
                 if (node.Identifier.Text.Equals("QueryDef", StringComparison.CurrentCultureIgnoreCase)) {
-                    return node.WithUsingDAO();
+                    return ParseName($"{DaoNamespace}.QueryDef");
                 }
 
                 if (node.Identifier.Text.Equals("Field", StringComparison.CurrentCultureIgnoreCase)) {
-                    return node.WithUsingDAO();
+                    return ParseName($"{DaoNamespace}.Field");
                 }
             }
 
@@ -141,33 +141,15 @@ public class DAORewriter(SemanticModel semantics) : LoggedRewriter
             if (RecordsetOptionEnum.Contains(node.Identifier.Text, StringComparer.InvariantCultureIgnoreCase)) {
                 return MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
-                    IdentifierName("RecordsetOptionEnum"), IdentifierName(node.Identifier.Text))
-                    .WithUsingDAO();
+                    ParseExpression($"{DaoNamespace}.RecordsetOptionEnum"), IdentifierName(node.Identifier.Text));
             }
 
             if (RecordsetTypeEnum.Contains(node.Identifier.Text, StringComparer.InvariantCultureIgnoreCase)) {
                 return MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
-                    IdentifierName("RecordsetTypeEnum"), IdentifierName(node.Identifier.Text))
-                    .WithUsingDAO();
+                    ParseExpression($"{DaoNamespace}.RecordsetTypeEnum"), IdentifierName(node.Identifier.Text));
             }
 
             return base.VisitIdentifierName(node);
         });
-}
-
-public static class DaoExtensions
-{
-    public static T WithUsingDAO<T>(this T node) where T : SyntaxNode
-    {
-        if (!node.HasAnnotations("Using")) {
-            return node.WithAdditionalAnnotations(
-                new SyntaxAnnotation("Using", "Microsoft.Office.Interop.Access.Dao"),
-                new SyntaxAnnotation("IgnoreMissing", string.Empty)
-            );
-        }
-        else {
-            return node;
-        }
-    }
 }

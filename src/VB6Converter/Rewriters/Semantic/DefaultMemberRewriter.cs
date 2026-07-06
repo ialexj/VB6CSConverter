@@ -16,9 +16,10 @@ namespace VB6Converter.Rewriters.Semantic;
 /// The initial conversion emits the object reference as-is, which fails to compile once
 /// it interacts with a value type, enum, or string (e.g.
 /// <c>Operator '==' cannot be applied to operands of type 'CheckBox' and 'CheckBoxConstants'</c>).
-/// This rewriter finds the type's <see cref="System.Reflection.DefaultMemberAttribute"/>
-/// (emitted by <c>ComStubGenerator</c> for COM default properties, or present on hand-written
-/// compatibility shims such as <c>VB.CheckBox</c>) and rewrites the bare object reference to
+/// This rewriter finds the type's custom XML doc-comment tag
+/// <c>&lt;DefaultMember&gt;Name&lt;/DefaultMember&gt;</c> (emitted by <c>ComStubGenerator</c>
+/// for COM default properties, and expected on any hand-written compatibility shims that
+/// participate in default-member expansion) and rewrites the bare object reference to
 /// <c>obj.MemberName</c> wherever it is compared/assigned against a value type, enum, or string.
 ///
 /// The rewrite deliberately does not restrict itself to the default member's own declared
@@ -149,10 +150,8 @@ public class DefaultMemberRewriter(SemanticModel semantics) : LoggedRewriter
 
     /// <summary>
     /// Determines whether <paramref name="type"/> exposes a usable DISPID-0 default
-    /// property/field discoverable via <see cref="System.Reflection.DefaultMemberAttribute"/>.
-    /// Indexer-backed default members are skipped: those already receive the attribute
-    /// implicitly from the C# compiler and are handled elsewhere (element access), not by
-    /// this rewrite.
+    /// property/field discoverable via a <c>&lt;DefaultMember&gt;Name&lt;/DefaultMember&gt;</c>
+    /// XML doc-comment tag on the type (or one of its base types/interfaces).
     /// </summary>
     private static bool HasUsableDefaultMember(ITypeSymbol type, out string memberName)
     {
@@ -179,19 +178,44 @@ public class DefaultMemberRewriter(SemanticModel semantics) : LoggedRewriter
         }
 
         foreach (var candidate in GetTypeAndInterfaces(type)) {
-            var attribute = candidate.GetAttributes().FirstOrDefault(IsDefaultMemberAttribute);
-            if (attribute is not null && attribute.ConstructorArguments is [{ Value: string name }, ..]) {
-                memberName = name;
-                return true;
+            foreach (var syntaxRef in candidate.DeclaringSyntaxReferences) {
+                if (TryGetDefaultMemberDocComment(syntaxRef.GetSyntax(), out var name)) {
+                    memberName = name;
+                    return true;
+                }
             }
         }
 
         return false;
     }
 
-    private static bool IsDefaultMemberAttribute(AttributeData attribute)
-        => attribute.AttributeClass is { Name: "DefaultMemberAttribute" } attributeClass
-            && attributeClass.ContainingNamespace?.ToDisplayString() == "System.Reflection";
+    private static bool TryGetDefaultMemberDocComment(SyntaxNode declaration, out string memberName)
+    {
+        memberName = null;
+
+        var docComment = declaration.GetLeadingTrivia()
+            .Select(t => t.GetStructure())
+            .OfType<DocumentationCommentTriviaSyntax>()
+            .FirstOrDefault();
+        if (docComment is null) {
+            return false;
+        }
+
+        var element = docComment.Content
+            .OfType<XmlElementSyntax>()
+            .FirstOrDefault(e => e.StartTag.Name.LocalName.Text == "DefaultMember");
+        if (element is null) {
+            return false;
+        }
+
+        var name = element.Content.ToString().Trim();
+        if (name.Length == 0) {
+            return false;
+        }
+
+        memberName = name;
+        return true;
+    }
 
     private static System.Collections.Generic.IEnumerable<ITypeSymbol> GetTypeAndInterfaces(ITypeSymbol type)
     {

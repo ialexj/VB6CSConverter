@@ -14,13 +14,13 @@ namespace VB6Converter.Rewriters.Forms;
 public class MsgBoxRewriter : LoggedRewriter
 {
     static readonly Dictionary<string, string> _results = new(StringComparer.InvariantCultureIgnoreCase) {
-        { "vbOK",     "DialogResult.OK" },
-        { "vbCancel", "DialogResult.Cancel" },
-        { "vbYes",    "DialogResult.Yes" },
-        { "vbNo",     "DialogResult.No" },
-        { "vbAbort",  "DialogResult.Abort" },
-        { "vbRetry",  "DialogResult.Retry" },
-        { "vbIgnore", "DialogResult.Ignore" },
+        { "vbOK",     "System.Windows.Forms.DialogResult.OK" },
+        { "vbCancel", "System.Windows.Forms.DialogResult.Cancel" },
+        { "vbYes",    "System.Windows.Forms.DialogResult.Yes" },
+        { "vbNo",     "System.Windows.Forms.DialogResult.No" },
+        { "vbAbort",  "System.Windows.Forms.DialogResult.Abort" },
+        { "vbRetry",  "System.Windows.Forms.DialogResult.Retry" },
+        { "vbIgnore", "System.Windows.Forms.DialogResult.Ignore" },
     };
 
     public override SyntaxNode VisitBinaryExpression(BinaryExpressionSyntax node)
@@ -74,18 +74,18 @@ public class MsgBoxRewriter : LoggedRewriter
 
         foreach (var option in options) {
             switch (option) {
-                case "vbOkOnly": buttonArg = "MessageBoxButtons.OK"; break;
-                case "vbOkCancel": buttonArg = "MessageBoxButtons.OKCancel"; break;
-                case "vbYesNo": buttonArg = "MessageBoxButtons.YesNo"; break;
-                case "vbYesNoCancel": buttonArg = "MessageBoxButtons.YesNoCancel"; break;
-                case "vbRetryCancel": buttonArg = "MessageBoxButtons.RetryCancel"; break;
-                case "vbAbortRetryIgnore": buttonArg = "MessageBoxButtons.AbortRetryIgnore"; break;
+                case "vbOkOnly": buttonArg = "System.Windows.Forms.MessageBoxButtons.OK"; break;
+                case "vbOkCancel": buttonArg = "System.Windows.Forms.MessageBoxButtons.OKCancel"; break;
+                case "vbYesNo": buttonArg = "System.Windows.Forms.MessageBoxButtons.YesNo"; break;
+                case "vbYesNoCancel": buttonArg = "System.Windows.Forms.MessageBoxButtons.YesNoCancel"; break;
+                case "vbRetryCancel": buttonArg = "System.Windows.Forms.MessageBoxButtons.RetryCancel"; break;
+                case "vbAbortRetryIgnore": buttonArg = "System.Windows.Forms.MessageBoxButtons.AbortRetryIgnore"; break;
 
-                case "vbInformation": iconArg = "MessageBoxIcon.Information"; break;
-                case "vbQuestion": iconArg = "MessageBoxIcon.Question"; break;
-                case "vbExclamation": iconArg = "MessageBoxIcon.Exclamation"; break;
-                case "vbWarning": iconArg = "MessageBoxIcon.Warning"; break;
-                case "vbCritical": iconArg = "MessageBoxIcon.Error"; break;
+                case "vbInformation": iconArg = "System.Windows.Forms.MessageBoxIcon.Information"; break;
+                case "vbQuestion": iconArg = "System.Windows.Forms.MessageBoxIcon.Question"; break;
+                case "vbExclamation": iconArg = "System.Windows.Forms.MessageBoxIcon.Exclamation"; break;
+                case "vbWarning": iconArg = "System.Windows.Forms.MessageBoxIcon.Warning"; break;
+                case "vbCritical": iconArg = "System.Windows.Forms.MessageBoxIcon.Error"; break;
             }
         }
 
@@ -105,9 +105,8 @@ public class MsgBoxRewriter : LoggedRewriter
         }
 
         return InvocationExpression(
-            MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("MessageBox"), IdentifierName("Show")))
+            MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, ParseExpression("System.Windows.Forms.MessageBox"), IdentifierName("Show")))
                 .WithArgumentList(ArgumentList(GetFinalArgs().ToArray()))
-                .WithUsingForms()
                 .WithAdditionalAnnotations(new SyntaxAnnotation("MessageBox", null));
     }
 }

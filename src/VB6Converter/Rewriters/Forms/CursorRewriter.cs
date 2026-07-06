@@ -34,10 +34,7 @@ public class CursorRewriter : LoggedRewriter
             if (node.Expression is IdentifierNameSyntax lname) {
                 var ids = (lname.Identifier.Text, node.Name.Identifier.Text);
                 if (ids == ("Screen", "MousePointer")) {
-                    return MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
-                        IdentifierName("Cursor"),
-                        IdentifierName("Current"))
-                        .WithUsingForms();
+                    return ParseExpression("System.Windows.Forms.Cursor.Current");
                 }
             }
 
@@ -48,15 +45,11 @@ public class CursorRewriter : LoggedRewriter
         => Rewrite(node, node => {
             if (cursors.TryGetValue(node.Identifier.Text, out var cursor)) {
                 if (cursor != string.Empty) {
-                    return MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
-                        IdentifierName("Cursors"), IdentifierName(cursor))
-                        .WithUsingForms();
+                    return ParseExpression($"System.Windows.Forms.Cursors.{cursor}");
                 }
                 else {
-                    return MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
-                        IdentifierName("Cursors"), IdentifierName("Default"))
-                        .WithTrailingTrivia(TriviaList(Comment($" // Not supported: {node.Identifier.Text}")))
-                        .WithUsingForms();
+                    return ParseExpression("System.Windows.Forms.Cursors.Default")
+                        .WithTrailingTrivia(TriviaList(Comment($" // Not supported: {node.Identifier.Text}")));
                 }
             }
 

@@ -9,8 +9,8 @@ namespace VB6Converter.Tests.Rewrites;
 public class DefaultMemberRewriterTests
 {
     private const string CheckBoxDecl =
-        "using System.Reflection; " +
-        "[DefaultMember(\"_Default\")] class CheckBox { public short _Default { get; set; } } " +
+        "/// <DefaultMember>_Default</DefaultMember>\n" +
+        "class CheckBox { public short _Default { get; set; } } " +
         "enum CheckBoxConstants : short { VbUnchecked = 0, VbChecked = 1 } ";
 
     [TestMethod]
@@ -64,15 +64,15 @@ public class DefaultMemberRewriterTests
             CheckBoxDecl + "class T { CheckBox chkArtigos = new CheckBox(); void M() { if (chkArtigos == null) { } } }");
 
     [TestMethod]
-    public void ExpandsDefaultMember_When_AttributeDeclaredOnImplementedInterface()
+    public void ExpandsDefaultMember_When_DocCommentDeclaredOnImplementedInterface()
         => CheckRewrites(
-            "using System.Reflection; " +
-            "[DefaultMember(\"_Default\")] interface ICheckBox { } " +
+            "/// <DefaultMember>_Default</DefaultMember>\n" +
+            "interface ICheckBox { } " +
             "class CheckBox : ICheckBox { public short _Default { get; set; } } " +
             "enum CheckBoxConstants : short { VbUnchecked = 0, VbChecked = 1 } " +
             "class T { CheckBox chkArtigos = new CheckBox(); void M() { chkArtigos = CheckBoxConstants.VbChecked; } }",
-            "using System.Reflection; " +
-            "[DefaultMember(\"_Default\")] interface ICheckBox { } " +
+            "/// <DefaultMember>_Default</DefaultMember>\n" +
+            "interface ICheckBox { } " +
             "class CheckBox : ICheckBox { public short _Default { get; set; } } " +
             "enum CheckBoxConstants : short { VbUnchecked = 0, VbChecked = 1 } " +
             "class T { CheckBox chkArtigos = new CheckBox(); void M() { chkArtigos._Default = CheckBoxConstants.VbChecked; } }");

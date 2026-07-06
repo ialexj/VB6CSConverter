@@ -41,7 +41,6 @@ public class UsingsRewriter(string file = null) : LoggedRewriter(file)
                     .WithStaticKeyword(Token(SyntaxKind.StaticKeyword)));
 
             var localUsings = node.Usings.Where(n => !n.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword)).Select(n => n.Name.ToString())
-                .Concat(node.GetAnnotatedNodesAndTokens("Using").SelectMany(t => t.GetAnnotations("Using")).Select(a => a.Data))
                 .Concat([ "System" ])
                 .Distinct()
                 .Order()

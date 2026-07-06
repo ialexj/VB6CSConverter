@@ -15,18 +15,22 @@ namespace ComStubGenerator;
 internal static class StubGenHelpers
 {
     /// <summary>
-    /// Builds <c>[System.Reflection.DefaultMember("<paramref name="memberName"/>")]</c>.
-    /// Apply this to a type when its VB6 DISPID 0 member is a named property rather than
-    /// an indexer (indexers already receive the attribute implicitly from the C# compiler).
+    /// Builds leading trivia for <c>/// &lt;DefaultMember&gt;<paramref name="memberName"/>&lt;/DefaultMember&gt;</c>,
+    /// a custom XML doc-comment tag marking a type's VB6 DISPID-0 default member.
+    /// Used instead of <c>[System.Reflection.DefaultMemberAttribute]</c> so the metadata:
+    /// <list type="bullet">
+    ///   <item>never conflicts with the attribute the C# compiler auto-adds to any type that
+    ///     also has an indexer (e.g. a forwarding indexer for a nested default-member chain) —
+    ///     a type cannot carry two instances of a non-<c>AllowMultiple</c> attribute;</item>
+    ///   <item>needs no shared type dependency reachable from every default-member-bearing
+    ///     class, so it works identically whether or not COM reference stub generation ran.</item>
+    /// </list>
+    /// Applied unconditionally to every type with a no-param DISPID 0 member, regardless of
+    /// whether that type also has an indexer, so there is a single consistent mechanism for
+    /// consumers (e.g. a future default-member-expansion rewriter) to look for.
     /// </summary>
-    public static AttributeListSyntax DefaultMemberAttributeList(string memberName)
-        => AttributeList(SingletonSeparatedList(
-            Attribute(
-                ParseName("System.Reflection.DefaultMember"),
-                AttributeArgumentList(SingletonSeparatedList(
-                    AttributeArgument(LiteralExpression(
-                        SyntaxKind.StringLiteralExpression, Literal(memberName))))))
-            .WithLeadingTrivia(TriviaList(Whitespace(Environment.NewLine)))));
+    public static SyntaxTriviaList DefaultMemberDocComment(string memberName)
+        => ParseLeadingTrivia($"/// <DefaultMember>{memberName}</DefaultMember>{Environment.NewLine}");
 
     /// <summary>
     /// Builds <c>[IndexedProperty("<paramref name="propertyName"/>")]</c>.

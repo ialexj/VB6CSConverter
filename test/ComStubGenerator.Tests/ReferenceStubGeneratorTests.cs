@@ -490,11 +490,13 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
-    public void Generate_DefaultPropertyWithoutParams_Interface_EmitsDefaultMemberAttribute()
+    public void Generate_DefaultPropertyWithoutParams_Interface_EmitsDefaultMemberDocComment()
     {
         // A parameterless DISPID 0 property (e.g. DAO.Field.Value) must cause the generated
-        // interface to carry [System.Reflection.DefaultMember("Value")] so that the C# compiler
-        // and runtime honour the default-member contract without an explicit indexer.
+        // interface to carry a `/// <DefaultMember>Value</DefaultMember>` doc comment so that
+        // a default-member-expansion rewriter can discover it without relying on
+        // [System.Reflection.DefaultMemberAttribute] (which would conflict with any indexer
+        // the type may also carry, e.g. a forwarding indexer for a nested default-member chain).
         var library = MakeLibrary("DAO",
             new ComQueryType("Field", LibraryTypeKind.DispatchInterface,
                 Members: [
@@ -510,8 +512,10 @@ public class ReferenceStubGeneratorTests
             var written = ReferenceStubGenerator.Generate(library, tempDir);
 
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("[System.Reflection.DefaultMember(\"Value\")]",
-                "a parameterless DISPID 0 member must be annotated on the interface");
+            source.Should().Contain("/// <DefaultMember>Value</DefaultMember>",
+                "a parameterless DISPID 0 member must be annotated on the interface via doc comment");
+            source.Should().NotContain("System.Reflection.DefaultMember",
+                "the attribute mechanism has been replaced by the doc-comment tag");
             source.Should().Contain("dynamic Value");
             source.Should().Contain("string Name");
         }
@@ -521,7 +525,7 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
-    public void Generate_DefaultPropertyWithoutParams_Class_EmitsDefaultMemberAttribute()
+    public void Generate_DefaultPropertyWithoutParams_Class_EmitsDefaultMemberDocComment()
     {
         // Same check as the interface variant, but for a concrete class stub.
         var library = MakeLibrary("DAO",
@@ -539,8 +543,10 @@ public class ReferenceStubGeneratorTests
             var written = ReferenceStubGenerator.Generate(library, tempDir);
 
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("[System.Reflection.DefaultMember(\"Value\")]",
-                "a parameterless DISPID 0 member must be annotated on the class");
+            source.Should().Contain("/// <DefaultMember>Value</DefaultMember>",
+                "a parameterless DISPID 0 member must be annotated on the class via doc comment");
+            source.Should().NotContain("System.Reflection.DefaultMember",
+                "the attribute mechanism has been replaced by the doc-comment tag");
             source.Should().Contain("dynamic Value");
         }
         finally {
@@ -549,11 +555,11 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
-    public void Generate_DefaultPropertyWithParams_DoesNotEmitDefaultMemberAttribute()
+    public void Generate_DefaultPropertyWithParams_DoesNotEmitDefaultMemberDocComment()
     {
-        // Parameterized DISPID 0 members become C# indexers; the C# compiler automatically
-        // adds [DefaultMember("Item")] for any type that exposes an indexer — an explicit
-        // [System.Reflection.DefaultMember] annotation must not be emitted.
+        // Parameterized DISPID 0 members become C# indexers; the default-member doc-comment
+        // tag only marks *parameterless* DISPID 0 members (mirroring the old attribute's
+        // gating condition) — it must not be emitted here.
         var library = MakeLibrary("DAO",
             new ComQueryType("Recordset", LibraryTypeKind.DispatchInterface,
                 Members: [
@@ -569,8 +575,8 @@ public class ReferenceStubGeneratorTests
 
             var source = File.ReadAllText(written[0]);
             source.Should().Contain("this[", "indexer must still be emitted");
-            source.Should().NotContain("System.Reflection.DefaultMember",
-                "parameterized default becomes an indexer; compiler provides [DefaultMember(\"Item\")] implicitly");
+            source.Should().NotContain("<DefaultMember>",
+                "a parameterized default becomes an indexer, not a doc-comment-tagged default member");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
@@ -618,6 +624,15 @@ public class ReferenceStubGeneratorTests
             // The forwarding indexer's return type should match Fields.Item's return type
             recordsetSource.Should().Contain("DAO.Field",
                 "forwarding indexer return type must match the inner collection's item type");
+            // Regression test for the original conflict this doc-comment mechanism fixes:
+            // Recordset carries BOTH the forwarding indexer AND its own no-param default
+            // ("Fields") metadata simultaneously. A [System.Reflection.DefaultMember]
+            // attribute here would clash with the one the compiler auto-adds for the
+            // indexer; the doc-comment tag carries the same information without conflict.
+            recordsetSource.Should().Contain("/// <DefaultMember>Fields</DefaultMember>",
+                "the outer type's own no-param default must be tagged even though it also has an indexer");
+            recordsetSource.Should().NotContain("System.Reflection.DefaultMember",
+                "the attribute mechanism must not be used here since it would conflict with the indexer");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);

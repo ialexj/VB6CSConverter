@@ -26,9 +26,7 @@ public class CheckStateRewriter : LoggedRewriter
             }
 
             if (_checkStates.TryGetValue(node.Identifier.Text, out var member)) {
-                return MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression,
-                    IdentifierName("CheckState"), IdentifierName(member))
-                    .WithUsingForms();
+                return ParseExpression($"System.Windows.Forms.CheckState.{member}");
             }
 
             return base.VisitIdentifierName(node);

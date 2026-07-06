@@ -15,8 +15,7 @@ public class TypeFinder(SemanticModel sem) : LoggedRewriter
                 }
                 var type = RoslynHelpers.FindTypeByName(sem, node.Identifier.Text);
                 if (type != null && !string.Equals(type.ToString(), node.Identifier.Text, StringComparison.Ordinal)) {
-                    return node.WithIdentifier(SyntaxFactory.Identifier(type.Name))
-                        .WithAdditionalAnnotations(new SyntaxAnnotation("Using", type.ContainingNamespace.ToString()));
+                    return SyntaxFactory.ParseName(type.ToString());
                 }
             }
 

@@ -653,11 +653,10 @@ public static class ClassConverter
             .WithModifiers(GetModifiers(declare.visibility(), true, SyntaxKind.ExternKeyword))
             .WithParameterList(GetMethodParameters(declare.argList(), useDynamic))
             .WithAttributeLists(SingletonList(AttributeList(SingletonSeparatedList(
-                Attribute(IdentifierName("DllImport"))
+                Attribute(IdentifierName("System.Runtime.InteropServices.DllImport"))
                     .WithArgumentList(AttributeArgumentList(SeparatedList(GetAttributeArguments())))
             ))))
-            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))
-            .WithAdditionalAnnotations(new SyntaxAnnotation("Using", "System.Runtime.InteropServices"));
+            .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
     }
 
     public static EventDeclarationSyntax GetEvent(EventStmtContext eventCtx, ClassContext ctx)
