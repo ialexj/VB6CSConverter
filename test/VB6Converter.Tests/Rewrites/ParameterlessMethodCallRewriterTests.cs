@@ -2,6 +2,8 @@ using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Collections.Generic;
+using System.Linq;
 using VB6Converter.Rewriters.Semantic;
 
 namespace VB6Converter.Tests.Rewrites;
@@ -27,12 +29,42 @@ public class ParameterlessMethodCallRewriterTests
             "class XArr { public int Hide() => 0; } class T { XArr autos = new(); void M() { _ = autos.Hide; } }",
             "class XArr { public int Hide() => 0; } class T { XArr autos = new(); void M() { _ = autos.Hide(); } }");
 
-    private static void CheckRewrite(string cs, string expected)
+    [TestMethod]
+    public void Rewrites_BareMemberAccess_PreferringDeclaredMethod_When_LinqExtensionAlsoInScope()
+        => CheckRewrite(
+            """
+            using System.Collections;
+            using System.Collections.Generic;
+            using System.Linq;
+            class XArr : IEnumerable<int> {
+                public int Count() => 0;
+                public IEnumerator<int> GetEnumerator() => throw new System.NotImplementedException();
+                IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            }
+            class T { XArr obj = new(); bool M() { return obj.Count == 0; } }
+            """,
+            """
+            using System.Collections;
+            using System.Collections.Generic;
+            using System.Linq;
+            class XArr : IEnumerable<int> {
+                public int Count() => 0;
+                public IEnumerator<int> GetEnumerator() => throw new System.NotImplementedException();
+                IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            }
+            class T { XArr obj = new(); bool M() { return obj.Count() == 0; } }
+            """,
+            [MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location)]);
+
+    private static void CheckRewrite(string cs, string expected, IEnumerable<MetadataReference>? extraReferences = null)
     {
         var cu = SyntaxFactory.ParseCompilationUnit(cs);
-        var comp = CSharpCompilation.Create("Test",
-            [cu.SyntaxTree],
-            [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
+        var references = new List<MetadataReference> { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) };
+        if (extraReferences is not null) {
+            references.AddRange(extraReferences);
+        }
+
+        var comp = CSharpCompilation.Create("Test", [cu.SyntaxTree], references);
 
         var semantics = comp.GetSemanticModel(cu.SyntaxTree, true);
         var rewriter = new ParameterlessMethodCallRewriter(semantics);
