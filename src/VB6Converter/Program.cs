@@ -176,63 +176,59 @@ public static class Program
             return;
         }
 
-        // Do the code transformation
-        var targetsThatNeedTransform = ws.ActiveTargets.Where(t => !t.Exists || t.HasErrors
-            || options.Filter.Any()
-            || options.Update.Contains(t.Name) || options.Update.Contains("*"))
-            .ToArray();
-
         // Generate COM reference stubs
         if (!options.SkipReferenceStubs) {
             var referenceDir = Path.Join(options.OutputDir, "_References");
             await GenerateReferenceStubs(options.Project, referenceDir, options.ExcludeReferences);
-            await CollectDiagnostics(ws, options.OutputDir);
-            PauseIfRequested(options.Pause);
+            await CommitOperation(ws, options, "Generate COM reference stubs");
         }
         // ────────────────────────────────────────────────────────────────────
 
-        if (!options.SkipTransform && targetsThatNeedTransform.Length > 0) {
-            var transformChanged = await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
-                ws.WithCompilationUnit(t, cancel, cu => {
-                    var sourceRelativePath = Path.GetRelativePath(rootPath, t.File.Path).Replace('\\', '/');
-                    var conversion = VB6ToCSharpConversion.ConvertFile(
-                        t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions,
-                        sourceRelativePath);
-
-                    var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
-                    return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
-                }));
-
-            if (options.Git && transformChanged) {
-                await GitCommit(options.OutputDir, "Convert VB6 to C#");
-            }
-
-            // Reload from disk before splitting: parallel saves during conversion leave
-            // the in-memory Project stale (last-writer wins), so documents converted by
-            // earlier threads are not found in the workspace and would be re-created empty.
-            await ws.ReloadProject();
-
-            // Split Form/Control designer code into separate *.designer.cs partial classes
-            var formControlTargets = targetsThatNeedTransform
-                .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
+        if (!options.SkipTransform) {
+            // Do the code transformation
+            var targetsThatNeedTransform = ws.ActiveTargets.Where(t => !t.Exists
+                || options.Filter.Length != 0
+                || options.Update.Contains(t.Name) || options.Update.Contains("*"))
                 .ToArray();
 
-            if (formControlTargets.Length > 0) {
-                var newDesignerTargets = new ConcurrentBag<ConversionTarget>();
-                var designerSplitChanged = await RunOperations(ws, "Splitting designer files", formControlTargets, (t, ctx, cancel) =>
+            if (targetsThatNeedTransform.Length > 0) {
+                var transformChanged = await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
-                        var (mainCu, designerCu) = DesignerFileSplitter.Split(cu);
-                        if (designerCu is not null) {
-                            File.WriteAllText(t.DesignerOutputPath, designerCu.NormalizeWhitespace().ToFullString());
-                            newDesignerTargets.Add(ConversionTarget.CreateForSplit(
-                                Path.GetFileNameWithoutExtension(t.DesignerOutputPath), t.DesignerOutputPath));
-                        }
-                        return ValueTask.FromResult(mainCu);
-                    }));
-                ws.AddToActiveTargets(newDesignerTargets);
+                        var sourceRelativePath = Path.GetRelativePath(rootPath, t.File.Path).Replace('\\', '/');
+                        var conversion = VB6ToCSharpConversion.ConvertFile(
+                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions,
+                            sourceRelativePath);
 
-                if (options.Git && designerSplitChanged) {
-                    await GitCommit(options.OutputDir, "Split designer files");
+                        var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
+                        return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
+                    }));
+
+                if (transformChanged) {
+                    await CommitOperation(ws, options, "Convert VB6 to C#");
+                }
+
+                // Split Form/Control designer code into separate *.designer.cs partial classes
+                var formControlTargets = targetsThatNeedTransform
+                    .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
+                    .ToArray();
+
+                if (formControlTargets.Length > 0) {
+                    var newDesignerTargets = new ConcurrentBag<ConversionTarget>();
+                    var designerSplitChanged = await RunOperations(ws, "Splitting designer files", formControlTargets, (t, ctx, cancel) =>
+                        ws.WithCompilationUnit(t, cancel, cu => {
+                            var (mainCu, designerCu) = DesignerFileSplitter.Split(cu);
+                            if (designerCu is not null) {
+                                File.WriteAllText(t.DesignerOutputPath, designerCu.NormalizeWhitespace().ToFullString());
+                                newDesignerTargets.Add(ConversionTarget.CreateForSplit(
+                                    Path.GetFileNameWithoutExtension(t.DesignerOutputPath), t.DesignerOutputPath));
+                            }
+                            return ValueTask.FromResult(mainCu);
+                        }));
+
+                    if (designerSplitChanged) {
+                        ws.AddToActiveTargets(newDesignerTargets);
+                        await CommitOperation(ws, options, "Split designer files");
+                    }
                 }
             }
         }
@@ -245,17 +241,14 @@ public static class Program
             // Reset the rewriter sequence counter for this fixup phase
             RewriterSequenceContext.Reset();
 
+            if (ws.Compilation is null) {
+                await AnsiConsole.Status().StartAsync("Compiling...", ctx => ws.Compile());
+            }
+
             bool hasChanges;
             int count = 0;
             do {
-                // Reload from disk to avoid stale in-memory project state caused by
-                // parallel SaveDocument writes during the conversion phase (each
-                // thread's doc.Project snapshot only carries its own file's update,
-                // so the last writer wins and all other documents appear empty).
-                await ws.ReloadProject();
-
                 hasChanges = false;
-                Compilation compilation = null;
 
                 async Task RunRewriter(bool compile, string title, Func<ConversionTarget, SemanticModel, Task<LoggedRewriter>> rewriter)
                 {
@@ -264,17 +257,11 @@ public static class Program
                     do {
                         iteration++;
 
-                        if (compile && compilation is null) {
-                            compilation = await CollectDiagnostics(ws, options.OutputDir);
-                            PauseIfRequested(options.Pause);
-                        }
-
                         hasRewriterChanges = await RunOperations(ws, title, ws.ActiveTargets,
                             async (t, ctx, cancel) => await ws.WithCompilationUnit(t, cancel, async cu => {
-                                var sm = compilation?.GetSemanticModel(cu.SyntaxTree, true);
+                                var sm = ws.Compilation.GetSemanticModel(cu.SyntaxTree, true);
 
                                 var r = await rewriter(t, sm);
-                                // Assign the current sequence to this rewriter run
                                 r.RewriterSequence = RewriterSequenceContext.GetNextSequence();
                                 r.Progress = (current, total) => {
                                     ctx.IsIndeterminate = false;
@@ -289,11 +276,7 @@ public static class Program
 
                         if (hasRewriterChanges) {
                             hasChanges = true;
-                            compilation = null;
-
-                            if (options.Git) {
-                                await GitCommit(options.OutputDir, $"Fixup: {title} (pass {count + 1}, iteration {iteration})");
-                            }
+                            await CommitOperation(ws, options, $"Fixup: {title} (pass {count + 1}, iteration {iteration})");
                         }
                     }
                     while (hasRewriterChanges);
@@ -308,16 +291,17 @@ public static class Program
                 }
 
                 await RunRewriter(true, "Finding Types", async (t, sm) => new TypeFinder(sm));
+
                 await RunRewriter(true, "Qualifying Ambiguous Types", async (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
                 await RunRewriter(true, "Finding Members", async (t, sm) => new SymbolCapitalizationRewriter(sm));
                 await RunRewriter(true, "Expanding default member usages", async (t, sm) => new DefaultMemberRewriter(sm));
-                await RunRewriter(true, "Rewriting parameterless method-backed member access", async (t, sm) => new ParameterlessMethodCallRewriter(sm));
 
                 await RunRewriter(true, "Rewriting default comparisons to null checks", async (t, sm) => new DefaultToNullRewriter(sm));
                 await RunRewriter(true, "Rewriting bitwise Or/And", async (t, sm) => new BitwiseOrRewriter(sm));
                 await RunRewriter(true, "Rewriting DateTime arithmetic", async (t, sm) => new DateTimeArithmeticRewriter(sm));
                 await RunRewriter(true, "Disambiguate Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
                 await RunRewriter(true, "Rewriting parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
+                await RunRewriter(true, "Rewriting parameterless method-backed member access", async (t, sm) => new ParameterlessMethodCallRewriter(sm));
 
                 await RunRewriter(true, "Refining Array Declarations", async (t, sm) => {
                     var declaratorTypes = new Dictionary<VariableDeclaratorSyntax, ArrayTypeSyntax>();
@@ -350,38 +334,17 @@ public static class Program
             }
             while (hasChanges);
         }
-
-        // Collect diagnostics
-        if (!options.SkipDiagnostics) {
-            await CollectDiagnostics(ws, options.OutputDir);
-            PauseIfRequested(options.Pause);
-        }
     }
 
-
-
-    static async Task<Compilation> GetCompilation(ConversionWorkspace ws)
+    static async Task CommitOperation(ConversionWorkspace ws, CommandLineOptions options, string commitMessage)
     {
-        Compilation compilation = null;
-
-        await AnsiConsole.Status()
-            .StartAsync("Compiling...", async ctx => {
-                var project = await ws.ReloadProject();
-                compilation = await project.GetCompilationAsync();
-            });
-
-        return compilation;
-    }
-
-    static async Task<Compilation> CollectDiagnostics(ConversionWorkspace ws, string outputDir)
-    {
-        var compilation = await GetCompilation(ws);
+        await AnsiConsole.Status().StartAsync("Compiling...", ctx => ws.Compile());
 
         AnsiConsole.Status()
             .Start("Collecting Diagnostics...", ctx => {
-                var diagnostics = compilation.GetDiagnostics();
+                var diagnostics = ws.Compilation.GetDiagnostics();
 
-                using var writer = new StreamWriter(Path.Combine(outputDir, "_Diagnostics.txt"), false);
+                using var writer = new StreamWriter(Path.Combine(options.OutputDir, "_Diagnostics.txt"), false);
                 DiagnosticsReport.Write(writer, diagnostics);
 
                 var errorCount = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
@@ -390,7 +353,11 @@ public static class Program
                 }
             });
 
-        return compilation;
+        PauseIfRequested(options.Pause);
+
+        if (options.Git) {
+            await GitCommit(options.OutputDir, commitMessage);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────

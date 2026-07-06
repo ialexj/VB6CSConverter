@@ -132,6 +132,15 @@ public sealed class ConversionWorkspace : IDisposable
     }
 
 
+    public Compilation Compilation { get; private set; }
+
+    public async Task Compile()
+    {
+        await ReloadProject();
+        Compilation = await Project.GetCompilationAsync();
+    }
+
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1068:CancellationToken parameters must come last", Justification = "This is a wrapper for a callback, which works best last.")]
     public async ValueTask<bool> WithCompilationUnit(
         ConversionTarget target, CancellationToken cancel,
@@ -200,4 +209,6 @@ public sealed class ConversionWorkspace : IDisposable
 
         return doc;
     }
+
+
 }
