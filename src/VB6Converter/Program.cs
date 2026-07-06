@@ -233,6 +233,11 @@ public static class Program
             }
         }
 
+        // Compile the solution to update diagnostics and initialize a semantic model.
+        if (ws.Compilation is null) {
+            await Compile(ws, options);
+        }
+
         // At this point we should have the whole solution converted,
         // so we can build a semantic model and perform global rewrites.
         if (!options.SkipFixup) {
@@ -240,10 +245,6 @@ public static class Program
 
             // Reset the rewriter sequence counter for this fixup phase
             RewriterSequenceContext.Reset();
-
-            if (ws.Compilation is null) {
-                await AnsiConsole.Status().StartAsync("Compiling...", ctx => ws.Compile());
-            }
 
             bool hasChanges;
             int count = 0;
@@ -338,6 +339,17 @@ public static class Program
 
     static async Task CommitOperation(ConversionWorkspace ws, CommandLineOptions options, string commitMessage)
     {
+        await Compile(ws, options);
+
+        PauseIfRequested(options.Pause);
+
+        if (options.Git) {
+            await GitCommit(options.OutputDir, commitMessage);
+        }
+    }
+
+    static async Task Compile(ConversionWorkspace ws, CommandLineOptions options)
+    {
         await AnsiConsole.Status().StartAsync("Compiling...", ctx => ws.Compile());
 
         AnsiConsole.Status()
@@ -352,12 +364,6 @@ public static class Program
                     AnsiConsole.MarkupLineInterpolated($"[red]Errors: {errorCount}[/]");
                 }
             });
-
-        PauseIfRequested(options.Pause);
-
-        if (options.Git) {
-            await GitCommit(options.OutputDir, commitMessage);
-        }
     }
 
     // ─────────────────────────────────────────────────────────────────────

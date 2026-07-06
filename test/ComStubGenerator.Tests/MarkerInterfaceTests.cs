@@ -30,7 +30,7 @@ public class MarkerInterfaceTests : ReferenceStubGeneratorTestBase
             var filePath = ReferenceStubGenerator.GenerateVB6Extensions(tempDir);
             var source = File.ReadAllText(filePath);
 
-            source.Should().Contain("public static class _VB6Extensions");
+            source.Should().Contain("public static partial class _VB6Extensions");
             source.Should().Contain("extension(IComStub stub)");
             source.Should().Contain("public int _Version");
             source.Should().Contain("public float _ExtentX");
@@ -79,8 +79,8 @@ public class MarkerInterfaceTests : ReferenceStubGeneratorTestBase
             var filePath = ReferenceStubGenerator.GenerateMarkerInterfaces(tempDir);
             var source = File.ReadAllText(filePath);
 
-            source.Should().Contain("public interface IComStub", "IComStub must be declared");
-            source.Should().Contain("public interface IOleStub", "IOleStub must be declared");
+            source.Should().Contain("public partial interface IComStub", "IComStub must be declared");
+            source.Should().Contain("public partial interface IOleStub", "IOleStub must be declared");
             source.Should().Contain("IOleStub : IComStub", "IOleStub must extend IComStub");
         }
         finally {
@@ -96,7 +96,7 @@ public class MarkerInterfaceTests : ReferenceStubGeneratorTestBase
             var filePath = ReferenceStubGenerator.GenerateMarkerInterfaces(tempDir);
             var source = File.ReadAllText(filePath);
 
-            source.Should().Contain("public interface IControlStub<out T>", "IControlStub<T> must be covariant");
+            source.Should().Contain("public partial interface IControlStub<out T>", "IControlStub<T> must be covariant");
             source.Should().Contain("IComStub", "IControlStub<T> must extend IComStub");
             source.Should().Contain("where T : class", "IControlStub<T> must constrain T to class");
             source.Should().Contain("T Object =>", "IControlStub<T> must declare a default Object property");
@@ -114,7 +114,7 @@ public class MarkerInterfaceTests : ReferenceStubGeneratorTestBase
             var filePath = ReferenceStubGenerator.GenerateMarkerInterfaces(tempDir);
             var source = File.ReadAllText(filePath);
 
-            source.Should().Contain("public sealed class IndexedPropertyAttribute", "attribute class must be declared");
+            source.Should().Contain("public sealed partial class IndexedPropertyAttribute", "attribute class must be declared");
             source.Should().Contain("IndexedPropertyAttribute : System.Attribute", "must extend System.Attribute");
             source.Should().Contain("System.AttributeTargets.Method", "must target methods only");
             source.Should().Contain("AllowMultiple = false", "must not allow multiple");

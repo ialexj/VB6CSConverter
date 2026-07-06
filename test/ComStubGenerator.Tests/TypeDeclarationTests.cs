@@ -27,7 +27,7 @@ public class TypeDeclarationTests : ReferenceStubGeneratorTestBase
 
             written.Should().ContainSingle();
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("public interface Recordset");
+            source.Should().Contain("public partial interface Recordset");
             source.Should().Contain("MoveNext");
             source.Should().Contain("Open");
             source.Should().Contain("bool EOF");
@@ -57,7 +57,7 @@ public class TypeDeclarationTests : ReferenceStubGeneratorTestBase
 
             written.Should().ContainSingle();
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("public interface IAnimation");
+            source.Should().Contain("public partial interface IAnimation");
             source.Should().Contain("void Play(");
             source.Should().Contain("bool Visible");
             source.Should().NotContain("NotImplementedException");
@@ -160,7 +160,7 @@ public class TypeDeclarationTests : ReferenceStubGeneratorTestBase
             var written = ReferenceStubGenerator.Generate(library, tempDir);
 
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("public static class MathUtils");
+            source.Should().Contain("public static partial class MathUtils");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);

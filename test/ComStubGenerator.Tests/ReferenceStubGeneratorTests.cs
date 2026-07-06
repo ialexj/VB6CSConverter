@@ -112,7 +112,7 @@ public class ReferenceStubGeneratorTests
 
             written.Should().ContainSingle();
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("public interface Recordset");
+            source.Should().Contain("public partial interface Recordset");
             source.Should().Contain("MoveNext");
             source.Should().Contain("Open");
             source.Should().Contain("bool EOF");
@@ -237,7 +237,7 @@ public class ReferenceStubGeneratorTests
 
             written.Should().ContainSingle();
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("public interface IAnimation");
+            source.Should().Contain("public partial interface IAnimation");
             source.Should().Contain("void Play(");
             source.Should().Contain("bool Visible");
             source.Should().NotContain("NotImplementedException");
@@ -292,7 +292,7 @@ public class ReferenceStubGeneratorTests
             var written = ReferenceStubGenerator.Generate(library, tempDir);
 
             var source = File.ReadAllText(written[0]);
-            source.Should().Contain("public static class MathUtils");
+            source.Should().Contain("public static partial class MathUtils");
         }
         finally {
             Directory.Delete(tempDir, recursive: true);
@@ -1872,7 +1872,7 @@ public class ReferenceStubGeneratorTests
             File.Exists(result!).Should().BeTrue();
 
             var source = File.ReadAllText(result);
-            source.Should().Contain("public static class __AppObjects");
+            source.Should().Contain("public static partial class __AppObjects");
             source.Should().Contain("public static readonly Screen Screen = new Screen()");
             // File must be at the root — not inside a library subfolder.
             Path.GetDirectoryName(result).Should().Be(tempDir);
