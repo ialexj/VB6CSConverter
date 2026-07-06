@@ -49,4 +49,34 @@ public class ParameterlessMethodCallRewriter(SemanticModel sem) : LoggedRewriter
 
             return InvocationExpression(node);
         });
+
+    // Handles bare (unqualified) references to a method declared on the enclosing type, e.g. calling a private
+    // method `IsDocumentoPagavel()` as `IsDocumentoPagavel` without `this.`. These are plain IdentifierNameSyntax
+    // nodes rather than MemberAccessExpressionSyntax, so they need their own visitor.
+    public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
+        => Rewrite(node, node => {
+            // The Name of a member/member-binding access is handled by its own visitor - don't double-process it.
+            if (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node) {
+                return base.VisitIdentifierName(node);
+            }
+
+            if (node.Parent is MemberBindingExpressionSyntax) {
+                return base.VisitIdentifierName(node);
+            }
+
+            var symbol = ResolveCandidate(sem.GetSymbolInfo(node));
+            if (!IsParameterlessValueMethod(symbol)) {
+                return base.VisitIdentifierName(node);
+            }
+
+            if (node.Parent is InvocationExpressionSyntax) {
+                return base.VisitIdentifierName(node);
+            }
+
+            if (node.Parent is AssignmentExpressionSyntax assignment && assignment.Left == node) {
+                return base.VisitIdentifierName(node);
+            }
+
+            return InvocationExpression(node);
+        });
 }

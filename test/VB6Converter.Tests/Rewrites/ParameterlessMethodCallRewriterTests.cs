@@ -30,6 +30,18 @@ public class ParameterlessMethodCallRewriterTests
             "class XArr { public int Hide() => 0; } class T { XArr autos = new(); void M() { _ = autos.Hide(); } }");
 
     [TestMethod]
+    public void Rewrites_BareUnqualifiedMethodReference_To_Invocation()
+        => CheckRewrite(
+            "class T { private bool IsValido() => true; bool M() { if (IsValido) return true; return false; } }",
+            "class T { private bool IsValido() => true; bool M() { if (IsValido()) return true; return false; } }");
+
+    [TestMethod]
+    public void DoesNotRewrite_BareUnqualifiedMethodReference_Already_Invoked()
+        => CheckRewrite(
+            "class T { private bool IsValido() => true; bool M() { return IsValido(); } }",
+            "class T { private bool IsValido() => true; bool M() { return IsValido(); } }");
+
+    [TestMethod]
     public void Rewrites_BareMemberAccess_PreferringDeclaredMethod_When_LinqExtensionAlsoInScope()
         => CheckRewrite(
             """

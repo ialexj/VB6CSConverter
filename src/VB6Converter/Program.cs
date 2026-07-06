@@ -288,6 +288,7 @@ public static class Program
                     await RunRewriter(true, "Expanding FRX-backed indexed designer assignments", async (t, sm) => new FrxExpansionRewriter(sm));
                     await RunRewriter(false, "Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
                     await RunRewriter(true, "Fixing Foreach Variable", async (t, sm) => new ForEachVariableRewriter(sm));
+                    await RunRewriter(true, "Declaring undeclared local variables", async (t, sm) => new LocalDeclarationInsertionRewriter(sm));
                     await RunRewriter(true, "Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
                 }
 

@@ -196,6 +196,27 @@ public sealed class ClassTests
         """);
 
     [TestMethod]
+    public void PropertyLetParameterNamedVisible_DoesNotRenameMemberAccess() => ValidateMemberMatches(
+        """
+        Private Property Let ReciboVisivel(Visible As Boolean)
+               lblDocumento(19).Visible = Visible
+               chkRecibo.Visible = Visible
+               txtRecibo.Visible = Visible
+        End Property
+        """,
+        """
+        private static bool ReciboVisivel
+        {
+            set
+            {
+                lblDocumento[19].Visible = value;
+                chkRecibo.Visible = value;
+                txtRecibo.Visible = value;
+            }
+        }
+        """);
+
+    [TestMethod]
     public void ParameterizedPropertyGetter() => ValidateMemberMatches(
         """
         Public Property Get NotaEncomenda(ByVal NewTipoNE As Byte, ByVal NewIDNE As Long) As Long
