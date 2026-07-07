@@ -102,6 +102,34 @@ public class BitwiseOrRewriterTests
     public void LeavesIntPlusIntUnchanged()
         => Check("class T { void M(int a, int b) { var x = a + b; } }");
 
+    // ── Not: boolean operand → leave unchanged; dynamic operand → leave unchanged ──
+
+    [TestMethod]
+    public void RewritesNotOnInt()
+        => Check(
+            "class T { void M(int a) { var x = !a; } }",
+            "class T { void M(int a) { var x = ~a; } }");
+
+    [TestMethod]
+    public void LeavesNotBoolUnchanged()
+        => Check("class T { void M(bool a) { var x = !a; } }");
+
+    [TestMethod]
+    public void LeavesNotDynamicUnchanged()
+        => Check("class T { void M(dynamic a) { var x = !a; } }");
+
+    [TestMethod]
+    public void LeavesDynamicOrDynamicUnchanged()
+        => Check("class T { void M(dynamic a, dynamic b) { var x = a || b; } }");
+
+    [TestMethod]
+    public void LeavesDynamicAndDynamicUnchanged()
+        => Check("class T { void M(dynamic a, dynamic b) { var x = a && b; } }");
+
+    [TestMethod]
+    public void LeavesIntOrDynamicUnchanged()
+        => Check("class T { void M(int a, dynamic b) { var x = a || b; } }");
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static void Check(string cs, string? expected = null)

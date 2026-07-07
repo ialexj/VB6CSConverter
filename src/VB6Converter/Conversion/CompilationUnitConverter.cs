@@ -17,9 +17,7 @@ public static class CompilationUnitConverter
         new ErrRaiseRewriter(file),
         new ErrObjectRewriter(file),
 
-        new KeywordEscapeRewriter(file),
-
-        new UsingsRewriter(file)
+        new KeywordEscapeRewriter(file)
     ];
 
     public static CompilationUnitSyntax GetCompilationUnit(ModuleContext module, string nsName, string className, bool isStatic, ConversionOptions options = null, string sourceDirectory = null, string outputDirectory = null, string sourceRelativePath = null)

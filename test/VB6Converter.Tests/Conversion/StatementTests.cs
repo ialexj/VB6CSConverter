@@ -16,7 +16,7 @@ public class StatementTests
         Unload Me
         """,
         """
-        Close();
+        Unload(this);
         """);
 
     [TestMethod]
@@ -52,6 +52,15 @@ public class StatementTests
     }
 
     [TestMethod]
+    public void DimAsNewUsesObjectInitializer() => ValidateBodyMatches(
+        """
+        Dim col As New Collection
+        """,
+        """
+        Collection col = new();
+        """);
+
+    [TestMethod]
     public void ExitSubBecomesReturn() => ValidateBodyMatches(
         """
         Exit Sub
@@ -66,7 +75,7 @@ public class StatementTests
         End
         """,
         """
-        Application.Exit();
+        System.Windows.Forms.Application.Exit();
         """);
 
     [TestMethod]
@@ -75,7 +84,7 @@ public class StatementTests
         Beep
         """,
         """
-        Console.Beep();
+        System.Console.Beep();
         """);
 
     static VB6ToCSharpConversion ConvertBody(string vb, string? name = null)

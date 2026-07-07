@@ -39,45 +39,6 @@ public class MemberFinderTests
             "class XArr { public object GetItem(int k) => null; public void SetItem(int k, object v) { } } class T { XArr obj = new(); void M() { obj.item[0] = null; } }",
             "class XArr { public object GetItem(int k) => null; public void SetItem(int k, object v) { } } class T { XArr obj = new(); void M() { obj.Item[0] = null; } }");
 
-    [TestMethod]
-    public void CorrectsObjectCreationCasing()
-        // VB6 form declared "frmclientesmain" but referenced with a different casing at the New site.
-        => CheckMember(
-            "class frmclientesmain { } class T { void M() { var f = new frmClientesMain(); } }",
-            "class frmclientesmain { } class T { void M() { var f = new frmclientesmain(); } }");
-
-    [TestMethod]
-    public void CorrectsArrayElementTypeCasing()
-        => CheckMember(
-            "class frmclientesmain { } class T { frmClientesMain[] arr; }",
-            "class frmclientesmain { } class T { frmclientesmain[] arr; }");
-
-    [TestMethod]
-    public void CorrectsBaseListCasing()
-        => CheckMember(
-            "class frmclientesmain { } class Derived : frmClientesMain { }",
-            "class frmclientesmain { } class Derived : frmclientesmain { }");
-
-    [TestMethod]
-    public void CorrectsMethodReturnTypeCasing()
-        => CheckMember(
-            "class frmclientesmain { } class T { frmClientesMain M() { return null; } }",
-            "class frmclientesmain { } class T { frmclientesmain M() { return null; } }");
-
-    [TestMethod]
-    public void CorrectsStaticMemberQualifierCasing()
-        // frmClientesMain.SharedField where the class is actually declared as frmclientesmain and
-        // the reference is fully unresolved (not just wrong-cased member on an otherwise valid type).
-        => CheckMember(
-            "class frmclientesmain { public static int SharedField; } class T { void M() { var x = frmClientesMain.SharedField; } }",
-            "class frmclientesmain { public static int SharedField; } class T { void M() { var x = frmclientesmain.SharedField; } }");
-
-    [TestMethod]
-    public void LeavesUnresolvedNonTypeIdentifiersUnchanged()
-        // No type in the compilation matches "NonExistentType" case-insensitively, so it must be left alone.
-        => CheckMember(
-            "class T { void M() { var f = new NonExistentType(); } }");
-
     private static void CheckMember(string cs, string? expected = null)
     {
         var cu   = SyntaxFactory.ParseCompilationUnit(cs);
@@ -86,7 +47,7 @@ public class MemberFinderTests
             [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
 
         var semantics = comp.GetSemanticModel(cu.SyntaxTree, true);
-        var rewriter  = new SymbolCapitalizationRewriter(semantics);
+        var rewriter  = new MemberFinder(semantics);
 
         var newCu = rewriter.Visit(cu);
         var actual = CSharpSyntaxTree.ParseText(newCu!.ToFullString()).GetRoot().NormalizeWhitespace().ToFullString();

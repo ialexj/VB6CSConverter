@@ -265,7 +265,7 @@ public class VBCoreRewriterTests
         """
         public static void Test(int x = default)
         {
-            if (x == default)
+            if ((x == default))
                 DoSomething();
         }
         """);

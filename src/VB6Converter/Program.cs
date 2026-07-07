@@ -142,6 +142,7 @@ public static class Program
         }
 
         var vbProject = VisualBasicProject.Load(options.Project);
+        var preferredNamespaces = new PreferredNamespaceList(options.PreferredNamespaces);
 
         // Open/Create C# project
         using var ws = new ConversionWorkspace();
@@ -251,7 +252,7 @@ public static class Program
             do {
                 hasChanges = false;
 
-                async Task RunRewriter(bool compile, string title, Func<ConversionTarget, SemanticModel, Task<LoggedRewriter>> rewriter)
+                async Task RunRewriter(string title, Func<ConversionTarget, SemanticModel, Task<LoggedRewriter>> rewriter)
                 {
                     bool hasRewriterChanges = false;
                     int iteration = 0;
@@ -270,9 +271,7 @@ public static class Program
                                     ctx.Value = current;
                                 };
 
-                                cu = (CompilationUnitSyntax)r.Visit(cu);
-                                cu = (CompilationUnitSyntax)new UsingsRewriter(t.Name).Visit(cu);
-                                return cu;
+                                return (CompilationUnitSyntax)r.Visit(cu);
                             }));
 
                         if (hasRewriterChanges) {
@@ -285,49 +284,52 @@ public static class Program
 
                 if (count == 0) {
                     // Structural rewrites, should work first time
-                    await RunRewriter(true, "Expanding FRX-backed indexed designer assignments", async (t, sm) => new FrxExpansionRewriter(sm));
-                    await RunRewriter(false, "Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
-                    await RunRewriter(true, "Fixing Foreach Variable", async (t, sm) => new ForEachVariableRewriter(sm));
-                    await RunRewriter(true, "Declaring undeclared local variables", async (t, sm) => new LocalDeclarationInsertionRewriter(sm));
-                    await RunRewriter(true, "Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
+                    await RunRewriter("Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
+                    await RunRewriter("Expanding FRX-backed indexed designer assignments", async (t, sm) => new FrxExpansionRewriter(sm));
+                    await RunRewriter("Fixing Foreach Variable", async (t, sm) => new ForEachVariableRewriter(sm));
+                    await RunRewriter("Declaring undeclared local variables", async (t, sm) => new LocalDeclarationInsertionRewriter(sm));
+                    await RunRewriter("Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
                 }
 
-                await RunRewriter(true, "Finding Types", async (t, sm) => new TypeFinder(sm));
+                await RunRewriter("Finding Types", async (t, sm) => new TypeFinder(sm, preferredNamespaces));
+                await RunRewriter("Finding Members", async (t, sm) => new MemberFinder(sm));
 
-                await RunRewriter(true, "Qualifying Ambiguous Types", async (t, sm) => new AmbiguousTypeQualifier(sm, options.PreferredNamespaces));
-                await RunRewriter(true, "Finding Members", async (t, sm) => new SymbolCapitalizationRewriter(sm));
-                await RunRewriter(true, "Expanding default member usages", async (t, sm) => new DefaultMemberRewriter(sm));
+                await RunRewriter("Expanding default members", async (t, sm) => new DefaultMemberRewriter(sm));
 
-                await RunRewriter(true, "Rewriting default comparisons to null checks", async (t, sm) => new DefaultToNullRewriter(sm));
-                await RunRewriter(true, "Rewriting bitwise Or/And", async (t, sm) => new BitwiseOrRewriter(sm));
-                await RunRewriter(true, "Rewriting DateTime arithmetic", async (t, sm) => new DateTimeArithmeticRewriter(sm));
-                await RunRewriter(true, "Disambiguate Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
-                await RunRewriter(true, "Rewriting parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
-                await RunRewriter(true, "Rewriting parameterless method-backed member access", async (t, sm) => new ParameterlessMethodCallRewriter(sm));
+                await RunRewriter("Disambiguating Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
+                await RunRewriter("Binding property getters to functions", async (t, sm) => new ParameterlessMethodCallRewriter(sm));
+                await RunRewriter("Binding parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
 
-                await RunRewriter(true, "Refining Array Declarations", async (t, sm) => {
+                await RunRewriter("Refining Variable Types", async (t, sm) => {
+                    var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
+                    await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
+                    return new TypeRefiner(varTypes);
+                });
+
+                await RunRewriter("Refining Array Declarations", async (t, sm) => {
                     var declaratorTypes = new Dictionary<VariableDeclaratorSyntax, ArrayTypeSyntax>();
                     var symbolTypes = new Dictionary<ISymbol, ArrayTypeSyntax>(SymbolEqualityComparer.Default);
                     await ArrayRefinementRewriter.GetAllArrayVariablesAndUsages(sm, ws.Project.Solution, declaratorTypes, symbolTypes);
                     return new ArrayRefinementRewriter(sm, declaratorTypes, symbolTypes);
                 });
 
-                await RunRewriter(true, "Refining Types", async (t, sm) => {
-                    var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
-                    await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
-                    return new TypeRefiner(varTypes);
-                });
+                await RunRewriter("Refining Return Types", async (t, sm) => new PropertyTypeRefiner(sm));
 
-                await RunRewriter(true, "Coercing Literals", async (t, sm) => new LiteralCoercionRewriter(sm));
-                await RunRewriter(true, "Casting Enums to Numbers", async (t, sm) => new EnumToNumberCastRewriter(sm));
-                await RunRewriter(true, "Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
-                await RunRewriter(true, "Applying Type Conversions", async (t, sm) => new TypeConversionRewriter(sm));
+                await RunRewriter("Coercing Literals", async (t, sm) => new LiteralCoercionRewriter(sm));
+                await RunRewriter("Casting Enums to Numbers", async (t, sm) => new EnumToNumberCastRewriter(sm));
+                await RunRewriter("Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
+                await RunRewriter("Applying Type Conversions", async (t, sm) => new TypeConversionRewriter(sm));
+
+                await RunRewriter("Rewriting bitwise Or/And", async (t, sm) => new BitwiseOrRewriter(sm));
+                await RunRewriter("Rewriting DateTime arithmetic", async (t, sm) => new DateTimeArithmeticRewriter(sm));
 
                 // Cosmetic - shouldn't change program meaning or reduce errors
-                //await RunRewriter(true, "Collapsing local declaration + first assignment", async (t, sm) => new LocalDeclarationCollapseRewriter(sm));
-                await RunRewriter(false, "Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter());
+                //await RunRewriter("Collapsing local declaration + first assignment", async (t, sm) => new LocalDeclarationCollapseRewriter(sm));
 
-                //await RunRewriter(true, "Rewriting DAO", async (t, sm) => new DAORewriter(sm));
+                await RunRewriter("Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter());
+                await RunRewriter("Rewriting null checks", async (t, sm) => new DefaultToNullRewriter(sm));
+
+                //await RunRewriter("Rewriting DAO", async (t, sm) => new DAORewriter(sm));
 
                 if (hasChanges) {
                     count++;

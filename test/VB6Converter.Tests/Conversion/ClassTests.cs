@@ -63,7 +63,7 @@ public sealed class ClassTests
         Private Declare Function GetSystemMetrics Lib "user32" (ByVal nIndex As Long) As Long
         """,
         """
-        [DllImport("user32")]
+        [System.Runtime.InteropServices.DllImport("user32")]
         private static extern int GetSystemMetrics(int nIndex);
         """);
 
@@ -73,7 +73,7 @@ public sealed class ClassTests
         Private Declare Function GetComputerName Lib "kernel32" Alias "GetComputerNameA" (ByVal lpBuffer As String, nSize As Long) As Long
         """,
         """
-        [DllImport("kernel32", EntryPoint = "GetComputerNameA")]
+        [System.Runtime.InteropServices.DllImport("kernel32", EntryPoint = "GetComputerNameA")]
         private static extern int GetComputerName(string lpBuffer, int nSize);
         """);
 
@@ -259,6 +259,18 @@ public sealed class ClassTests
             public static int[] arr1;
             public static int[] arr2 = new int[10 + 1];
             public static int[, ] arr3 = new int[10 + 1, 20 + 1];
+        }
+        """);
+
+    [TestMethod]
+    public void VariablesAsNew() => ValidateClassMatches(
+        """
+        Private col As New Collection
+        """,
+        """
+        public static partial class VariablesAsNew
+        {
+            private static Collection col = new();
         }
         """);
 

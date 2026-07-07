@@ -43,6 +43,11 @@ public class BitwiseOrRewriter(SemanticModel semantics) : LoggedRewriter
             if (lType is null || rType is null)
                 return base.VisitBinaryExpression(node);
 
+            // "dynamic" operands aren't confirmed non-boolean - the semantic model simply
+            // couldn't determine a concrete type, so don't assume a bitwise rewrite is safe.
+            if (lType.TypeKind == TypeKind.Dynamic || rType.TypeKind == TypeKind.Dynamic)
+                return base.VisitBinaryExpression(node);
+
             if (lType.SpecialType == SpecialType.System_Boolean || rType.SpecialType == SpecialType.System_Boolean)
                 return base.VisitBinaryExpression(node);
 
@@ -71,7 +76,11 @@ public class BitwiseOrRewriter(SemanticModel semantics) : LoggedRewriter
 
             var operandType = semantics.GetTypeInfo(node.Operand).Type;
 
-            if (operandType is null || operandType.SpecialType == SpecialType.System_Boolean)
+            // "dynamic" operands aren't confirmed non-boolean - the semantic model simply
+            // couldn't determine a concrete type, so don't assume a bitwise rewrite is safe.
+            if (operandType is null
+                || operandType.SpecialType == SpecialType.System_Boolean
+                || operandType.TypeKind == TypeKind.Dynamic)
                 return base.VisitPrefixUnaryExpression(node);
 
             var newToken = Token(

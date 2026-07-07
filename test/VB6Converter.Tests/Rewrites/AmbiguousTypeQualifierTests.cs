@@ -383,6 +383,52 @@ public class AmbiguousTypeQualifierTests
         CheckQualification(cs, expected, preferredNamespaces: ["B"]);
     }
 
+    [TestMethod]
+    public void CorrectsObjectCreationCasing()
+        // VB6 form declared "frmclientesmain" but referenced with a different casing at the New site.
+        => CheckQualification(
+            "class frmclientesmain { } class T { void M() { var f = new frmClientesMain(); } }",
+            "class frmclientesmain { } class T { void M() { var f = new frmclientesmain(); } }",
+            []);
+
+    [TestMethod]
+    public void CorrectsArrayElementTypeCasing()
+        => CheckQualification(
+            "class frmclientesmain { } class T { frmClientesMain[] arr; }",
+            "class frmclientesmain { } class T { frmclientesmain[] arr; }",
+            []);
+
+    [TestMethod]
+    public void CorrectsBaseListCasing()
+        => CheckQualification(
+            "class frmclientesmain { } class Derived : frmClientesMain { }",
+            "class frmclientesmain { } class Derived : frmclientesmain { }",
+            []);
+
+    [TestMethod]
+    public void CorrectsMethodReturnTypeCasing()
+        => CheckQualification(
+            "class frmclientesmain { } class T { frmClientesMain M() { return null; } }",
+            "class frmclientesmain { } class T { frmclientesmain M() { return null; } }",
+            []);
+
+    [TestMethod]
+    public void CorrectsStaticMemberQualifierCasing()
+        // frmClientesMain.SharedField where the class is actually declared as frmclientesmain and
+        // the reference is fully unresolved (not just wrong-cased member on an otherwise valid type).
+        => CheckQualification(
+            "class frmclientesmain { public static int SharedField; } class T { void M() { var x = frmClientesMain.SharedField; } }",
+            "class frmclientesmain { public static int SharedField; } class T { void M() { var x = frmclientesmain.SharedField; } }",
+            []);
+
+    [TestMethod]
+    public void LeavesUnresolvedNonTypeIdentifiersUnchanged()
+        // No type in the compilation matches "NonExistentType" case-insensitively, so it must be left alone.
+        => CheckQualification(
+            "class T { void M() { var f = new NonExistentType(); } }",
+            "class T { void M() { var f = new NonExistentType(); } }",
+            []);
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private static string RewriteCode(string cs, IEnumerable<string> preferredNamespaces)
@@ -393,7 +439,7 @@ public class AmbiguousTypeQualifierTests
             [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
 
         var semantics = comp.GetSemanticModel(cu.SyntaxTree, true);
-        var rewriter = new AmbiguousTypeQualifier(semantics, preferredNamespaces);
+        var rewriter = new TypeFinder(semantics, [.. preferredNamespaces]);
         return rewriter.Visit(cu).ToFullString();
     }
 

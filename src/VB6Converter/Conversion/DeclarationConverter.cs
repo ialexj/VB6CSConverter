@@ -78,6 +78,7 @@ public static class DeclarationConverter
             var type = isArray
                 ? ArrayType(baseType, SingletonList(ArrayRankSpecifier(SeparatedList<ExpressionSyntax>(omittedExpressions))))
                 : baseType;
+            bool hasAsNew = sub.asTypeClause()?.NEW() is not null;
 
             var variable = VariableDeclarator(name);
             if (arrayDimensions.Count > 0) {
@@ -90,7 +91,11 @@ public static class DeclarationConverter
                 ));
             }
 
-            if (defaultInit) {
+            if (hasAsNew) {
+                variable = variable.WithInitializer(
+                    EqualsValueClause(ImplicitObjectCreationExpression()));
+            }
+            else if (defaultInit) {
                 variable = variable.WithInitializer(
                     EqualsValueClause(
                         LiteralExpression(SyntaxKind.DefaultLiteralExpression, Token(SyntaxKind.DefaultKeyword))));

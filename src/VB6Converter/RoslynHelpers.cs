@@ -21,6 +21,26 @@ internal static class RoslynHelpers
                         : cls))
             .NormalizeWhitespace();
 
+    public static IEnumerable<ITypeSymbol> FindTypesByName(SemanticModel sem, string name, INamespaceSymbol nss = null)
+    {
+        nss ??= sem.Compilation.GlobalNamespace;
+
+        foreach (var m in nss.GetTypeMembers()) {
+            if (string.Equals(m.ToString(), name, StringComparison.OrdinalIgnoreCase)) {
+                yield return m;
+            }
+            if (string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)) {
+                yield return m;
+            }
+        }
+
+        foreach (var nested in nss.GetNamespaceMembers()) {
+            foreach (var ts in FindTypesByName(sem, name, nested)) {
+                yield return ts;
+            }
+        }
+    }
+
     /// <summary>
     /// Recursively searches the compilation's namespaces for a type whose name (or fully
     /// qualified name) matches <paramref name="name"/> case-insensitively. Used to recover
@@ -29,24 +49,7 @@ internal static class RoslynHelpers
     /// </summary>
     public static ITypeSymbol FindTypeByName(SemanticModel sem, string name, INamespaceSymbol nss = null)
     {
-        nss ??= sem.Compilation.GlobalNamespace;
-
-        foreach (var m in nss.GetTypeMembers()) {
-            if (string.Equals(m.ToString(), name, StringComparison.OrdinalIgnoreCase)) {
-                return m;
-            }
-            if (string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)) {
-                return m;
-            }
-        }
-
-        foreach (var nested in nss.GetNamespaceMembers()) {
-            if (FindTypeByName(sem, name, nested) is ITypeSymbol ts) {
-                return ts;
-            }
-        }
-
-        return null;
+        return FindTypesByName(sem, name, nss).FirstOrDefault();
     }
 
     public static SyntaxTokenList Modifiers(
@@ -255,5 +258,66 @@ internal static class RoslynHelpers
     public static T FirstDescendantOrSelf<T>(this SyntaxNode node) where T : SyntaxNode
     {
         return node.DescendantNodesAndSelf(i => i is not T).OfType<T>().FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Walks the parent chain of <paramref name="node"/> looking for syntax contexts
+    /// that constrain the expected type: variable declaration, assignment LHS, enclosing
+    /// return type, or method-call parameter type.
+    /// </summary>
+    public static ITypeSymbol TryGetContextualType(this SemanticModel sem, NameSyntax node)
+    {
+        for (var ancestor = node.Parent; ancestor != null; ancestor = ancestor.Parent) {
+            switch (ancestor) {
+                // Variable declaration where this node IS the declared type:
+                //   Widget x = expr  →  infer from initializer expression
+                case VariableDeclarationSyntax decl when decl.Type.Span.Contains(node.Span):
+                    foreach (var variable in decl.Variables) {
+                        if (variable.Initializer?.Value is { } init) {
+                            var t = sem.GetTypeInfo(init).Type;
+                            if (t is not null) return t;
+                        }
+                    }
+                    return null;
+
+                // Variable declaration where this node is in the initializer:
+                //   A.Widget x = new Widget()  →  infer from the declared type
+                case VariableDeclarationSyntax decl:
+                    return sem.GetTypeInfo(decl.Type).Type;
+
+                // Assignment RHS:  x = new Widget()  →  infer from LHS
+                case AssignmentExpressionSyntax assign when assign.Right.Span.Contains(node.Span):
+                    return sem.GetTypeInfo(assign.Left).Type;
+
+                // Return statement:  return new Widget()  →  enclosing method/property return type
+                case ReturnStatementSyntax:
+                    return sem.GetEnclosingSymbol(node.SpanStart) switch {
+                        IMethodSymbol   m => m.ReturnType,
+                        IPropertySymbol p => p.Type,
+                        _ => null
+                    };
+
+                // Method argument:  Foo(new Widget())  →  matching parameter type
+                case ArgumentSyntax arg
+                    when arg.Parent is ArgumentListSyntax argList
+                      && argList.Parent is InvocationExpressionSyntax invoc: {
+                    var si = sem.GetSymbolInfo(invoc);
+                    if ((si.Symbol ?? si.CandidateSymbols.FirstOrDefault()) is IMethodSymbol method) {
+                        int index = argList.Arguments.IndexOf(arg);
+                        IParameterSymbol param = arg.NameColon is { } nc
+                            ? method.Parameters.FirstOrDefault(p => p.Name == nc.Name.Identifier.Text)
+                            : index >= 0 && index < method.Parameters.Length ? method.Parameters[index] : null;
+                        if (param is not null) return param.Type;
+                    }
+                    return null;
+                }
+
+                // Stop at class / compilation-unit boundaries
+                case MemberDeclarationSyntax:
+                case CompilationUnitSyntax:
+                    return null;
+            }
+        }
+        return null;
     }
 }

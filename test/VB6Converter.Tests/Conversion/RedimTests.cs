@@ -21,7 +21,7 @@ public class RedimTests
         ReDim Preserve arr(10) As String
         """,
         """
-        Array.Resize(ref arr, 10);
+        System.Array.Resize(ref arr, 10);
         """);
 
     [TestMethod]

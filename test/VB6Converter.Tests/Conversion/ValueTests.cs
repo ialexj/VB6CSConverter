@@ -115,7 +115,7 @@ public class ValueTests
         x = a ^ b
         """,
         """
-        x = Math.Pow(a, b);
+        x = System.Math.Pow(a, b);
         """);
 
     [TestMethod]
