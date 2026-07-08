@@ -22,7 +22,7 @@ public class TypeFinder(SemanticModel sem, PreferredNamespaceList namespaces) : 
         => RewriteName(node) ?? base.VisitQualifiedName(node);
 
     SyntaxNode RewriteName(NameSyntax node) => Rewrite(node, node => {
-        if (IsTypeUsage(node)) {
+        if (node.IsTypeUsage()) {
             var info = sem.GetSymbolInfo(node);
             if (info.Symbol is {}) {
                 return node; // Already resolved
@@ -57,23 +57,4 @@ public class TypeFinder(SemanticModel sem, PreferredNamespaceList namespaces) : 
 
         return null;
     });
-
-    /// <summary>
-    /// Determines whether <paramref name="node"/> sits in a syntactic position where it is
-    /// expected to name a type (as opposed to a variable, method, or member name).
-    /// </summary>
-    static bool IsTypeUsage(NameSyntax node)
-        => node.Parent switch {
-            VariableDeclarationSyntax vds => vds.Type == node,
-            ParameterSyntax ps => ps.Type == node,
-            ObjectCreationExpressionSyntax oce => oce.Type == node,
-            ArrayTypeSyntax at => at.ElementType == node,
-            BaseTypeSyntax bts => bts.Type == node,
-            CastExpressionSyntax ce => ce.Type == node,
-            MethodDeclarationSyntax mds => mds.ReturnType == node,
-            PropertyDeclarationSyntax pds => pds.Type == node,
-            IndexerDeclarationSyntax ids => ids.Type == node,
-            MemberAccessExpressionSyntax maes => maes.Expression == node,
-            _ => false,
-        };
 }

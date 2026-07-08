@@ -10,6 +10,32 @@ namespace VB6Converter;
 
 internal static class RoslynHelpers
 {
+    /// <summary>
+    /// Determines whether a <see cref="NameSyntax"/> appears in a syntactic position where
+    /// it is expected to denote a type (as opposed to a variable/member value expression).
+    /// </summary>
+    public static bool IsTypeUsage(this NameSyntax node)
+        => node.Parent switch {
+            VariableDeclarationSyntax v when v.Type == node => true,
+            ParameterSyntax p when p.Type == node => true,
+            PropertyDeclarationSyntax p when p.Type == node => true,
+            MethodDeclarationSyntax m when m.ReturnType == node => true,
+            LocalFunctionStatementSyntax l when l.ReturnType == node => true,
+            ForEachStatementSyntax f when f.Type == node => true,
+            IndexerDeclarationSyntax i when i.Type == node => true,
+            ObjectCreationExpressionSyntax o when o.Type == node => true,
+            CastExpressionSyntax c when c.Type == node => true,
+            ArrayTypeSyntax a when a.ElementType == node => true,
+            NullableTypeSyntax n when n.ElementType == node => true,
+            PointerTypeSyntax p when p.ElementType == node => true,
+            RefTypeSyntax r when r.Type == node => true,
+            BaseTypeSyntax b when b.Type == node => true,
+            DeclarationPatternSyntax d when d.Type == node => true,
+            MemberAccessExpressionSyntax m when m.Expression == node => true,
+            TypeArgumentListSyntax => true,
+            _ => false,
+        };
+
     public static CompilationUnitSyntax CompilationUnit(
         ClassDeclarationSyntax cls, NameSyntax ns = null)
         => SyntaxFactory.CompilationUnit()

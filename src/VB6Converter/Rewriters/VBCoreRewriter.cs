@@ -31,6 +31,10 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
                 return base.VisitIdentifierName(node);
             }
 
+            if (node.Identifier.Text == "Collection" && node.IsTypeUsage()) {
+                return ParseName("Microsoft.VisualBasic.Collection");
+            }
+
             switch (node.Identifier.Text) {
                 case "Now":     return ParseExpression("System.DateTime.Now");
                 case "Date":    return ParseExpression("System.DateTime.Now.Date");

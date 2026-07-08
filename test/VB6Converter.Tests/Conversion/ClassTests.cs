@@ -270,7 +270,7 @@ public sealed class ClassTests
         """
         public static partial class VariablesAsNew
         {
-            private static Collection col = new();
+            private static Microsoft.VisualBasic.Collection col = new();
         }
         """);
 

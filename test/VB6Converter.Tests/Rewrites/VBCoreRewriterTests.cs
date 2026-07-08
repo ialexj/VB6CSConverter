@@ -241,6 +241,11 @@ public class VBCoreRewriterTests
         "Dim x As VB.Timer",
         "public static VB.Timer x;");
 
+    [TestMethod]
+    public void CollectionType_IsFullyQualified() => ValidateMemberMatches(
+        "Private col As New Collection",
+        "private static Microsoft.VisualBasic.Collection col = new();");
+
     // ── Parameterless calls without parentheses ──────────────────────────────
 
     [TestMethod]

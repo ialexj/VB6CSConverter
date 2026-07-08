@@ -57,7 +57,7 @@ public class StatementTests
         Dim col As New Collection
         """,
         """
-        Collection col = new();
+        Microsoft.VisualBasic.Collection col = new();
         """);
 
     [TestMethod]
