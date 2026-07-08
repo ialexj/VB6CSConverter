@@ -1744,12 +1744,12 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
-    public void Generate_Class_WithTopLeftFloatProperties_IsTreatedAsControl()
+    public void Generate_Class_WithWidthLeftFloatProperties_IsTreatedAsControl()
     {
         var library = MakeLibrary("TestLib",
             new ComQueryType("MyCtrl", LibraryTypeKind.Class,
                 Members: [
-                    new ComQueryMember("Top", LibraryMemberKind.PropertyGet, "float", []),
+                    new ComQueryMember("Width", LibraryMemberKind.PropertyGet, "float", []),
                     new ComQueryMember("Left", LibraryMemberKind.PropertyGet, "float", []),
                 ]));
 
@@ -1758,7 +1758,7 @@ public class ReferenceStubGeneratorTests
             var written = ReferenceStubGenerator.Generate(library, tempDir);
             var source = File.ReadAllText(written[0]);
 
-            source.Should().Contain("IControlStub<MyCtrl>", "Top/Left float should infer control stub marker");
+            source.Should().Contain("IControlStub<MyCtrl>", "Width/Left float should infer control stub marker");
             source.Should().NotContain("ToolTipText", "inferred controls should not manually inject extender properties into class stubs");
         }
         finally {
@@ -1767,12 +1767,12 @@ public class ReferenceStubGeneratorTests
     }
 
     [TestMethod]
-    public void Generate_Interface_WithTopLeftFloatProperties_IsTreatedAsControl()
+    public void Generate_Interface_WithWidthLeftFloatProperties_IsTreatedAsControl()
     {
         var library = MakeLibrary("TestLib",
             new ComQueryType("IWidget", LibraryTypeKind.Interface,
                 Members: [
-                    new ComQueryMember("Top", LibraryMemberKind.PropertyGet, "float", []),
+                    new ComQueryMember("Width", LibraryMemberKind.PropertyGet, "float", []),
                     new ComQueryMember("Left", LibraryMemberKind.PropertyGet, "float", []),
                 ]));
 
@@ -1781,7 +1781,7 @@ public class ReferenceStubGeneratorTests
             var written = ReferenceStubGenerator.Generate(library, tempDir);
             var source = File.ReadAllText(written[0]);
 
-            source.Should().Contain("IControlStub<IWidget>", "Top/Left float should infer control interfaces");
+            source.Should().Contain("IControlStub<IWidget>", "Width/Left float should infer control interfaces");
         }
         finally {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
