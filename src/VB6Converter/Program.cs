@@ -166,7 +166,7 @@ public static class Program
             }
         }
 
-        var allTargets = vbProject.Files.Select(f => ConversionTarget.Create(f, options.OutputDir, rootPath)).OrderBy(t => t.Name).ToArray();
+        var allTargets = vbProject.Files.SelectMany(f => ConversionTarget.CreateAll(f, options.OutputDir, rootPath)).OrderBy(t => t.Name).ToArray();
         await ws.Open(allTargets, options.OutputDir, vbProject.Name);
 
         var conversionOptions = ConversionOptions.Default;
@@ -287,8 +287,6 @@ public static class Program
                     await RunRewriter("Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
                     await RunRewriter("Expanding FRX-backed indexed designer assignments", async (t, sm) => new FrxExpansionRewriter(sm));
                     await RunRewriter("Fixing Foreach Variable", async (t, sm) => new ForEachVariableRewriter(sm));
-                    await RunRewriter("Declaring undeclared local variables", async (t, sm) => new LocalDeclarationInsertionRewriter(sm));
-                    await RunRewriter("Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
                 }
 
                 await RunRewriter("Finding Types", async (t, sm) => new TypeFinder(sm, preferredNamespaces));
@@ -326,8 +324,13 @@ public static class Program
                 // Cosmetic - shouldn't change program meaning or reduce errors
                 //await RunRewriter("Collapsing local declaration + first assignment", async (t, sm) => new LocalDeclarationCollapseRewriter(sm));
 
-                await RunRewriter("Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter());
                 await RunRewriter("Rewriting null checks", async (t, sm) => new DefaultToNullRewriter(sm));
+                await RunRewriter("Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter());
+
+                if (count == 0) {
+                    await RunRewriter("Declaring undeclared local variables", async (t, sm) => new LocalDeclarationInsertionRewriter(sm));
+                    await RunRewriter("Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
+                }
 
                 //await RunRewriter("Rewriting DAO", async (t, sm) => new DAORewriter(sm));
 

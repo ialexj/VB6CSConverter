@@ -152,6 +152,7 @@ public sealed class ConversionWorkspace : IDisposable
         var cu  = st.GetCompilationUnitRoot(cancel);
 
         var newcu = await task(cu);
+        newcu = newcu.NormalizeWhitespace();
 
         if (string.IsNullOrEmpty(newcu.SyntaxTree.FilePath)) {
             st = newcu.SyntaxTree.WithFilePath(target.OutputPath);

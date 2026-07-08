@@ -204,6 +204,19 @@ internal static class RoslynHelpers
             : PredefinedType(Token(SyntaxKind.ObjectKeyword));
     }
 
+    static readonly SymbolDisplayFormat NamespaceQualifiedFormat = new SymbolDisplayFormat(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters);
+
+    public static NameSyntax ToNameSyntax(this ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+            return ToNameSyntax(arrayType.ElementType);
+
+        return ParseName(typeSymbol?.ToDisplayString(NamespaceQualifiedFormat));
+    }
+
     public static bool IsEquivalentSyntax(object oldValue, object newValue)
     {
         if (oldValue is null != newValue is null)

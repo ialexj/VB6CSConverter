@@ -13,6 +13,18 @@ namespace VB6Converter.Rewriters.Semantic;
 // type instead of guessing.
 public class PropertyTypeRefiner(SemanticModel semantics) : LoggedRewriter
 {
+    public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
+        => Rewrite(node, node => {
+            if (!IsDynamicOrObject(node.ReturnType))
+                return base.VisitMethodDeclaration(node);
+
+            var returnType = GetReturnType(node.ExpressionBody, node.Body);
+            if (!IsUsableRefinementType(returnType))
+                return base.VisitMethodDeclaration(node);
+
+            return node.WithReturnType(returnType.ToTypeSyntax().WithTriviaFrom(node.ReturnType));
+        });
+
     public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
         => Rewrite(node, node =>
         {
@@ -30,21 +42,21 @@ public class PropertyTypeRefiner(SemanticModel semantics) : LoggedRewriter
             if (getter is null)
                 return base.VisitPropertyDeclaration(node);
 
-            var returnType = GetReturnType(getter);
+            var returnType = GetReturnType(getter.ExpressionBody, getter.Body);
             if (!IsUsableRefinementType(returnType))
                 return base.VisitPropertyDeclaration(node);
 
             return node.WithType(returnType.ToTypeSyntax().WithTriviaFrom(node.Type));
         });
 
-    private ITypeSymbol GetReturnType(AccessorDeclarationSyntax getter)
+    private ITypeSymbol GetReturnType(ArrowExpressionClauseSyntax expressionBody, BlockSyntax body)
     {
-        if (getter.ExpressionBody is { } arrow)
+        if (expressionBody is { } arrow)
             return semantics.GetTypeInfo(arrow.Expression).Type;
 
         // Return statements may be nested inside if/switch/loop blocks, not just at the
         // top level - walk the whole body, but don't cross into nested function boundaries.
-        var returns = getter.Body?
+        var returns = body?
             .DescendantNodes(n => n is not AnonymousFunctionExpressionSyntax && n is not LocalFunctionStatementSyntax)
             .OfType<ReturnStatementSyntax>()
             .ToArray();

@@ -52,6 +52,38 @@ public class PropertyTypeRefinerTests
     public void LeavesDynamicReturnExpressionUnchanged()
         => Check("class T { dynamic Y; public dynamic X { get => Y; } }");
 
+    // ── Refines method return types with the same safety rules ──────────────
+
+    [TestMethod]
+    public void RefinesExpressionBodiedMethodToBool()
+        => Check(
+            "class T { int Operacao; public dynamic Edicao() => Operacao != 3; }",
+            "class T { int Operacao; public bool Edicao() => Operacao != 3; }");
+
+    [TestMethod]
+    public void RefinesObjectTypedMethodToInt()
+        => Check(
+            "class T { public object Total() { return 42; } }",
+            "class T { public int Total() { return 42; } }");
+
+    [TestMethod]
+    public void RefinesBlockBodiedMethodWithAgreeingReturns()
+        => Check(
+            "class T { bool F; public dynamic X() { if (F) { return 1; } return 2; } }",
+            "class T { bool F; public int X() { if (F) { return 1; } return 2; } }");
+
+    [TestMethod]
+    public void LeavesMethodWithAmbiguousReturnTypesUnchanged()
+        => Check("class T { bool F; public dynamic X() { if (F) { return 1; } return \"a\"; } }");
+
+    [TestMethod]
+    public void LeavesMethodWithDynamicReturnExpressionUnchanged()
+        => Check("class T { dynamic Y; public dynamic X() { return Y; } }");
+
+    [TestMethod]
+    public void LeavesMethodWithoutBodyUnchanged()
+        => Check("abstract class T { public abstract dynamic X(); }");
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static void Check(string cs, string? expected = null)

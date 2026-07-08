@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using VB6Parser;
@@ -44,6 +45,17 @@ public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
 
         var outputRelativePath = Path.ChangeExtension(relativePath, ".cs");
         return new ConversionTarget(file, Path.Combine(outDir, outputRelativePath));
+    }
+
+    public static IEnumerable<ConversionTarget> CreateAll(VisualBasicProjectFile file, string outDir, string rootPath)
+    {
+        yield return Create(file, outDir, rootPath);
+
+        var relativePath = Path.GetRelativePath(rootPath, file.Path);
+        var outputRelativePath = Path.ChangeExtension(relativePath, ".designer.cs");
+        if (System.IO.File.Exists(Path.Combine(outDir, outputRelativePath))) {
+            yield return new ConversionTarget(file, Path.Combine(outDir, outputRelativePath));
+        }
     }
 }
 

@@ -8,6 +8,100 @@ namespace VB6Converter.Tests.Rewrites;
 [TestClass]
 public class AmbiguousTypeQualifierTests
 {
+    [TestMethod]
+    public void Parameter_NotAffected()
+    {
+        var cs = """
+            using A;
+            namespace A { class Widget {} }
+            class Test {
+                void M(dynamic Widget) {
+                    Widget.DoSomething();
+                }
+            }
+            """;
+
+        var expected = """
+            using A;
+            namespace A { class Widget {} }
+            class Test {
+                void M(dynamic Widget) {
+                    Widget.DoSomething();
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, []);
+    }
+
+    [TestMethod]
+    public void AmbiguousEnum_Resolves()
+    {
+        var cs = """
+            using A;
+            using B;
+            namespace A { enum Widget { WA, WB } }
+            namespace B { enum Widget { WA, WB } }
+            class Target { A.Widget x; }
+            class Test {
+                void M() {
+                    Target t = null;
+                    t.x = Widget.WA;
+                }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { enum Widget { WA, WB } }
+            namespace B { enum Widget { WA, WB } }
+            class Target { A.Widget x; }
+            class Test {
+                void M() {
+                    Target t = null;
+                    t.x = A.Widget.WA;
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: []);
+    }
+
+    [TestMethod]
+    public void AmbiguousEnum_FollowsContextualType()
+    {
+        var cs = """
+            using A;
+            using B;
+            namespace A { enum Widget { WA, WB } }
+            namespace B { enum Widget { WA, WB } }
+            class Target { B.Widget x; }
+            class Test {
+                void M() {
+                    Target t = null;
+                    t.x = Widget.WA;
+                }
+            }
+            """;
+
+        var expected = """
+            using A;
+            using B;
+            namespace A { enum Widget { WA, WB } }
+            namespace B { enum Widget { WA, WB } }
+            class Target { B.Widget x; }
+            class Test {
+                void M() {
+                    Target t = null;
+                    t.x = B.Widget.WA;
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: []);
+    }
+
     // ── user-preferred namespace ──────────────────────────────────────────────
 
     [TestMethod]

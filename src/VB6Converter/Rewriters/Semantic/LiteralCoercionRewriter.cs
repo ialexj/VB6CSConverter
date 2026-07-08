@@ -387,22 +387,27 @@ public class LiteralCoercionRewriter(SemanticModel semantics) : LoggedRewriter
             .Where(f => f.ConstantValue is not null)
             .FirstOrDefault(f => Convert.ToInt64(f.ConstantValue) == value);
 
-        if (match is not null)
-        {
+        NameSyntax enumNameWithNamespace = enumType.ContainingNamespace.IsGlobalNamespace
+            ? IdentifierName(enumType.Name)
+            : QualifiedName(
+                IdentifierName(Identifier(leading, enumType.ContainingNamespace.ToString(), TriviaList())),
+                IdentifierName(Identifier(enumType.Name))
+            );
+
+        if (match is not null) {
             // EnumType.MemberName  — preserve original leading/trailing trivia
             return MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName(Identifier(leading, enumType.Name, TriviaList())),
+                enumType.ToNameSyntax(),
                 IdentifierName(Identifier(TriviaList(), match.Name, trailing)));
         }
 
         // No matching member — emit (EnumType)value
         // Put the original leading trivia on the cast's open-paren token.
-        var castType  = IdentifierName(enumType.Name);
         var innerExpr = expr.WithoutLeadingTrivia();
         return CastExpression(
             Token(leading, SyntaxKind.OpenParenToken, TriviaList()),
-            castType,
+            enumType.ToNameSyntax(),
             Token(SyntaxKind.CloseParenToken),
             innerExpr.WithTrailingTrivia(trailing));
     }

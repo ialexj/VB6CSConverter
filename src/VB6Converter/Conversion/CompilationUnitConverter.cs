@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Collections.Generic;
 using System.Linq;
 using VB6Converter.Rewriters;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
@@ -24,14 +25,33 @@ public static class CompilationUnitConverter
     {
         using var _ = new TraceMethod(module);
 
-        var namespaceName = ParseName(nsName ?? className);
+        var classNs = ParseName(nsName ?? className);
+        var classDef = ClassConverter.GetClass(module, new ClassContext(className, isStatic, options ?? ConversionOptions.Default, sourceDirectory, outputDirectory, sourceRelativePath));
 
-        var @class = ClassConverter.GetClass(module, new ClassContext(className, isStatic, options ?? ConversionOptions.Default, sourceDirectory, outputDirectory, sourceRelativePath));
+        var cid = IdentifierName(classDef.Identifier);
+        NameSyntax classFullName = classNs != null ? QualifiedName(classNs, cid) : cid;
 
-        var @namespace = FileScopedNamespaceDeclaration(namespaceName)
-            .WithMembers(SingletonList<MemberDeclarationSyntax>(@class));
+        IEnumerable<NameSyntax> GetClassGlobalStaticUsings() {
+            yield return classFullName;
 
-        var cu = CompilationUnit(default, default, default, SingletonList<MemberDeclarationSyntax>(@namespace));
+            // Expose the enums as global static usings
+            var enums = classDef.DescendantNodes().OfType<EnumDeclarationSyntax>()
+                .Select(e => QualifiedName(classFullName, IdentifierName(e.Identifier)));
+
+            foreach (var e in enums) {
+                yield return e;
+            }
+        }
+
+        var usings = GetClassGlobalStaticUsings()
+            .Select(n => UsingDirective(n)
+                .WithGlobalKeyword(Token(SyntaxKind.GlobalKeyword))
+                .WithStaticKeyword(Token(SyntaxKind.StaticKeyword)));
+
+        var ns = FileScopedNamespaceDeclaration(classNs)
+            .WithMembers(SingletonList<MemberDeclarationSyntax>(classDef));
+
+        var cu = CompilationUnit(default, List(usings), default, SingletonList<MemberDeclarationSyntax>(ns));
 
         foreach (var rewriter in CreateRewriters(sourceRelativePath)) {
             cu = (CompilationUnitSyntax)rewriter.Visit(cu);
@@ -57,4 +77,6 @@ public static class CompilationUnitConverter
 
         return CompilationUnit([], List(usings), [], SingletonList<MemberDeclarationSyntax>(vb6Class));
     }
+
+
 }

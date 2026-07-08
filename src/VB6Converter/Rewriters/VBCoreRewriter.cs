@@ -357,7 +357,7 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         return InvocationExpression(
             MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                ParenthesizedExpression(CastExpression(IdentifierName("Array"), array.Expression)),
+                ParenthesizedExpression(CastExpression(IdentifierName("System.Array"), array.Expression)),
                 IdentifierName("GetUpperBound")),
             ArgumentList(rank));
     }
@@ -376,7 +376,7 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         return InvocationExpression(
             MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                ParenthesizedExpression(CastExpression(IdentifierName("Array"), array.Expression)),
+                ParenthesizedExpression(CastExpression(IdentifierName("System.Array"), array.Expression)),
                 IdentifierName("GetLowerBound")),
             ArgumentList(rank));
     }
