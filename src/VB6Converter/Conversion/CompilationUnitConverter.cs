@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Linq;
 using VB6Converter.Rewriters;
+using VB6Converter.Rewriters.Forms;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using static VB6Parser.VisualBasic6Parser;
 
@@ -14,6 +15,8 @@ public static class CompilationUnitConverter
     static CSharpSyntaxRewriter[] CreateRewriters(string file) => [
         new VBLiteralRewriter(file),
         new VBCoreRewriter(file),
+
+        new CursorRewriter(file),
 
         new ErrRaiseRewriter(file),
         new ErrObjectRewriter(file),

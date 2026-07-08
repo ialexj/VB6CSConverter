@@ -11,8 +11,6 @@ namespace VB6Converter.Rewriters;
 /// </summary>
 public class KeywordEscapeRewriter(string file = null) : LoggedRewriter(file)
 {
-    public static readonly KeywordEscapeRewriter Default = new();
-
     static bool IsKeyword(string text)
         => SyntaxFacts.GetKeywordKind(text) != SyntaxKind.None;
 
