@@ -87,6 +87,32 @@ public class StatementTests
         System.Console.Beep();
         """);
 
+    [TestMethod]
+    public void IfElseIfPreservesFirstBranch() => ValidateBodyMatches(
+        """
+        If Len(!agnTelefone) > 0 Then
+            SMS_EnviaNumero !agnTelefone
+        ElseIf !agnIDCliente > 0 Then
+            SMS_EnviaCliente !agnIDCliente
+        Else
+            MsgBox "A marcação não está associada a um cliente.", vbOKOnly + vbInformation, "Enviar SMS Marcação"
+        End If
+        """,
+        """
+        if (Len((string)this["agnTelefone"]) > 0)
+        {
+            SMS_EnviaNumero(this["agnTelefone"]);
+        }
+        else if (this["agnIDCliente"] > 0)
+        {
+            SMS_EnviaCliente(this["agnIDCliente"]);
+        }
+        else
+        {
+            Microsoft.VisualBasic.Interaction.MsgBox("A marcação não está associada a um cliente.", Microsoft.VisualBasic.Constants.vbOKOnly | Microsoft.VisualBasic.Constants.vbInformation, "Enviar SMS Marcação");
+        }
+        """);
+
     static VB6ToCSharpConversion ConvertBody(string vb, string? name = null)
     {
         var wrapper = $"""

@@ -211,30 +211,43 @@ public static class StatementConverter
         using var _ = new TraceMethod(ifthen);
 
         if (ifthen is BlockIfThenElseContext @if) {
-            IfStatementSyntax current = null;
+            var branches = new List<(ExpressionSyntax Condition, StatementSyntax Then)>();
+
             if (@if.ifBlockStmt() is IfBlockStmtContext ifBlock) {
                 var condition = GetValue(ifBlock.ifConditionStmt().valueStmt(), ctx);
                 var then = GetBlock(ifBlock.block(), ctx);
-                current = IfStatement(condition, then);
+                branches.Add((condition, then));
             }
 
             if (@if.ifElseIfBlockStmt() is IfElseIfBlockStmtContext[] elseifs) {
                 foreach (var elseif in elseifs) {
                     var condition = GetValue(elseif.ifConditionStmt().valueStmt(), ctx);
                     var then = GetBlock(elseif.block(), ctx);
-
-                    var next = IfStatement(condition, then);
-                    current = current.WithElse(ElseClause(next));
-                    current = next;
+                    branches.Add((condition, then));
                 }
             }
 
+            StatementSyntax elseStatement = null;
             if (@if.ifElseBlockStmt() is IfElseBlockStmtContext @else) {
-                var block = GetBlock(@else.block(), ctx);
-                current = current.WithElse(ElseClause(block));
+                elseStatement = GetBlock(@else.block(), ctx);
             }
 
-            return (IfStatementSyntax)current.AncestorsAndSelf().Last();
+            for (var i = branches.Count - 1; i >= 0; i--) {
+                var (condition, then) = branches[i];
+                var next = IfStatement(condition, then);
+                if (elseStatement is not null) {
+                    next = next.WithElse(ElseClause(elseStatement));
+                }
+
+                elseStatement = next;
+            }
+
+            if (elseStatement is IfStatementSyntax result) {
+                return result;
+            }
+
+            return EmptyStatement()
+                .WithError(TransformError.Create(ifthen, "Invalid if statement"));
         }
         else if (ifthen is InlineIfThenElseContext inline && inline.ifConditionStmt() is IfConditionStmtContext ifcond) {
             var condition = GetValue(ifcond.valueStmt(), ctx);
