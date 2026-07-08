@@ -11,6 +11,7 @@ public class NewTests
         Set x = new Database
         """,
         """
+        // Set
         x = new Database();
         """);
 }

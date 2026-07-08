@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 using System.Text;
+using VB6Converter.Conversion;
 using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests.Conversion;
@@ -49,6 +50,30 @@ public class StatementTests
 
         var body = GetBodyText(conversion);
         body.Should().Contain("Resume Next");
+    }
+
+    [TestMethod]
+    public void SetAssignmentIsMarkedForLaterDefaultMemberExpansion()
+    {
+        var conversion = ConvertBody(
+            """
+            Set x = Nothing
+            """);
+
+        var statement = conversion.Class.Members.OfType<MethodDeclarationSyntax>().Single().Body!.Statements.Single();
+        statement.IsSetAssignment().Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void LetAssignmentIsNotMarkedAsSet()
+    {
+        var conversion = ConvertBody(
+            """
+            x = 1
+            """);
+
+        var statement = conversion.Class.Members.OfType<MethodDeclarationSyntax>().Single().Body!.Statements.Single();
+        statement.IsSetAssignment().Should().BeFalse();
     }
 
     [TestMethod]

@@ -109,7 +109,10 @@ public static class StatementConverter
                 return GetCall(call, ctx);
             }
             else if (stmt.assignment() is IAssignmentContext assignment) {
-                return ExpressionStatement(GetAssignment(assignment, ctx));
+                var expressionStatement = ExpressionStatement(GetAssignment(assignment, ctx));
+                return assignment is SetStmtContext
+                    ? expressionStatement.WithSetAssignmentMarker()
+                    : expressionStatement;
             }
             else if (stmt.withStmt() is WithStmtContext with) {
                 return GetWith(with, ctx);
