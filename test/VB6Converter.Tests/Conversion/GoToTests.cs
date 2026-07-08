@@ -173,4 +173,58 @@ public class GoToTests
             b = 0;
         }
         """);
+
+    [TestMethod]
+    public void TrailingEmptyLabel() => ValidateBodyMatches(
+        """
+        x = 1
+        FinalLabel:
+        """,
+        """
+        x = 1;
+        FinalLabel:
+            ;
+        """);
+
+    [TestMethod]
+    public void TrailingConsecutiveLabels() => ValidateBodyMatches(
+        """
+        x = 1
+        Label1:
+        Label2:
+        """,
+        """
+        x = 1;
+        Label1:
+            Label2:
+                ;
+        """);
+
+    [TestMethod]
+    public void ConsecutiveLabelsReferencedByGoto() => ValidateBodyMatches(
+        """
+        GoTo Label1
+        GoTo Label2
+        Label1:
+        Label2:
+        x = 1
+        """,
+        """
+        goto Label1;
+        goto Label2;
+        Label1:
+            Label2:
+                x = 1;
+        """);
+
+    [TestMethod]
+    public void TrailingReferencedLabel() => ConversionShouldSucceed(
+        """
+        Sub Test()
+            On Error GoTo ErrorHandler
+            Dim x As Integer
+            x = 1
+            ErrorHandler:
+        End Sub
+        """);
 }

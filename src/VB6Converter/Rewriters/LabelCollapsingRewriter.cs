@@ -46,6 +46,7 @@ public class LabelCollapsingRewriter : LoggedRewriter
     /// A label is collapsible if:
     /// - It has no following statements (or only empty statements) → collapse to `return;`
     /// - It is followed only by a single return statement → collapse to that return
+    /// Handles nested labeled statements (e.g., Label1: Label2: Stmt;) by unwrapping to the core statement.
     /// </summary>
     private static BlockSyntax CollapseGotos(BlockSyntax body)
     {
@@ -57,8 +58,9 @@ public class LabelCollapsingRewriter : LoggedRewriter
                 continue;
             }
 
-            // Collect all statements starting from the label's attached statement
-            var statements = new List<StatementSyntax> { labeled.Statement };
+            // Collect all statements starting from the core statement (unwrapping nested labels)
+            var coreStmt = UnwrapNestedLabels(labeled.Statement);
+            var statements = new List<StatementSyntax> { coreStmt };
 
             // Add all statements after this label in the block
             for (int j = i + 1; j < body.Statements.Count; j++) {
@@ -84,7 +86,10 @@ public class LabelCollapsingRewriter : LoggedRewriter
             // Otherwise: more statements follow, so don't collapse
 
             if (replacementReturn != null) {
-                map[labeled.Identifier.Text] = replacementReturn;
+                // Map the outermost label (and all nested labels within it) to the same return
+                CollectAllLabels(labeled, label => {
+                    map[label.Text] = replacementReturn;
+                });
             }
         }
 
@@ -95,6 +100,28 @@ public class LabelCollapsingRewriter : LoggedRewriter
 
         // Apply the replacer to the whole body
         return (BlockSyntax)new GotoReplacer(map).Visit(body);
+    }
+
+    /// <summary>
+    /// Recursively unwraps nested labeled statements to get to the underlying (non-labeled) statement.
+    /// </summary>
+    private static StatementSyntax UnwrapNestedLabels(StatementSyntax stmt)
+    {
+        while (stmt is LabeledStatementSyntax labeled) {
+            stmt = labeled.Statement;
+        }
+        return stmt;
+    }
+
+    /// <summary>
+    /// Recursively collects all labels from a nested labeled statement structure and applies an action to each.
+    /// </summary>
+    private static void CollectAllLabels(LabeledStatementSyntax labeled, Action<SyntaxToken> action)
+    {
+        action(labeled.Identifier);
+        if (labeled.Statement is LabeledStatementSyntax nestedLabeled) {
+            CollectAllLabels(nestedLabeled, action);
+        }
     }
 
     /// <summary>

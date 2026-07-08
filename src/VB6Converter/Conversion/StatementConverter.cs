@@ -34,23 +34,38 @@ public static class StatementConverter
 
     public static IEnumerable<StatementSyntax> GetMethodStatements(IEnumerable<BlockStmtContext> statements, CallContext ctx)
     {
-        SyntaxToken? currentLabel = null;
+        var pendingLabels = new List<SyntaxToken>();
 
         foreach (var stmt in statements) {
             if (stmt.lineLabel() is LineLabelContext label) {
-                currentLabel = GetIdentifier(label.ambiguousIdentifier());
+                pendingLabels.Add(GetIdentifier(label.ambiguousIdentifier()));
             }
             else {
                 foreach (var s in GetMethodStatements(stmt, ctx)) {
-                    if (currentLabel is SyntaxToken l) {
-                        currentLabel = null;
-                        yield return LabeledStatement(l, s);
+                    if (pendingLabels.Count > 0) {
+                        yield return WrapLabels(pendingLabels, s);
+                        pendingLabels.Clear();
                     }
                     else {
                         yield return s;
                     }
                 }
             }
+        }
+
+        // Handle trailing labels: wrap EmptyStatement() with any pending labels
+        if (pendingLabels.Count > 0) {
+            yield return WrapLabels(pendingLabels, EmptyStatement());
+        }
+
+        static StatementSyntax WrapLabels(List<SyntaxToken> labels, StatementSyntax stmt)
+        {
+            // Fold labels from last to first so the first-added label is outermost
+            StatementSyntax result = stmt;
+            for (int i = labels.Count - 1; i >= 0; i--) {
+                result = LabeledStatement(labels[i], result);
+            }
+            return result;
         }
 
         static IEnumerable<StatementSyntax> GetMethodStatements(BlockStmtContext stmt, CallContext ctx)
