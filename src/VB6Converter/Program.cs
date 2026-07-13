@@ -13,6 +13,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using VB6Converter.Rewriters;
+using VB6Converter.Rewriters.Forms;
 using VB6Converter.Rewriters.Semantic;
 using VB6Parser;
 using static VB6Converter.ConsoleHelpers;
@@ -284,7 +285,14 @@ public static class Program
 
                 if (count == 0) {
                     // Structural rewrites, should work first time
-                    await RunRewriter("Creating control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
+                    await RunRewriter("Converting Core Functions", async (t, sem) => new VBCoreRewriter(t.File.Name));
+                    await RunRewriter("Converting Core Constants", async (t, sem) => new VBLiteralRewriter(t.File.Name));
+                    await RunRewriter("Converting Err.Raise to throw", async (t, sem) => new ErrRaiseRewriter(t.File.Name));
+                    await RunRewriter("Converting Err object usage", async (t, sem) => new ErrObjectRewriter(t.File.Name));
+
+                    await RunRewriter("Converting Cursor Changes", async (t, sem) => new CursorRewriter(t.File.Name));
+
+                    await RunRewriter("Using control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
                     await RunRewriter("Expanding FRX-backed indexed designer assignments", async (t, sm) => new FrxExpansionRewriter(sm));
                     await RunRewriter("Fixing Foreach Variable", async (t, sm) => new ForEachVariableRewriter(sm));
                 }

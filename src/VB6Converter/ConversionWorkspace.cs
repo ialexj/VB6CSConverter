@@ -114,13 +114,6 @@ public sealed class ConversionWorkspace : IDisposable
             DefaultNamespace = name;
         }
 
-        // Create a global usings file to replicate VB6's module accessibility
-        var globalUsingsPath = Path.Combine(outDir, "_VB6Usings.cs");
-        if (!File.Exists(globalUsingsPath)) {
-            var globalUsings = CompilationUnitConverter.GetGlobalStaticUsings().NormalizeWhitespace();
-            File.WriteAllText(globalUsingsPath, globalUsings.ToFullString());
-        }
-
         Project = await _ws.OpenProjectAsync(projectPath);
     }
 
