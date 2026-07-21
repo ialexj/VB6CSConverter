@@ -99,7 +99,6 @@ VB6 project (.vbp)
                   ParameterizedPropertyRewriter
                   TypeRefiner (cross-file variable collection)
                   LiteralCoercionRewriter · TypeCastRewriter
-                  AmbiguousTypeQualifier
      + UsingsRewriter applied after each pass
   ↓  _Diagnostics.txt written to output dir
 ```
@@ -177,14 +176,13 @@ All rewriters extend `LoggedRewriter` (which extends `CSharpSyntaxRewriter`) and
 
 | File | Role |
 |---|---|
-| [TypeFinder.cs](src/VB6Converter/Rewriters/Semantic/TypeFinder.cs) | Infers variable types from usage patterns |
+| [TypeFinder.cs](src/VB6Converter/Rewriters/Semantic/TypeFinder.cs) | Infers variable types from usage patterns; also disambiguates type names that resolve to multiple candidates across `using` namespaces via `PreferredNamespaceList` (formerly a separate `AmbiguousTypeQualifier` rewriter) |
 | [TypeRefiner.cs](src/VB6Converter/Rewriters/Semantic/TypeRefiner.cs) | Cross-file type refinement using `ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>` |
 | [TypeCastRewriter.cs](src/VB6Converter/Rewriters/Semantic/TypeCastRewriter.cs) | Inserts explicit casts where needed |
 | [LiteralCoercionRewriter.cs](src/VB6Converter/Rewriters/Semantic/LiteralCoercionRewriter.cs) | Coerces bare numeric literals to `bool`/`decimal`/`float` where the LHS type demands it |
 | [MemberFinder.cs](src/VB6Converter/Rewriters/Semantic/MemberFinder.cs) | Resolves member accesses (properties / methods on known types) |
 | [ArrayCallDisambiguator.cs](src/VB6Converter/Rewriters/Semantic/ArrayCallDisambiguator.cs) | Distinguishes `arr(i)` (array index) from `fn(i)` (call) |
 | [ParameterizedPropertyRewriter.cs](src/VB6Converter/Rewriters/Semantic/ParameterizedPropertyRewriter.cs) | Rewrites `obj.Foo[k] = v` element-access assignments to `obj.SetFoo(k, v)` calls |
-| [AmbiguousTypeQualifier.cs](src/VB6Converter/Rewriters/Semantic/AmbiguousTypeQualifier.cs) | Fully qualifies type names that are ambiguous across multiple `using` namespaces |
 | [DAORewriter.cs](src/VB6Converter/Rewriters/Semantic/DAORewriter.cs) | Data Access Object pattern rewrites *(currently disabled)* |
 
 ### ComStubGenerator (`src/ComStubGenerator/`)
@@ -257,8 +255,8 @@ Root-level tests:
 
 | File | Tests |
 |---|---|
-| `AmbiguousTypeQualifierTests.cs` | `AmbiguousTypeQualifier` rewriter |
 | `DisambiguatorTests.cs` | `ArrayCallDisambiguator` rewriter |
+| `TypeFinderTests.cs` | `TypeFinder` rewriter (includes the `AmbiguousTypeQualifierTests` test class covering type disambiguation) |
 | `KeywordEscapeRewriterTests.cs` | `KeywordEscapeRewriter` |
 | `LiteralCoercionTests.cs` | `LiteralCoercionRewriter` |
 | `MsgBoxTests.cs` | `MsgBoxRewriter` |

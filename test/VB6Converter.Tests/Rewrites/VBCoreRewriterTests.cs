@@ -346,4 +346,21 @@ public class VBCoreRewriterTests
     public void RGB() => ValidateBodyMatches(
         "y = RGB(r, g, b)",
         "y = Microsoft.VisualBasic.Information.RGB(r, g, b);");
+
+
+    [TestMethod]
+    public void Replace2() => ValidateMemberMatches(
+        """
+        Function SqlStr(ByVal s As String)
+            SqlStr = "'" & Replace$(s, "'", "''") & "'"
+        End Function
+        """,
+        """
+        public static dynamic SqlStr(string s) => "'" + Microsoft.VisualBasic.Strings.Replace((string)s, "'", "''") + "'";
+        """);
+
+    [TestMethod]
+    public void IsNull() => ValidateBodyMatches(
+        "x = IsNull(z)",
+        "x = (z is null);");
 }

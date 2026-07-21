@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 namespace VB6Converter;
 
 /// <summary>
-/// A collection object to encapsulate namespace preferences, as used by AmbiguousTypeQualifier.
+/// A collection object to encapsulate namespace preferences, as used by TypeFinder for disambiguating ambiguous type references.
 /// </summary>
 public class PreferredNamespaceList : List<string>
 {

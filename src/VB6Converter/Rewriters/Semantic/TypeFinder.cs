@@ -22,8 +22,14 @@ public class TypeFinder(SemanticModel sem, PreferredNamespaceList namespaces) : 
         => RewriteName(node) ?? base.VisitQualifiedName(node);
 
     SyntaxNode RewriteName(NameSyntax node) => Rewrite(node, node => {
+        var info = sem.GetSymbolInfo(node);
+
+        if (node is IdentifierNameSyntax && !IsQualifierTarget(node)
+            && TryQualifyEnumLiteral(node, info) is { } qualifiedEnum) {
+            return qualifiedEnum;
+        }
+
         if (node.IsTypeUsage()) {
-            var info = sem.GetSymbolInfo(node);
             if (info.Symbol is {}) {
                 return node; // Already resolved
             }
@@ -57,4 +63,67 @@ public class TypeFinder(SemanticModel sem, PreferredNamespaceList namespaces) : 
 
         return null;
     });
+
+    /// <summary>
+    /// True when <paramref name="node"/> is already explicitly qualified/labelled by its parent
+    /// (e.g. the right-hand side of a member access or qualified name, or a named-argument/
+    /// named-equals label). These positions must never be re-qualified.
+    /// </summary>
+    static bool IsQualifierTarget(NameSyntax node)
+        => node.Parent switch {
+            MemberAccessExpressionSyntax m => m.Name == node,
+            QualifiedNameSyntax q => q.Right == node,
+            MemberBindingExpressionSyntax b => b.Name == node,
+            NameColonSyntax nc => nc.Name == node,
+            NameEqualsSyntax ne => ne.Name == node,
+            _ => false,
+        };
+
+    /// <summary>
+    /// Rewrites a bare enum literal reference (one that only resolves because of a
+    /// <c>using static</c>/<c>global using static</c> directive) into an explicitly
+    /// qualified <c>EnumType.Member</c> form, even though it already compiles unqualified.
+    /// If the reference is ambiguous across multiple statically-imported enums, the
+    /// preferred candidate is chosen using the same rules as <see cref="PreferredNamespaceList"/>.
+    /// </summary>
+    SyntaxNode TryQualifyEnumLiteral(NameSyntax node, SymbolInfo info)
+    {
+        static bool IsEnumField(ISymbol s) => s is IFieldSymbol { ContainingType.TypeKind: TypeKind.Enum };
+
+        SyntaxNode Qualify(IFieldSymbol field)
+        {
+            // Sibling member references inside the enum's own body (e.g. `enum Foo { A, B = A + 1 }`)
+            // must stay unqualified.
+            var enclosingEnum = node.FirstAncestorOrSelf<EnumDeclarationSyntax>();
+            if (enclosingEnum is { } && SymbolEqualityComparer.Default.Equals(sem.GetDeclaredSymbol(enclosingEnum), field.ContainingType)) {
+                return null;
+            }
+
+            return QualifiedName(field.ContainingType.ToNameSyntax(), IdentifierName(field.Name)).WithTriviaFrom(node);
+        }
+
+        if (info.Symbol is IFieldSymbol resolved && IsEnumField(resolved)) {
+            return Qualify(resolved);
+        }
+
+        if (info.Symbol is null) {
+            var candidates = info.CandidateSymbols.OfType<IFieldSymbol>().Where(IsEnumField).ToList();
+
+            if (candidates.Count == 1) {
+                return Qualify(candidates[0]);
+            }
+
+            if (candidates.Count > 1) {
+                var contextual = sem.TryGetContextualType(node); // Prefer contextual type if available
+                var containingTypes = candidates.Select(f => f.ContainingType);
+                if (namespaces.PickType(containingTypes, contextual) is { } chosenType) {
+                    var chosenField = candidates.FirstOrDefault(f =>
+                        SymbolEqualityComparer.Default.Equals(f.ContainingType, chosenType)) ?? candidates[0];
+                    return Qualify(chosenField);
+                }
+            }
+        }
+
+        return null;
+    }
 }

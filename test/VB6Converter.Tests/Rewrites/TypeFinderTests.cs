@@ -540,3 +540,183 @@ public class AmbiguousTypeQualifierTests
     private static void CheckQualification(string cs, string expected, IEnumerable<string> preferredNamespaces)
         => RewriteCode(cs, preferredNamespaces).Should().Be(expected);
 }
+
+[TestClass]
+public class EnumLiteralQualificationTests
+{
+    [TestMethod]
+    public void UnambiguousBareEnumLiteral_GetsQualified()
+    {
+        // WA only compiles unqualified because of `using static A.Widget;`.
+        // TypeFinder should always re-add the enum qualifier.
+        var cs = """
+            using static A.Widget;
+            namespace A { enum Widget { WA, WB } }
+            class Test {
+                void M() {
+                    var x = WA;
+                }
+            }
+            """;
+
+        var expected = """
+            using static A.Widget;
+            namespace A { enum Widget { WA, WB } }
+            class Test {
+                void M() {
+                    var x = A.Widget.WA;
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, []);
+    }
+
+    [TestMethod]
+    public void BareEnumLiteral_AsMemberAccessReceiver_GetsQualified()
+    {
+        var cs = """
+            using static A.Widget;
+            namespace A { enum Widget { WA, WB } }
+            class Test {
+                void M() {
+                    var x = WA.ToString();
+                }
+            }
+            """;
+
+        var expected = """
+            using static A.Widget;
+            namespace A { enum Widget { WA, WB } }
+            class Test {
+                void M() {
+                    var x = A.Widget.WA.ToString();
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, []);
+    }
+
+    [TestMethod]
+    public void AlreadyQualifiedEnumAccess_Unchanged()
+    {
+        // WA is already qualified (Name of a MemberAccessExpression) - must not be touched.
+        var cs = """
+            using static A.Widget;
+            namespace A { enum Widget { WA, WB } }
+            class Test {
+                void M() {
+                    var x = A.Widget.WA;
+                }
+            }
+            """;
+
+        CheckQualification(cs, cs, []);
+    }
+
+    [TestMethod]
+    public void AmbiguousBareEnumLiteral_FollowsUserPreference()
+    {
+        // "Same" exists in both A.Widget and B.Gadget, both brought in via `using static`.
+        var cs = """
+            using static A.Widget;
+            using static B.Gadget;
+            namespace A { enum Widget { Same } }
+            namespace B { enum Gadget { Same } }
+            class Test {
+                void M() {
+                    var x = Same;
+                }
+            }
+            """;
+
+        var expected = """
+            using static A.Widget;
+            using static B.Gadget;
+            namespace A { enum Widget { Same } }
+            namespace B { enum Gadget { Same } }
+            class Test {
+                void M() {
+                    var x = B.Gadget.Same;
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: ["B"]);
+    }
+
+    [TestMethod]
+    public void AmbiguousBareEnumLiteral_FollowsContextualType()
+    {
+        // Even though the user prefers B, the declared type of x (A.Widget) wins.
+        var cs = """
+            using static A.Widget;
+            using static B.Gadget;
+            namespace A { enum Widget { Same } }
+            namespace B { enum Gadget { Same } }
+            class Test {
+                void M() {
+                    A.Widget x = Same;
+                }
+            }
+            """;
+
+        var expected = """
+            using static A.Widget;
+            using static B.Gadget;
+            namespace A { enum Widget { Same } }
+            namespace B { enum Gadget { Same } }
+            class Test {
+                void M() {
+                    A.Widget x = A.Widget.Same;
+                }
+            }
+            """;
+
+        CheckQualification(cs, expected, preferredNamespaces: ["B"]);
+    }
+
+    [TestMethod]
+    public void EnumSelfReference_StaysUnqualified()
+    {
+        // Sibling member references inside the enum's own body must not be qualified.
+        var cs = "namespace A { enum Widget { First, Second = First + 1 } }";
+
+        CheckQualification(cs, cs, []);
+    }
+
+    [TestMethod]
+    public void NonEnumStaticConstField_Unchanged()
+    {
+        // WA is a const int on a static class (not an enum) - out of scope for this feature.
+        var cs = """
+            using static A.Constants;
+            namespace A { static class Constants { public const int WA = 5; } }
+            class Test {
+                void M() {
+                    var x = WA;
+                }
+            }
+            """;
+
+        CheckQualification(cs, cs, []);
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    private static string RewriteCode(string cs, IEnumerable<string> preferredNamespaces)
+    {
+        var cu = SyntaxFactory.ParseCompilationUnit(cs);
+        var comp = CSharpCompilation.Create("Test",
+            [cu.SyntaxTree],
+            [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
+
+        var semantics = comp.GetSemanticModel(cu.SyntaxTree, true);
+        var rewriter = new TypeFinder(semantics, [.. preferredNamespaces]);
+        return rewriter.Visit(cu).ToFullString();
+    }
+
+    private static void CheckQualification(string cs, string expected, IEnumerable<string> preferredNamespaces)
+        => RewriteCode(cs, preferredNamespaces).Should().Be(expected);
+}
