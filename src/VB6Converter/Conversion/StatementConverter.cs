@@ -417,27 +417,30 @@ public static class StatementConverter
         var statements = redim.redimSubStmt().Select<RedimSubStmtContext, ExpressionSyntax>(rd => {
             var variable   = GetCallIdentifierExpression(rd.implicitCallStmt_InStmt(), ctx);
             var type       = rd.asTypeClause().ToTypeSyntax(true, ctx.Options?.UseDynamic ?? true);
-            var subscripts = rd.subscripts().subscript().Select(s => GetValue(s.valueStmt(0), ctx)).ToArray();
+            var bounds     = GetArrayBounds(rd.subscripts(), ctx);
 
             if (redim.PRESERVE() is not null) {
-                if (subscripts.Length != 1) {
+                if (bounds.Length != 1) {
                     return ParseExpression("default")
                         .WithError(TransformError.Create(rd, "Multi-dimensional Redim Preserve not supported"));
                 }
 
-                return InvocationExpression(
+                var resize = InvocationExpression(
                     MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
                         IdentifierName("System.Array"),
                         IdentifierName("Resize")),
                     ArgumentList(
                         Argument(variable).WithRefKindKeyword(Token(SyntaxKind.RefKeyword)),
-                        Argument(subscripts[0])));
+                        Argument(GetZeroBasedArrayLengthExpression(bounds[0].UpperBound))));
+
+                return IsZeroLowerBound(bounds[0].LowerBound)
+                    ? resize
+                    : resize.WithError(TransformError.Create(rd.subscripts(), "Non-zero lower bound on single-dimensional array is not honored; indices are not offset"));
             }
             else {
-                var arrayType = ArrayType(type, SingletonList(ArrayRankSpecifier(SeparatedList(subscripts))));
                 return AssignmentExpression(SyntaxKind.SimpleAssignmentExpression,
-                    variable, ArrayCreationExpression(arrayType));
+                    variable, GetArrayCreationExpression(type, rd.subscripts(), ctx));
             }
         }).Select(ExpressionStatement).ToArray();
 

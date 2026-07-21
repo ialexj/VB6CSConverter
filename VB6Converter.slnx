@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/scratch/">
+    <Project Path="scratch/TypeFlagsProbe/TypeFlagsProbe.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/ComQuery/ComQuery.csproj" />
     <Project Path="src/ComStubGenerator/ComStubGenerator.csproj" />

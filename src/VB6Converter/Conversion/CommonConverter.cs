@@ -3,8 +3,11 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using VB6Parser;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+using static VB6Converter.Conversion.ValueConverter;
 using static VB6Parser.VisualBasic6Parser;
 
 namespace VB6Converter.Conversion;
@@ -104,6 +107,91 @@ public static class CommonConverter
         return ParseTypeName(complex.GetText());
     }
 
+    public static ExpressionSyntax GetArrayCreationExpression(TypeSyntax elementType, SubscriptsContext subscripts, CallContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(elementType);
+        ArgumentNullException.ThrowIfNull(subscripts);
+
+        var bounds = GetArrayBounds(subscripts, ctx);
+
+        if (bounds.All(b => IsZeroLowerBound(b.LowerBound))) {
+            return ArrayCreationExpression(BuildSizedArrayType(elementType, bounds.Select(b => GetZeroBasedArrayLengthExpression(b.UpperBound))));
+        }
+
+        if (bounds.Length == 1) {
+            return ArrayCreationExpression(BuildSizedArrayType(elementType, [GetZeroBasedArrayLengthExpression(bounds[0].UpperBound)]))
+                .WithError(TransformError.Create(subscripts, "Non-zero lower bound on single-dimensional array is not honored; indices are not offset"));
+        }
+
+        var lengths = GetIntArrayExpression(bounds.Select(b => GetLengthExpression(b.LowerBound, b.UpperBound)));
+        var lowerBounds = GetIntArrayExpression(bounds.Select(b => b.LowerBound));
+        var rectangularType = BuildRectangularArrayType(elementType, bounds.Length);
+        var elementTypeOf = elementType is IdentifierNameSyntax { Identifier.Text: "dynamic" }
+            ? PredefinedType(Token(SyntaxKind.ObjectKeyword))
+            : elementType;
+
+        return CastExpression(
+            rectangularType,
+            InvocationExpression(
+                MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName("System.Array"),
+                    IdentifierName("CreateInstance")),
+                ArgumentList(SeparatedList<ArgumentSyntax>([
+                    Argument(TypeOfExpression(elementTypeOf)),
+                    Token(SyntaxKind.CommaToken),
+                    Argument(lengths),
+                    Token(SyntaxKind.CommaToken),
+                    Argument(lowerBounds)
+                ]))));
+    }
+
+    public static ArrayBounds[] GetArrayBounds(SubscriptsContext subscripts, CallContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(subscripts);
+
+        return subscripts.subscript().Select(subscript => {
+            var values = subscript.valueStmt();
+            var hasExplicitLowerBound = values.Length > 1;
+            var lowerBound = hasExplicitLowerBound
+                ? GetValue(values[0], ctx)
+                : LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0));
+            var upperBound = GetValue(hasExplicitLowerBound ? values[1] : values[0], ctx);
+
+            return new ArrayBounds(subscript, lowerBound, upperBound);
+        }).ToArray();
+    }
+
+    public static bool IsZeroLowerBound(ExpressionSyntax expression)
+        => expression is LiteralExpressionSyntax literal
+           && literal.IsKind(SyntaxKind.NumericLiteralExpression)
+           && literal.Token.ValueText == "0";
+
+    public static ExpressionSyntax GetZeroBasedArrayLengthExpression(ExpressionSyntax upperBound)
+        => ParseExpression($"{upperBound} + 1");
+
+    static ExpressionSyntax GetLengthExpression(ExpressionSyntax lowerBound, ExpressionSyntax upperBound)
+        => ParseExpression($"({upperBound}) - ({lowerBound}) + 1");
+
+    static ArrayTypeSyntax BuildSizedArrayType(TypeSyntax elementType, IEnumerable<ExpressionSyntax> sizes)
+        => ArrayType(elementType, SingletonList(ArrayRankSpecifier(SeparatedList<ExpressionSyntax>(sizes))));
+
+    static ArrayTypeSyntax BuildRectangularArrayType(TypeSyntax elementType, int rank)
+    {
+        var omittedSizes = Enumerable.Range(0, rank)
+            .Select(_ => (SyntaxNodeOrToken)OmittedArraySizeExpression())
+            .Intersperse(Token(SyntaxKind.CommaToken));
+
+        return ArrayType(elementType, SingletonList(ArrayRankSpecifier(SeparatedList<ExpressionSyntax>(omittedSizes))));
+    }
+
+    static ExpressionSyntax GetIntArrayExpression(IEnumerable<ExpressionSyntax> expressions)
+        => ArrayCreationExpression(
+            ArrayType(
+                PredefinedType(Token(SyntaxKind.IntKeyword)),
+                SingletonList(ArrayRankSpecifier(SingletonSeparatedList<ExpressionSyntax>(OmittedArraySizeExpression())))),
+            InitializerExpression(SyntaxKind.ArrayInitializerExpression, SeparatedList<ExpressionSyntax>(expressions)));
+
     public static SyntaxToken GetVisibility(this IVisibilityContext v, SyntaxKind defaultVisibility = SyntaxKind.PrivateKeyword)
     {
         if (v is null) {
@@ -123,4 +211,6 @@ public static class CommonConverter
                 .WithError(TransformError.Create(v, "Unknown visibility"));
         }
     }
+
+    public sealed record ArrayBounds(SubscriptContext Source, ExpressionSyntax LowerBound, ExpressionSyntax UpperBound);
 }

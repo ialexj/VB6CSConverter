@@ -242,25 +242,34 @@ public sealed class ClassTests
         """);
 
     [TestMethod]
-    public void Variables() => ValidateClassMatches(
-        """
-        Private str As String
-        Private int1 As Long, int2 as Long
-        Public arr1() As Long
-        Public arr2(1 to 10) As Long
-        Public arr3(1 To 10, 1 To 20) As Long
-        """,
-        """
-        public static partial class Variables
-        {
-            private static string str;
-            private static int int1;
-            private static int int2;
-            public static int[] arr1;
-            public static int[] arr2 = new int[10 + 1];
-            public static int[, ] arr3 = new int[10 + 1, 20 + 1];
-        }
-        """);
+    public void Variables()
+    {
+        var conversion = VB6ToCSharpConversion.ConvertString(
+            """
+            Private str As String
+            Private int1 As Long, int2 as Long
+            Public arr1() As Long
+            Public arr2(1 to 10) As Long
+            Public arr3(1 To 10, 1 To 20) As Long
+            """,
+            nameof(Variables));
+
+        conversion.ParseErrors.Should().BeEmpty();
+        conversion.SyntaxErrors.Should().BeEmpty();
+        conversion.TransformErrors.Should().ContainSingle(e => e.Message.Contains("Non-zero lower bound on single-dimensional array is not honored"));
+        var generated = conversion.Class.NormalizeWhitespace().ToFullString();
+        generated.Should().Contain("private static string str;");
+        generated.Should().Contain("private static int int1;");
+        generated.Should().Contain("private static int int2;");
+        generated.Should().Contain("public static int[] arr1;");
+        generated.Should().Contain("public static int[] arr2 = // ERROR: Non-zero lower bound on single-dimensional array is not honored");
+        generated.Should().Contain("new int[10 + 1];");
+        generated.Should().Contain("public static int[, ] arr3 = (int[, ])System.Array.CreateInstance(typeof(int), new int[]");
+        generated.Should().Contain("(10) - (1) + 1");
+        generated.Should().Contain("(20) - (1) + 1");
+        generated.Should().Contain("new int[]");
+        generated.Should().Contain("1,");
+    }
 
     [TestMethod]
     public void VariablesAsNew() => ValidateClassMatches(

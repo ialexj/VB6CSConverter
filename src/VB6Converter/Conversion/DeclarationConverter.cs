@@ -64,16 +64,6 @@ public static class DeclarationConverter
                 .Intersperse(Token(SyntaxKind.CommaToken))
                 .ToArray();
 
-            List<string> arrayDimensions = [];
-
-            if (sub.subscripts() is SubscriptsContext subscripts) {
-                foreach (var subscript in subscripts.subscript()) {
-                    var from = GetValue(subscript.valueStmt(0), default);
-                    var to = subscript.valueStmt(1) is ValueStmtContext v ? GetValue(v, default) : null;
-                    arrayDimensions.Add($"{to} + 1");
-                }
-            }
-
             var baseType = sub.asTypeClause().ToTypeSyntax(true, useDynamic);
             var type = isArray
                 ? ArrayType(baseType, SingletonList(ArrayRankSpecifier(SeparatedList<ExpressionSyntax>(omittedExpressions))))
@@ -81,14 +71,8 @@ public static class DeclarationConverter
             bool hasAsNew = sub.asTypeClause()?.NEW() is not null;
 
             var variable = VariableDeclarator(name);
-            if (arrayDimensions.Count > 0) {
-                variable = variable.WithInitializer(EqualsValueClause(
-                    ArrayCreationExpression(((ArrayTypeSyntax)type)
-                        .WithRankSpecifiers(SingletonList(
-                            ArrayRankSpecifier(SeparatedList(arrayDimensions.Select(i => ParseExpression(i)))
-                        ))
-                    ))
-                ));
+            if (sub.subscripts() is SubscriptsContext subscripts) {
+                variable = variable.WithInitializer(EqualsValueClause(GetArrayCreationExpression(baseType, subscripts, default)));
             }
 
             if (hasAsNew) {
