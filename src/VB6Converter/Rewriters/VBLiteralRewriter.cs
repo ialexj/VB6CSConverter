@@ -113,12 +113,16 @@ public class VBLiteralRewriter(string file = null) : LoggedRewriter(file)
     public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
         => Rewrite(node, node => {
             // Skip replacement when the identifier appears in a name/declaration context
-            // (namespace, using directive, qualified name) where only NameSyntax is accepted.
+            // (namespace, using directive, qualified name) or as the member-access `.Name`
+            // (e.g. `obj.vbNormal` referring to a real member, not the VB constant) where
+            // only a SimpleNameSyntax/NameSyntax is accepted.
             if (node.Parent is QualifiedNameSyntax
                 || node.Parent is FileScopedNamespaceDeclarationSyntax
                 || node.Parent is NamespaceDeclarationSyntax
                 || node.Parent is UsingDirectiveSyntax
-                || node.Parent is AliasQualifiedNameSyntax) {
+                || node.Parent is AliasQualifiedNameSyntax
+                || (node.Parent is MemberAccessExpressionSyntax memberAccess
+                    && memberAccess.Name == node)) {
                 return base.VisitIdentifierName(node);
             }
 

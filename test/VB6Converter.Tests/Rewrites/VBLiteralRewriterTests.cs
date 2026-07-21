@@ -132,4 +132,13 @@ public class VBLiteralRewriterTests
     public void VarTypeArray() => ValidateBodyMatches(
         "x = vbArray",
         "x = Microsoft.VisualBasic.Constants.vbArray;");
+
+    // ── Member access whose `.Name` collides with a constant name ───────────
+    // Must NOT be treated as the VB constant, since the rewriter would produce
+    // an invalid MemberAccessExpressionSyntax.Name (a SimpleNameSyntax slot).
+
+    [TestMethod]
+    public void MemberAccessNameNotRewritten() => ValidateBodyMatches(
+        "x = Screen.vbNormal",
+        "x = Screen.vbNormal;");
 }
