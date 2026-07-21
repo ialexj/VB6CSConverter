@@ -1,3 +1,4 @@
+using VB6Converter.Rewriters;
 using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests.Rewrites;
@@ -12,7 +13,7 @@ public class ErrObjectRewriterTests
         """,
         """
         x = Microsoft.VisualBasic.Information.Err().Number;
-        """);
+        """, new ErrRaiseRewriter(), new ErrObjectRewriter());
 
     [TestMethod]
     public void ErrDescription_BecomesInformationErrCall() => ValidateBodyMatches(
@@ -21,7 +22,7 @@ public class ErrObjectRewriterTests
         """,
         """
         x = Microsoft.VisualBasic.Information.Err().Description;
-        """);
+        """, new ErrRaiseRewriter(), new ErrObjectRewriter());
 
     [TestMethod]
     public void ErrSourceHelpFileHelpContext_BecomeInformationErrCalls() => ValidateBodyMatches(
@@ -34,7 +35,7 @@ public class ErrObjectRewriterTests
         a = Microsoft.VisualBasic.Information.Err().Source;
         b = Microsoft.VisualBasic.Information.Err().HelpFile;
         c = Microsoft.VisualBasic.Information.Err().HelpContext;
-        """);
+        """, new ErrRaiseRewriter(), new ErrObjectRewriter());
 
     [TestMethod]
     public void ErrClear_BecomesInformationErrCall() => ValidateBodyMatches(
@@ -43,7 +44,7 @@ public class ErrObjectRewriterTests
         """,
         """
         Microsoft.VisualBasic.Information.Err().Clear();
-        """);
+        """, new ErrRaiseRewriter(), new ErrObjectRewriter());
 
     [TestMethod]
     public void BareErl_BecomesInformationErlCall() => ValidateBodyMatches(
@@ -52,7 +53,7 @@ public class ErrObjectRewriterTests
         """,
         """
         x = Microsoft.VisualBasic.Information.Erl();
-        """);
+        """, new ErrRaiseRewriter(), new ErrObjectRewriter());
 
     [TestMethod]
     public void ErlInConcatenation_BecomesInformationErlCall() => ValidateBodyMatches(
@@ -61,7 +62,7 @@ public class ErrObjectRewriterTests
         """,
         """
         x = "Line: " + Microsoft.VisualBasic.Information.Erl();
-        """);
+        """, new ErrRaiseRewriter(), new ErrObjectRewriter());
 
     [TestMethod]
     public void ErrRaiseCanonicalReRaise_StillCollapsesToThrow() => ValidateBodyMatches(
@@ -80,7 +81,7 @@ public class ErrObjectRewriterTests
         {
             throw;
         }
-        """);
+        """, new ErrRaiseRewriter(), new ErrObjectRewriter());
 
     [TestMethod]
     public void ErrRaiseAsNonStatementExpression_BecomesInformationErrCall() => ValidateBodyMatches(
@@ -89,5 +90,5 @@ public class ErrObjectRewriterTests
         """,
         """
         y = LogAndRaise(Microsoft.VisualBasic.Information.Err().Raise(11, "mod.proc", "boom"));
-        """);
+        """, new ErrRaiseRewriter(), new ErrObjectRewriter());
 }

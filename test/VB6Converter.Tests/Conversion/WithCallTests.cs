@@ -189,5 +189,8 @@ public class WithCallTests
             Set .b.c = x
         End With
         """,
-        "a.b.c = x;");
+        """
+        // Set
+        a.b.c = x;
+        """);
 }

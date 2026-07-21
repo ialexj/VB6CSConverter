@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using System.IO;
+using VB6Converter.Rewriters;
 using static VB6Converter.Tests.Validations;
 using VB6Parser;
 
@@ -16,7 +17,7 @@ public class FunctionsTests
         """,
         """
         x = (a ? b : c);
-        """);
+        """, new VBCoreRewriter());
 
     [TestMethod]
     public void Array() => ValidateBodyMatches(
@@ -30,7 +31,7 @@ public class FunctionsTests
             "b",
             "c"
         };
-        """);
+        """, new VBCoreRewriter());
 
     [TestMethod]
     public void Asc() => ValidateBodyMatches(
@@ -39,7 +40,7 @@ public class FunctionsTests
         """,
         """
         x = 'a';
-        """);
+        """, new VBCoreRewriter());
 
     [TestMethod]
     public void ArrayParameters() => ValidateMemberMatches(

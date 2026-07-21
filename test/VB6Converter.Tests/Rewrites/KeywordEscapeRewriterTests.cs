@@ -1,3 +1,4 @@
+using VB6Converter.Rewriters;
 using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests.Rewrites;
@@ -10,7 +11,7 @@ public class KeywordEscapeRewriterTests
     [TestMethod]
     public void LocalVariable_KeywordName_Escaped() => ValidateBodyMatches(
         "Dim default As String",
-        "string @default = default;");
+        "string @default = default;", new KeywordEscapeRewriter());
 
     [TestMethod]
     public void LocalVariable_KeywordName_UsageEscaped() => ValidateBodyMatches(
@@ -21,12 +22,12 @@ public class KeywordEscapeRewriterTests
         """
         string @default = default;
         @default = "foo";
-        """);
+        """, new KeywordEscapeRewriter());
 
     [TestMethod]
     public void LocalVariable_NonKeyword_Unchanged() => ValidateBodyMatches(
         "Dim myVar As String",
-        "string myVar = default;");
+        "string myVar = default;", new KeywordEscapeRewriter());
 
     // ── Parameters ────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ public class KeywordEscapeRewriterTests
         public static void Test(string @default)
         {
         }
-        """);
+        """, new KeywordEscapeRewriter());
 
     [TestMethod]
     public void Parameter_KeywordName_BodyUsageEscaped() => ValidateMemberMatches(
@@ -56,7 +57,7 @@ public class KeywordEscapeRewriterTests
             string x = default;
             x = @default;
         }
-        """);
+        """, new KeywordEscapeRewriter());
 
     [TestMethod]
     public void Parameter_NonKeyword_Unchanged() => ValidateMemberMatches(
@@ -68,7 +69,7 @@ public class KeywordEscapeRewriterTests
         public static void Test(string value)
         {
         }
-        """);
+        """, new KeywordEscapeRewriter());
 
     // ── Multiple keywords ─────────────────────────────────────────────────────
 
@@ -82,7 +83,7 @@ public class KeywordEscapeRewriterTests
         public static void Test(string @default, int @namespace)
         {
         }
-        """);
+        """, new KeywordEscapeRewriter());
 
     [TestMethod]
     public void ThisReceiver_IsNotEscaped() => ValidateBodyMatches(
@@ -98,5 +99,5 @@ public class KeywordEscapeRewriterTests
         {
             oUtils.ModificarValor(mskPrescricaoO(this.ActiveControl.Index));
         }
-        """);
+        """, new KeywordEscapeRewriter());
 }

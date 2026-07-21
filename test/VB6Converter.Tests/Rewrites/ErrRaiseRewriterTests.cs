@@ -1,3 +1,4 @@
+using VB6Converter.Rewriters;
 using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests;
@@ -19,7 +20,7 @@ public class ErrRaiseRewriterTests
                 ["Source"] = "clsDocClienteHeader.VendasCarrega"
             }
         };
-        """);
+        """, new ErrRaiseRewriter());
 
     [TestMethod]
     public void ErrRaise_MapsHelpFieldsWhenProvided() => ValidateBodyMatches(
@@ -37,7 +38,7 @@ public class ErrRaiseRewriterTests
                 ["HelpContext"] = 42
             }
         };
-        """);
+        """, new ErrRaiseRewriter());
 
     [TestMethod]
     public void ErrRaise_WithoutDescription_UsesEmptyString() => ValidateBodyMatches(
@@ -53,7 +54,7 @@ public class ErrRaiseRewriterTests
                 ["Source"] = "mod.proc"
             }
         };
-        """);
+        """, new ErrRaiseRewriter());
 
     [TestMethod]
     public void ErrRaise_WithCanonicalErrArguments_BecomesThrow() => ValidateBodyMatches(
@@ -72,5 +73,5 @@ public class ErrRaiseRewriterTests
         {
             throw;
         }
-        """);
+        """, new ErrRaiseRewriter());
 }

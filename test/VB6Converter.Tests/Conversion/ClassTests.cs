@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
+using VB6Converter.Rewriters;
 using static VB6Converter.Tests.Validations;
 using VB6Parser;
 
@@ -281,7 +282,7 @@ public sealed class ClassTests
         {
             private static Microsoft.VisualBasic.Collection col = new();
         }
-        """);
+        """, new VBCoreRewriter());
 
     [TestMethod]
     public void Event() => ValidateClassMatches(

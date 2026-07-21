@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 using System.Text;
+using VB6Converter.Rewriters;
 using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests.Conversion;
@@ -419,7 +420,7 @@ public class IOTests
             """
             Dim x As Boolean
             x = EOF(1)
-            """);
+            """, rewriter: new VBCoreRewriter());
 
         var body = GetBodyText(conversion);
         body.Should().Contain("Microsoft.VisualBasic.FileSystem.EOF");
@@ -432,7 +433,7 @@ public class IOTests
             """
             Dim x As Long
             x = LOF(1)
-            """);
+            """, rewriter: new VBCoreRewriter());
 
         var body = GetBodyText(conversion);
         body.Should().Contain("Microsoft.VisualBasic.FileSystem.LOF");
@@ -445,7 +446,7 @@ public class IOTests
             """
             Dim f As Integer
             f = FreeFile()
-            """);
+            """, rewriter: new VBCoreRewriter());
 
         var body = GetBodyText(conversion);
         body.Should().Contain("Microsoft.VisualBasic.FileSystem.FreeFile");
@@ -458,7 +459,7 @@ public class IOTests
             """
             Dim s As String
             s = Dir("C:\*.*")
-            """);
+            """, rewriter: new VBCoreRewriter());
 
         var body = GetBodyText(conversion);
         body.Should().Contain("Microsoft.VisualBasic.FileSystem.Dir");
@@ -471,13 +472,13 @@ public class IOTests
             """
             Dim pos As Long
             pos = Seek(1)
-            """);
+            """, rewriter: new VBCoreRewriter());
 
         var body = GetBodyText(conversion);
         body.Should().Contain("Microsoft.VisualBasic.FileSystem.Seek");
     }
 
-    static VB6ToCSharpConversion ConvertBody(string vb, string? name = null)
+    static VB6ToCSharpConversion ConvertBody(string vb, string? name = null, LoggedRewriter rewriter = null)
     {
         var wrapper = $"""
         Sub Test()
@@ -488,6 +489,11 @@ public class IOTests
         var conversion = VB6ToCSharpConversion.ConvertString(wrapper, name ?? nameof(IOTests));
         conversion.ParseErrors.Should().BeEmpty();
         conversion.SyntaxErrors.Should().BeEmpty();
+
+        if (rewriter is not null) {
+            conversion = conversion with { CompilationUnit = (CompilationUnitSyntax)rewriter.Visit(conversion.CompilationUnit) };
+        }
+
         return conversion;
     }
 

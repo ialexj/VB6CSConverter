@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 using System.Text;
 using VB6Converter.Conversion;
+using VB6Converter.Rewriters;
 using static VB6Converter.Tests.Validations;
 
 namespace VB6Converter.Tests.Conversion;
@@ -83,7 +84,7 @@ public class StatementTests
         """,
         """
         Microsoft.VisualBasic.Collection col = new();
-        """);
+        """, new VBCoreRewriter());
 
     [TestMethod]
     public void ExitSubBecomesReturn() => ValidateBodyMatches(
