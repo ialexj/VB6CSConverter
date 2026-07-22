@@ -16,7 +16,7 @@ public class WithCallTests
         With obj
             .MyFunction 1, 2, 3, a:= 4
             Call .MyFunction(1, 2, 3, a:= 4)
-        End With 
+        End With
         """,
         """
         {
@@ -31,7 +31,7 @@ public class WithCallTests
         With one.two
             .MyFunction 1, 2, 3, a:= 4
             Call .MyFunction(1, 2, 3, a:= 4)
-        End With 
+        End With
         """,
         """
         {

@@ -325,6 +325,7 @@ public static class Program
                 await RunRewriter("Casting Enums to Numbers", async (t, sm) => new EnumToNumberCastRewriter(sm));
                 await RunRewriter("Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
                 await RunRewriter("Applying Type Conversions", async (t, sm) => new TypeConversionRewriter(sm));
+                await RunRewriter("Converting non-constant const fields to static readonly", async (t, sm) => new ConstFieldRewriter(sm));
 
                 await RunRewriter("Rewriting bitwise Or/And", async (t, sm) => new BitwiseOrRewriter(sm));
                 await RunRewriter("Rewriting DateTime arithmetic", async (t, sm) => new DateTimeArithmeticRewriter(sm));
