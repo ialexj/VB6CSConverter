@@ -193,4 +193,16 @@ public class WithCallTests
         // Set
         a.b.c = x;
         """);
+
+    [TestMethod]
+    public void NestedWithUsesOuterReceiver() => ValidateBodyMatches(
+        """
+        With A
+            With .B
+                .C = "Test"
+            End With
+        End With
+        """,
+        "A.B.C = \"Test\";"
+    );
 }

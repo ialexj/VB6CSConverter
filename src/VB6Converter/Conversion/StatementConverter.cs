@@ -198,7 +198,7 @@ public static class StatementConverter
     public static StatementSyntax GetWith(WithStmtContext with, CallContext ctx)
     {
         using var _ = new TraceMethod(with);
-        return GetBlock(with.block(), new CallContext(with.implicitCallStmt_InStmt(), ctx.Options), true);
+        return GetBlock(with.block(), ctx.PushWith(with.implicitCallStmt_InStmt()), true);
     }
 
     public static ExpressionStatementSyntax GetCall(ICallContext call, CallContext ctx)

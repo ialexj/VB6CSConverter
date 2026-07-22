@@ -50,7 +50,7 @@ public static class ValueConverter
 
         var segments = call.segments().ToArray();
         if (call.IsPartial && ctx.With is not null) {
-            segments = ctx.With.segments().Concat(segments).ToArray();
+            segments = ctx.WithStack.SelectMany(with => with.segments()).Concat(segments).ToArray();
         }
 
         ExpressionSyntax expr = null;

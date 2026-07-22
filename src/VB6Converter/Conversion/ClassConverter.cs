@@ -505,7 +505,7 @@ public static class ClassConverter
 
         var type = CommonConverter.ToTypeSyntax(methodCtx.asTypeClause(), methodCtx.IsFunction, ctx.UseDynamic);
         var name = GetIdentifier(methodCtx.ambiguousIdentifier());
-        var body = StatementConverter.GetBlock(methodCtx.block(), new CallContext(null, ctx.Options));
+        var body = StatementConverter.GetBlock(methodCtx.block(), new CallContext(ctx.Options));
 
         MemberDeclarationSyntax method;
         if (name.Text == "Class_Initialize") {
@@ -535,7 +535,7 @@ public static class ClassConverter
 
         var type = ctx.UseDynamic ? (TypeSyntax)IdentifierName("dynamic") : PredefinedType(Token(SyntaxKind.ObjectKeyword));
         var name = GetIdentifier(propCtx.ambiguousIdentifier());
-        var body = StatementConverter.GetBlock(propCtx.block(), new CallContext(null, ctx.Options));
+        var body = StatementConverter.GetBlock(propCtx.block(), new CallContext(ctx.Options));
         var parameters = GetMethodParameters(propCtx.argList(), ctx.UseDynamic);
 
         // Multi-value (parameterized) property: no direct C# equivalent, emit as methods.
