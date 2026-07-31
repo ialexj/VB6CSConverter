@@ -24,6 +24,9 @@ public class TypeCastRewriter(SemanticModel semantics) : LoggedRewriter
                 if (TryGetEnumValueCastTarget(rightType.Type, leftType.Type, node.Right, out var enumCastType)) {
                     return node.WithRight(ApplyCast(node.Right, enumCastType));
                 }
+                if (TryGetEnumValueCastTarget(leftType.Type, rightType.Type, node.Left, out var leftEnumCastType)) {
+                    return node.WithLeft(ApplyCast(node.Left, leftEnumCastType));
+                }
             }
 
             return base.VisitAssignmentExpression(node);
@@ -44,7 +47,7 @@ public class TypeCastRewriter(SemanticModel semantics) : LoggedRewriter
 
             if (leftType.Type?.SpecialType == SpecialType.System_Object
                 && rightType.Type?.SpecialType != SpecialType.System_Object) {
-                
+
                 return node.WithLeft(ApplyCast(node.Left, rightType.Type));
             }
             else if (leftType.Type?.SpecialType != SpecialType.System_Object
@@ -55,7 +58,6 @@ public class TypeCastRewriter(SemanticModel semantics) : LoggedRewriter
             if (TryGetEnumValueCastTarget(rightType.Type, leftType.Type, node.Right, out var rightEnumCastType)) {
                 return node.WithRight(ApplyCast(node.Right, rightEnumCastType));
             }
-
             if (TryGetEnumValueCastTarget(leftType.Type, rightType.Type, node.Left, out var leftEnumCastType)) {
                 return node.WithLeft(ApplyCast(node.Left, leftEnumCastType));
             }
@@ -127,7 +129,7 @@ public class TypeCastRewriter(SemanticModel semantics) : LoggedRewriter
         }
 
         expression = (ExpressionSyntax)Visit(expression);
-        
+
         if (expression is InvocationExpressionSyntax or MemberAccessExpressionSyntax or ElementAccessExpressionSyntax or NameSyntax) {
             return CastExpression(typeSyntax, expression);
         }

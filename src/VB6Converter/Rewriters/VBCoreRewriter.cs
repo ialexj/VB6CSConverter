@@ -19,47 +19,105 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         "FreeFile", "Command",
     };
 
-    public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
-        => Rewrite(node, node => {
-            if ((node.Parent is MemberAccessExpressionSyntax memberAccess
-                    && memberAccess.Name == node)
-                || node.Parent is QualifiedNameSyntax) {
-                // Member/qualified-name positions are type or namespace references (e.g. the
-                // "Timer" in `VB.Timer`, or a control/type field of that name), not value
-                // expressions. Rewriting them to a MemberAccessExpressionSyntax here would
-                // produce an invalid SimpleNameSyntax slot and crash the base rewriter.
-                return base.VisitIdentifierName(node);
-            }
+    static LiteralExpressionSyntax Lit(object value) => (value switch {
+        string s => LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(s)),
+        char c => LiteralExpression(SyntaxKind.CharacterLiteralExpression, Literal(c)),
+        int i => LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(i)),
+        _ => throw new NotSupportedException()
+    }).WithAdditionalAnnotations(new SyntaxAnnotation("Literal"));
 
-            if (node.Identifier.Text == "Collection" && node.IsTypeUsage()) {
-                return ParseName("Microsoft.VisualBasic.Collection");
-            }
+    static LiteralExpressionSyntax Lit(object value, string comment)
+        => Lit(value).WithTrailingTrivia(TriviaList(Comment($"/* {comment} */")));
 
-            switch (node.Identifier.Text) {
-                case "Now":     return ParseExpression("System.DateTime.Now");
-                case "Date":    return ParseExpression("System.DateTime.Now.Date");
-                case "Time":    return ParseExpression("System.DateTime.Now.TimeOfDay");
-                case "DateStr": return ParseExpression("Microsoft.VisualBasic.DateAndTime.DateString");
-                case "TimeStr": return ParseExpression("Microsoft.VisualBasic.DateAndTime.TimeString");
-                case "Timer":   return ParseExpression("Microsoft.VisualBasic.DateAndTime.Timer");
-            }
+    static MemberAccessExpressionSyntax MicrosoftVisualBasic(string typeName, string memberName)
+        => MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+            IdentifierName($"Microsoft.VisualBasic.{typeName}"),
+            IdentifierName(memberName));
 
-            // A handful of VB6 runtime functions (FreeFile, Command, ...) are commonly called
-            // without parentheses when used as an expression value. When this identifier isn't
-            // already the target of an explicit invocation (VisitInvocationExpression handles
-            // that case), synthesize a zero-argument call for those.
-            bool isInvocationTarget = node.Parent is InvocationExpressionSyntax invocation && invocation.Expression == node;
-            if (!isInvocationTarget
-                && _zeroArgFuncs.Contains(node.Identifier.Text)
-                && _funcs.TryGetValue(node.Identifier.Text, out var converter)) {
-                var call = converter(InvocationExpression(node, ArgumentList()));
-                if (call?.IsEquivalentTo(node) == false) {
-                    return Visit(call);
-                }
-            }
+    static readonly Dictionary<string, ExpressionSyntax> _literals = new(StringComparer.InvariantCultureIgnoreCase) {
+        // String / char constants
+        ["vbNullString"] = Lit(string.Empty),
+        ["vbNullChar"]   = Lit('\0'),
+        ["vbCr"]         = Lit('\r'),
+        ["vbLf"]         = Lit('\n'),
+        ["vbCrLf"]       = Lit("\r\n"),
+        ["vbFormFeed"]   = Lit('\f'),
+        ["vbBack"]       = Lit('\b'),
+        ["vbTab"]        = Lit('\t'),
 
-            return base.VisitIdentifierName(node);
-        });
+        // Color constants (OLE COLORREF BGR integers — no typed .NET equivalent)
+        ["vbBlack"]   = Lit(0x000000, "vbBlack"),
+        ["vbRed"]     = Lit(0x0000FF, "vbRed"),
+        ["vbGreen"]   = Lit(0x00FF00, "vbGreen"),
+        ["vbYellow"]  = Lit(0x00FFFF, "vbYellow"),
+        ["vbBlue"]    = Lit(0xFF0000, "vbBlue"),
+        ["vbMagenta"] = Lit(0xFF00FF, "vbMagenta"),
+        ["vbCyan"]    = Lit(0xFFFF00, "vbCyan"),
+        ["vbWhite"]   = Lit(0xFFFFFF, "vbWhite"),
+
+        // Day of week — FirstDayOfWeek enum
+        ["vbSunday"]    = MicrosoftVisualBasic("FirstDayOfWeek", "Sunday"),
+        ["vbMonday"]    = MicrosoftVisualBasic("FirstDayOfWeek", "Monday"),
+        ["vbTuesday"]   = MicrosoftVisualBasic("FirstDayOfWeek", "Tuesday"),
+        ["vbWednesday"] = MicrosoftVisualBasic("FirstDayOfWeek", "Wednesday"),
+        ["vbThursday"]  = MicrosoftVisualBasic("FirstDayOfWeek", "Thursday"),
+        ["vbFriday"]    = MicrosoftVisualBasic("FirstDayOfWeek", "Friday"),
+        ["vbSaturday"]  = MicrosoftVisualBasic("FirstDayOfWeek", "Saturday"),
+
+        // Tristate — TriState enum
+        ["vbUseDefault"] = MicrosoftVisualBasic("TriState", "UseDefault"),
+        ["vbTrue"]       = MicrosoftVisualBasic("TriState", "True"),
+        ["vbFalse"]      = MicrosoftVisualBasic("TriState", "False"),
+
+        // String comparison — CompareMethod enum
+        ["vbBinaryCompare"]   = MicrosoftVisualBasic("CompareMethod", "Binary"),
+        ["vbTextCompare"]     = MicrosoftVisualBasic("CompareMethod", "Text"),
+        ["vbDatabaseCompare"] = Lit(2, "vbDatabaseCompare"), // no .NET equivalent
+
+        // String conversion — VbStrConv enum
+        ["vbUpperCase"]    = MicrosoftVisualBasic("VbStrConv", "UpperCase"),
+        ["vbLowerCase"]    = MicrosoftVisualBasic("VbStrConv", "LowerCase"),
+        ["vbProperCase"]   = MicrosoftVisualBasic("VbStrConv", "ProperCase"),
+        ["vbWide"]         = MicrosoftVisualBasic("VbStrConv", "Wide"),
+        ["vbNarrow"]       = MicrosoftVisualBasic("VbStrConv", "Narrow"),
+        ["vbKatakana"]     = MicrosoftVisualBasic("VbStrConv", "Katakana"),
+        ["vbHiragana"]     = MicrosoftVisualBasic("VbStrConv", "Hiragana"),
+        ["vbUnicode"]      = MicrosoftVisualBasic("VbStrConv", "Unicode"),
+        ["vbFromUnicode"]  = MicrosoftVisualBasic("VbStrConv", "FromUnicode"),
+
+        // Date format — DateFormat enum
+        ["vbGeneralDate"] = MicrosoftVisualBasic("DateFormat", "GeneralDate"),
+        ["vbLongDate"]    = MicrosoftVisualBasic("DateFormat", "LongDate"),
+        ["vbShortDate"]   = MicrosoftVisualBasic("DateFormat", "ShortDate"),
+        ["vbLongTime"]    = MicrosoftVisualBasic("DateFormat", "LongTime"),
+        ["vbShortTime"]   = MicrosoftVisualBasic("DateFormat", "ShortTime"),
+
+        // File / directory attributes — FileAttribute enum
+        ["vbNormal"]    = MicrosoftVisualBasic("FileAttribute", "Normal"),
+        ["vbReadOnly"]  = MicrosoftVisualBasic("FileAttribute", "ReadOnly"),
+        ["vbHidden"]    = MicrosoftVisualBasic("FileAttribute", "Hidden"),
+        ["vbSystem"]    = MicrosoftVisualBasic("FileAttribute", "System"),
+        ["vbVolume"]    = MicrosoftVisualBasic("FileAttribute", "Volume"),
+        ["vbDirectory"] = MicrosoftVisualBasic("FileAttribute", "Directory"),
+        ["vbArchive"]   = MicrosoftVisualBasic("FileAttribute", "Archive"),
+        ["vbAlias"]     = MicrosoftVisualBasic("FileAttribute", "Alias"),
+
+        // Shell window style — AppWinStyle enum
+        ["vbHide"]             = MicrosoftVisualBasic("AppWinStyle", "Hide"),
+        ["vbNormalFocus"]      = MicrosoftVisualBasic("AppWinStyle", "NormalFocus"),
+        ["vbMinimizedFocus"]   = MicrosoftVisualBasic("AppWinStyle", "MinimizedFocus"),
+        ["vbMaximizedFocus"]   = MicrosoftVisualBasic("AppWinStyle", "MaximizedFocus"),
+        ["vbNormalNoFocus"]    = MicrosoftVisualBasic("AppWinStyle", "NormalNoFocus"),
+        ["vbMinimizedNoFocus"] = MicrosoftVisualBasic("AppWinStyle", "MinimizedNoFocus"),
+
+        // Not a constant in Microsoft.VisualBasic.Constants
+        ["vbDataObject"] = Lit(13, "vbDataObject"),
+    };
+
+    static readonly Dictionary<string, MemberAccessExpressionSyntax> _constants =
+        typeof(Microsoft.VisualBasic.Constants).GetFields()
+            .ToDictionary(f => f.Name, f => MicrosoftVisualBasic("Constants", f.Name));
 
     static readonly Dictionary<string, Func<InvocationExpressionSyntax, SyntaxNode>> _funcs = new(StringComparer.OrdinalIgnoreCase) {
         ["Array"] = ConvertArray,
@@ -168,6 +226,79 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
         ["AppActivate"]  = node => InvocationExpression(ParseExpression("Microsoft.VisualBasic.Interaction.AppActivate"),  node.ArgumentList),
     };
 
+    public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
+        => Rewrite(node, node => {
+            // Skip replacement when the identifier appears in a name/declaration context
+            // (namespace, using directive, qualified name) or as the member-access `.Name`
+            // (e.g. `obj.vbNormal` referring to a real member, not the VB constant) where
+            // only a SimpleNameSyntax/NameSyntax is accepted.
+            if (node.Parent is QualifiedNameSyntax
+                || node.Parent is FileScopedNamespaceDeclarationSyntax
+                || node.Parent is NamespaceDeclarationSyntax
+                || node.Parent is UsingDirectiveSyntax
+                || node.Parent is AliasQualifiedNameSyntax
+                || (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node)) {
+                return base.VisitIdentifierName(node);
+            }
+
+            if (_literals.TryGetValue(node.Identifier.Text, out var literal)) {
+                return literal;
+            }
+
+            if (_constants.TryGetValue(node.Identifier.Text, out var constant)) {
+                return constant;
+            }
+
+            if (node.Identifier.Text == "Collection" && node.IsTypeUsage()) {
+                return ParseName("Microsoft.VisualBasic.Collection");
+            }
+
+            switch (node.Identifier.Text) {
+                case "Now":     return ParseExpression("System.DateTime.Now");
+                case "Date":    return ParseExpression("System.DateTime.Now.Date");
+                case "Time":    return ParseExpression("System.DateTime.Now.TimeOfDay");
+                case "DateStr": return ParseExpression("Microsoft.VisualBasic.DateAndTime.DateString");
+                case "TimeStr": return ParseExpression("Microsoft.VisualBasic.DateAndTime.TimeString");
+                case "Timer":   return ParseExpression("Microsoft.VisualBasic.DateAndTime.Timer");
+            }
+
+            // A handful of VB6 runtime functions (FreeFile, Command, ...) are commonly called
+            // without parentheses when used as an expression value. When this identifier isn't
+            // already the target of an explicit invocation (VisitInvocationExpression handles
+            // that case), synthesize a zero-argument call for those.
+            bool isInvocationTarget = node.Parent is InvocationExpressionSyntax invocation && invocation.Expression == node;
+            if (!isInvocationTarget
+                && _zeroArgFuncs.Contains(node.Identifier.Text)
+                && _funcs.TryGetValue(node.Identifier.Text, out var converter)) {
+                var call = converter(InvocationExpression(node, ArgumentList()));
+                if (call?.IsEquivalentTo(node) == false) {
+                    return Visit(call);
+                }
+            }
+
+            return base.VisitIdentifierName(node);
+        });
+
+    public override SyntaxNode VisitVariableDeclaration(VariableDeclarationSyntax node)
+        => Rewrite(node, node => {
+            var result = (VariableDeclarationSyntax)base.VisitVariableDeclaration(node);
+
+            var literals = result.GetAnnotatedNodes("Literal");
+            if (literals.FirstOrDefault() is LiteralExpressionSyntax lit) {
+                if (lit.IsKind(SyntaxKind.StringLiteralExpression)) {
+                    return result.WithType(PredefinedType(Token(SyntaxKind.StringKeyword)));
+                }
+                else if (lit.IsKind(SyntaxKind.CharacterLiteralExpression)) {
+                    return result.WithType(PredefinedType(Token(SyntaxKind.CharKeyword)));
+                }
+                else if (lit.IsKind(SyntaxKind.NumericLiteralExpression)) {
+                    return result.WithType(PredefinedType(Token(SyntaxKind.IntKeyword)));
+                }
+            }
+
+            return result;
+        });
+
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
         => Rewrite(node, node => {
             SyntaxNode newSyntax = node;
@@ -191,24 +322,6 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
             }
         });
 
-    static SyntaxNode ConvertStr(InvocationExpressionSyntax node)
-    {
-        var arg = node.ArgumentList.Arguments[0].Expression;
-        return InvocationExpression(
-            MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression,
-                ParenthesizedExpression(arg), IdentifierName("ToString")),
-            ArgumentList());
-    }
-
-    static SyntaxNode ConvertIsMissing(InvocationExpressionSyntax node)
-    {
-        var arg = node.ArgumentList.Arguments[0].Expression;
-        return ParenthesizedExpression(
-            BinaryExpression(SyntaxKind.EqualsExpression, arg,
-                LiteralExpression(SyntaxKind.DefaultLiteralExpression)));
-    }
-
     public override SyntaxNode VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
     {
         var result = base.VisitPrefixUnaryExpression(node);
@@ -227,6 +340,25 @@ public class VBCoreRewriter(string file = null) : LoggedRewriter(file)
             }
         }
         return result;
+    }
+
+
+    static SyntaxNode ConvertStr(InvocationExpressionSyntax node)
+    {
+        var arg = node.ArgumentList.Arguments[0].Expression;
+        return InvocationExpression(
+            MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                ParenthesizedExpression(arg), IdentifierName("ToString")),
+            ArgumentList());
+    }
+
+    static SyntaxNode ConvertIsMissing(InvocationExpressionSyntax node)
+    {
+        var arg = node.ArgumentList.Arguments[0].Expression;
+        return ParenthesizedExpression(
+            BinaryExpression(SyntaxKind.EqualsExpression, arg,
+                LiteralExpression(SyntaxKind.DefaultLiteralExpression)));
     }
 
     static SyntaxNode ConvertChr(InvocationExpressionSyntax node)

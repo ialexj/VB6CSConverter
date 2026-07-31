@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace VB6Parser;
 
-internal static partial class Preprocessor
+public static partial class Preprocessor
 {
     [GeneratedRegex(@"^(.+)\s*('.*)$")]
     private static partial Regex TrailingComments();
@@ -49,7 +49,7 @@ internal static partial class Preprocessor
                 }
 
                 // Put all comments on own line
-                if (SplitComment(line) is (string code, string comment) 
+                if (SplitComment(line) is (string code, string comment)
                     && !string.IsNullOrWhiteSpace(code) && !string.IsNullOrEmpty(comment)) {
                     sb.Append(new string([.. code.TakeWhile(c => c == ' ' || c == '\t')]));
                     sb.AppendLine(comment);
@@ -61,7 +61,7 @@ internal static partial class Preprocessor
                     sb.AppendLine(m.Groups[1].Value);
                     line = "        " + m.Groups[2].Value.TrimEnd();
                 }
-            
+
                 if (StatementThatLooksLikeLabel().IsMatch(line) && !line.Contains("Case ")) {
                     line = line.TrimEnd(':');
                 }

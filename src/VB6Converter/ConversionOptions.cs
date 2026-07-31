@@ -13,4 +13,9 @@ public record ConversionOptions
     /// Pass <c>--use-object</c> on the command line to disable.
     /// </summary>
     public bool UseDynamic { get; init; } = true;
+
+    /// <summary>
+    /// When true (default), the pre-processed VB6 source is written back to the original file.
+    /// </summary>
+    public bool WritePreprocessedSource { get; init; } = true;
 }

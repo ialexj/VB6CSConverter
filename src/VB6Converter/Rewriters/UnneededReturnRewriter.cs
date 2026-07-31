@@ -11,9 +11,9 @@ namespace VB6Converter.Rewriters;
 /// - Removes break after throw/goto/return
 /// This intentionally does not perform general reachability analysis.
 /// </summary>
-public class UnneededReturnRewriter : LoggedRewriter
+public class UnneededReturnRewriter(string file) : LoggedRewriter(file)
 {
-    public static readonly UnneededReturnRewriter Default = new();
+    public static readonly UnneededReturnRewriter Default = new("default");
 
     public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         => Rewrite(node, node => {

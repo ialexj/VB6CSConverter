@@ -9,7 +9,7 @@ using static VB6Parser.VisualBasic6Parser;
 namespace VB6Converter;
 
 [DebuggerDisplay("{Name}")]
-public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
+public class ConversionTarget(VisualBasicProjectFile file, string outputPath, string rootPath)
 {
     public VisualBasicProjectFile File { get; } = file ?? throw new ArgumentNullException(nameof(file));
 
@@ -23,12 +23,14 @@ public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
 
     public bool HasErrors => System.IO.File.Exists($"{OutputPath}.log");
 
+    public string SourceRelativePath => Path.GetRelativePath(rootPath, File.Path).Replace('\\', '/');
+
     public string DesignerOutputPath => Path.Combine(
         Path.GetDirectoryName(OutputPath)!,
         Path.GetFileNameWithoutExtension(OutputPath) + ".designer.cs");
 
-    public static ConversionTarget CreateForSplit(string name, string outputPath)
-        => new ConversionTarget(new VisualBasicProjectFile(outputPath, name, VisualBasicFileType.Module), outputPath);
+    public static ConversionTarget CreateForSplit(string name, string outputPath, string rootPath)
+        => new ConversionTarget(new VisualBasicProjectFile(outputPath, name, VisualBasicFileType.Module), outputPath, rootPath);
 
     public static ConversionTarget Create(VisualBasicProjectFile file, string outDir, string rootPath)
     {
@@ -41,10 +43,10 @@ public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
             || relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
 
         if (isOutsideRoot)
-            return new ConversionTarget(file, Path.Combine(outDir, $"{file.Name}.cs"));
+            return new ConversionTarget(file, Path.Combine(outDir, $"{file.Name}.cs"), rootPath);
 
         var outputRelativePath = Path.ChangeExtension(relativePath, ".cs");
-        return new ConversionTarget(file, Path.Combine(outDir, outputRelativePath));
+        return new ConversionTarget(file, Path.Combine(outDir, outputRelativePath), rootPath);
     }
 
     public static IEnumerable<ConversionTarget> CreateAll(VisualBasicProjectFile file, string outDir, string rootPath)
@@ -54,7 +56,7 @@ public class ConversionTarget(VisualBasicProjectFile file, string outputPath)
         var relativePath = Path.GetRelativePath(rootPath, file.Path);
         var outputRelativePath = Path.ChangeExtension(relativePath, ".designer.cs");
         if (System.IO.File.Exists(Path.Combine(outDir, outputRelativePath))) {
-            yield return new ConversionTarget(file, Path.Combine(outDir, outputRelativePath));
+            yield return new ConversionTarget(file, Path.Combine(outDir, outputRelativePath), rootPath);
         }
     }
 }

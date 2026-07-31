@@ -22,7 +22,7 @@ namespace VB6Converter;
 
 public static class Program
 {
-    public class CommandLineOptions
+    public class ConverterOptions
     {
         public string Project { get; set; } = null!;
         public string OutputDir { get; set; } = null!;
@@ -30,6 +30,7 @@ public static class Program
         public string[] Update { get; set; } = [];
         public string[] Filter { get; set; } = [];
         public bool Show { get; set; }
+        public bool SkipCleanSource { get; set; }
         public bool SkipReferenceStubs { get; set; }
         public bool SkipTransform { get; set; }
         public bool SkipFixup { get; set; }
@@ -39,9 +40,17 @@ public static class Program
         public bool Pause { get; set; }
         public bool Verbose { get; set; }
         public bool Git { get; set; }
+        public string DiagnosticsPath { get; set; }
+
     }
 
     public static Task<int> Main(string[] args)
+    {
+        var rootCommand = GetRootCommand();
+        return rootCommand.Parse(args).InvokeAsync();
+    }
+
+    static RootCommand GetRootCommand()
     {
         var projectOpt = new Option<string>("--project", ["-p"]) {
             Description = "Path to the VB6 project file.",
@@ -90,8 +99,15 @@ public static class Program
         var gitOpt = new Option<bool>("--git", []) {
             Description = "Commit to git after each rewriter pass. The output directory must already be a git repository.",
         };
+        var skipCleanOpt = new Option<bool>("--skip-clean-source", []) {
+            Description = "Does not persist the preprocessed source back to the input file. Doing so may break source backreferences.",
+        };
+        var diagnosticsPathOpt = new Option<string>("--diagnostics-path", []) {
+            Description = "Path for the diagnostics report file. Defaults to _Diagnostics.txt in the output directory.",
+        };
 
-        var rootCommand = new RootCommand("Convert VB6 projects to C#.") {
+        var rootCommand = new RootCommand("Convert VB6 projects to C#.")
+        {
             projectOpt,
             outputOpt,
             updateOpt,
@@ -106,17 +122,21 @@ public static class Program
             pauseOpt,
             workspaceRootOpt,
             verboseOpt,
-            gitOpt
+            gitOpt,
+            skipCleanOpt,
+            diagnosticsPathOpt,
+            GetDiagnosticsCommand()
         };
 
         rootCommand.SetAction(async (ParseResult result) => {
-            await Run(new CommandLineOptions {
+            await RunConverter(new ConverterOptions {
                 Project = result.GetValue(projectOpt)!,
                 OutputDir = result.GetValue(outputOpt)!,
                 Update = result.GetValue(updateOpt) ?? [],
                 Filter = result.GetValue(filterOpt) ?? [],
                 Show = result.GetValue(showOpt),
                 SkipReferenceStubs = result.GetValue(skipStubsOpt),
+                SkipCleanSource = result.GetValue(skipCleanOpt),
                 SkipTransform = result.GetValue(skipTransformOpt),
                 SkipFixup = result.GetValue(skipFixupOpt),
                 SkipDiagnostics = result.GetValue(skipDiagnosticsOpt),
@@ -126,33 +146,55 @@ public static class Program
                 Root = result.GetValue(workspaceRootOpt),
                 Verbose = result.GetValue(verboseOpt),
                 Git = result.GetValue(gitOpt),
+                DiagnosticsPath = result.GetValue(diagnosticsPathOpt),
             });
             return 0;
         });
-
-        return rootCommand.Parse(args).InvokeAsync();
+        return rootCommand;
     }
 
-    static async Task Run(CommandLineOptions options)
+    static Command GetDiagnosticsCommand()
+    {
+        var command = new Command("diagnostics", "Collects machine-readable diagnostics for the converted project.")
+        {
+            new Option<string>("--project", ["-p"]) {
+                Description = "Path to the VB6 project file.",
+                Required = true,
+            },
+            new Option<string>("--output", ["-o"]) {
+                Description = "Output directory for the diagnostics report file.",
+                Required = true,
+            },
+        };
+
+        command.SetAction(parse => RunDiagnostics(
+            parse.GetValue<string>("--project"),
+            parse.GetValue<string>("--output"))
+        );
+
+        return command;
+    }
+
+    private static void RunDiagnostics(string v1, string v2) => throw new NotImplementedException();
+
+    static async Task RunConverter(ConverterOptions options)
     {
         Directory.CreateDirectory(options.OutputDir);
         Log.Init(options.OutputDir, options.Verbose);
+
+        var preferredNamespaces = new PreferredNamespaceList(options.PreferredNamespaces);
 
         if (options.Git) {
             await EnsureGitAvailable(options.OutputDir);
         }
 
         var vbProject = VisualBasicProject.Load(options.Project);
-        var preferredNamespaces = new PreferredNamespaceList(options.PreferredNamespaces);
 
-        // Open/Create C# project
-        using var ws = new ConversionWorkspace();
+        // Determine root path for the workspace
         var projectBasePath = Path.GetDirectoryName(Path.GetFullPath(options.Project)) ?? Directory.GetCurrentDirectory();
-
         var rootPath = options.Root is not null
             ? Path.GetFullPath(options.Root)
             : GetCommonAncestor(projectBasePath, vbProject.Files.Select(f => f.Path));
-
         AnsiConsole.MarkupLineInterpolated($"[grey]Workspace root: {rootPath}[/]");
 
         // Warn about files that fall outside the resolved root (only relevant when
@@ -167,6 +209,8 @@ public static class Program
             }
         }
 
+        // Open/Create C# project
+        using var ws = new ConversionWorkspace();
         var allTargets = vbProject.Files.SelectMany(f => ConversionTarget.CreateAll(f, options.OutputDir, rootPath)).OrderBy(t => t.Name).ToArray();
         await ws.Open(allTargets, options.OutputDir, vbProject.Name);
 
@@ -186,20 +230,27 @@ public static class Program
         }
         // ────────────────────────────────────────────────────────────────────
 
-        if (!options.SkipTransform) {
-            // Do the code transformation
-            var targetsThatNeedTransform = ws.ActiveTargets.Where(t => !t.Exists
-                || options.Filter.Length != 0
-                || options.Update.Contains(t.Name) || options.Update.Contains("*"))
-                .ToArray();
 
-            if (targetsThatNeedTransform.Length > 0) {
+        var targetsThatNeedTransform = ws.ActiveTargets.Where(t => !t.Exists
+            || options.Filter.Length != 0
+            || options.Update.Contains(t.Name) || options.Update.Contains("*"))
+            .ToArray();
+
+        if (targetsThatNeedTransform.Length > 0) {
+            if (!options.SkipCleanSource) {
+                var cleanChanged = await RunOperations(ws, "Cleaning source files", targetsThatNeedTransform, async (t, ctx, cancel) => {
+                    await VB6ToCSharpConversion.NormalizeSource(t.File.Path);
+                    return true;
+                });
+            }
+
+            if (!options.SkipTransform) {
+                // Do the code transformation
                 var transformChanged = await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
                     ws.WithCompilationUnit(t, cancel, cu => {
-                        var sourceRelativePath = Path.GetRelativePath(rootPath, t.File.Path).Replace('\\', '/');
                         var conversion = VB6ToCSharpConversion.ConvertFile(
                             t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions,
-                            sourceRelativePath);
+                            t.SourceRelativePath);
 
                         var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
                         return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
@@ -222,7 +273,7 @@ public static class Program
                             if (designerCu is not null) {
                                 File.WriteAllText(t.DesignerOutputPath, designerCu.NormalizeWhitespace().ToFullString());
                                 newDesignerTargets.Add(ConversionTarget.CreateForSplit(
-                                    Path.GetFileNameWithoutExtension(t.DesignerOutputPath), t.DesignerOutputPath));
+                                    Path.GetFileNameWithoutExtension(t.DesignerOutputPath), t.DesignerOutputPath, rootPath));
                             }
                             return ValueTask.FromResult(mainCu);
                         }));
@@ -285,8 +336,7 @@ public static class Program
 
                 if (count == 0) {
                     // Structural rewrites, should work first time
-                    await RunRewriter("Converting Core Functions", async (t, sem) => new VBCoreRewriter(t.File.Name));
-                    await RunRewriter("Converting Core Constants", async (t, sem) => new VBLiteralRewriter(t.File.Name));
+                    await RunRewriter("Converting VB6 Functions", async (t, sem) => new VBCoreRewriter(t.File.Name));
                     await RunRewriter("Converting Err.Raise to throw", async (t, sem) => new ErrRaiseRewriter(t.File.Name));
                     await RunRewriter("Converting Err object usage", async (t, sem) => new ErrObjectRewriter(t.File.Name));
 
@@ -334,7 +384,7 @@ public static class Program
                 //await RunRewriter("Collapsing local declaration + first assignment", async (t, sm) => new LocalDeclarationCollapseRewriter(sm));
 
                 await RunRewriter("Rewriting null checks", async (t, sm) => new DefaultToNullRewriter(sm));
-                await RunRewriter("Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter());
+                await RunRewriter("Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter(t.File.Name));
 
                 if (count == 0) {
                     await RunRewriter("Declaring undeclared local variables", async (t, sm) => new LocalDeclarationInsertionRewriter(sm));
@@ -352,7 +402,7 @@ public static class Program
         }
     }
 
-    static async Task CommitOperation(ConversionWorkspace ws, CommandLineOptions options, string commitMessage)
+    static async Task CommitOperation(ConversionWorkspace ws, ConverterOptions options, string commitMessage)
     {
         await Compile(ws, options);
 
@@ -363,7 +413,7 @@ public static class Program
         }
     }
 
-    static async Task Compile(ConversionWorkspace ws, CommandLineOptions options)
+    static async Task Compile(ConversionWorkspace ws, ConverterOptions options)
     {
         await AnsiConsole.Status().StartAsync("Compiling...", ctx => ws.Compile());
 
@@ -371,8 +421,14 @@ public static class Program
             .Start("Collecting Diagnostics...", ctx => {
                 var diagnostics = ws.Compilation.GetDiagnostics();
 
-                using var writer = new StreamWriter(Path.Combine(options.OutputDir, "_Diagnostics.txt"), false);
-                DiagnosticsReport.Write(writer, diagnostics);
+                var diagnosticsPath = !string.IsNullOrEmpty(options.DiagnosticsPath)
+                    ? options.DiagnosticsPath
+                    : Path.Combine(options.OutputDir, "_Diagnostics.txt");
+
+                var diagnosticsRoot = Path.GetDirectoryName(Path.GetFullPath(diagnosticsPath))!;
+
+                using var writer = new StreamWriter(diagnosticsPath, false);
+                DiagnosticsReport.Write(writer, diagnostics, diagnosticsRoot);
 
                 var errorCount = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
                 if (errorCount > 0) {

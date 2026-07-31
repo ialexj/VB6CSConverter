@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using VB6Converter.Conversion;
 using VB6Parser;
 using static VB6Parser.VisualBasic6Parser;
@@ -12,6 +13,20 @@ namespace VB6Converter;
 
 public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax CompilationUnit)
 {
+    /// <summary>
+    /// Runs the preprocessor on the input file. This method is provided so that the preprocessed code can be persisted separately.
+    /// </summary>
+    public static async Task<string> NormalizeSource(string input)
+    {
+        string source;
+        using (var reader = OpenFile(input)) {
+             source = Preprocessor.Preprocess(reader);
+        }
+
+        await File.WriteAllTextAsync(input, source, VisualBasic6Encoding.Encoding);
+        return source;
+    }
+
     public static VB6ToCSharpConversion ConvertFile(string input, string output)
     {
         var name = Path.GetFileNameWithoutExtension(input);
@@ -21,11 +36,13 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
 
     public static VB6ToCSharpConversion ConvertFile(string input, string output, string className, string nsName, VisualBasicFileType type, ConversionOptions options = null, string sourceRelativePath = null)
     {
-        using var reader = OpenFile(input);
         var sourceDirectory = Path.GetDirectoryName(input);
         var outputDirectory = Path.GetDirectoryName(output);
 
-        var conversion = Convert(reader, className, nsName, type, options, sourceDirectory, outputDirectory, sourceRelativePath);
+        VB6ToCSharpConversion conversion;
+        using (var reader = OpenFile(input)) {
+            conversion = Convert(reader, className, nsName, type, options, sourceDirectory, outputDirectory, sourceRelativePath);
+        }
 
         var outputDir = Path.GetDirectoryName(output);
         if (!string.IsNullOrWhiteSpace(outputDir)) {
@@ -80,31 +97,7 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
 
         try {
             var parse = Parse(input, className);
-
-            var cu = CompilationUnitConverter.GetCompilationUnit(
-                parse.Start.module(), nsName, className,
-                isStatic: type == VisualBasicFileType.Module,
-                options: options,
-                sourceDirectory: sourceDirectory,
-                outputDirectory: outputDirectory,
-                sourceRelativePath: sourceRelativePath);
-
-            var transformErrors = cu.GetTransformErrors().ToArray();
-            foreach (var error in transformErrors) {
-                log.Warning("{file} TRANSFORM ERROR: {error}", className, error.Message);
-            }
-
-            // Basic compile and check for syntax errors
-            var syntaxErrors = GetCompilation([cu]).GetParseDiagnostics();
-            foreach (var diag in syntaxErrors) {
-                log.Warning("{file} SYNTAX ERROR: {error}", className, diag.ToString());
-            }
-
-            return new VB6ToCSharpConversion(className, cu) {
-                Parse = parse,
-                TransformErrors = transformErrors,
-                SyntaxErrors = syntaxErrors
-            };
+            return Convert(parse, className, nsName, type, options, sourceDirectory, outputDirectory, sourceRelativePath);
         }
         catch (ParseException pex) {
             foreach (var error in pex.Errors) {
@@ -116,6 +109,36 @@ public record class VB6ToCSharpConversion(string Name, CompilationUnitSyntax Com
                 ParseErrors = pex.Errors
             };
         }
+    }
+
+    public static VB6ToCSharpConversion Convert(ParseContext parse, string className, string nsName, VisualBasicFileType type, ConversionOptions options = null, string sourceDirectory = null, string outputDirectory = null, string sourceRelativePath = null)
+    {
+        var log = Log.ForFile(className);
+
+        var cu = CompilationUnitConverter.GetCompilationUnit(
+            parse.Start.module(), nsName, className,
+            isStatic: type == VisualBasicFileType.Module,
+            options: options,
+            sourceDirectory: sourceDirectory,
+            outputDirectory: outputDirectory,
+            sourceRelativePath: sourceRelativePath);
+
+        var transformErrors = cu.GetTransformErrors().ToArray();
+        foreach (var error in transformErrors) {
+            log.Warning("{file} TRANSFORM ERROR: {error}", className, error.Message);
+        }
+
+        // Basic compile and check for syntax errors
+        var syntaxErrors = GetCompilation([cu]).GetParseDiagnostics();
+        foreach (var diag in syntaxErrors) {
+            log.Warning("{file} SYNTAX ERROR: {error}", className, diag.ToString());
+        }
+
+        return new VB6ToCSharpConversion(className, cu) {
+            Parse = parse,
+            TransformErrors = transformErrors,
+            SyntaxErrors = syntaxErrors
+        };
     }
 
     public static CSharpCompilation GetCompilation(IEnumerable<CompilationUnitSyntax> files)

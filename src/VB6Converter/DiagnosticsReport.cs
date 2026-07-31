@@ -7,7 +7,7 @@ using System.Linq;
 namespace VB6Converter;
 public static class DiagnosticsReport
 {
-    public static void Write(TextWriter writer, IReadOnlyCollection<Diagnostic> diagnostics)
+    public static void Write(TextWriter writer, IReadOnlyCollection<Diagnostic> diagnostics, string? outputRoot = null)
     {
         writer.WriteLine($"Diagnostics Report - {DateTime.Now}");
         writer.WriteLine("Global");
@@ -19,9 +19,28 @@ public static class DiagnosticsReport
         writer.WriteLine();
 
         foreach (var file in diagnostics.Where(d => d.Location?.SourceTree != null).GroupBy(d => d.Location.SourceTree.FilePath).OrderByDescending(f => f.Count())) {
-            writer.WriteLine($"{Path.GetFileNameWithoutExtension(file.Key)}");
+            writer.WriteLine($"{GetRelativePath(file.Key, outputRoot)}");
             writer.WriteLine("=======================================================");
             WriteStatistics(writer, file, true);
+        }
+    }
+
+    static string GetRelativePath(string filePath, string? outputRoot)
+    {
+        if (string.IsNullOrEmpty(outputRoot)) {
+            return Path.GetFileName(filePath);
+        }
+
+        try {
+            var fullPath = Path.GetFullPath(filePath);
+            var fullRoot = Path.GetFullPath(outputRoot);
+            var relative = Path.GetRelativePath(fullRoot, fullPath).Replace('\\', '/');
+            var dir = Path.GetDirectoryName(relative)?.Replace('\\', '/');
+            return string.IsNullOrEmpty(dir) || dir == "."
+                ? Path.GetFileName(relative)
+                : $"{dir}/{Path.GetFileName(relative)}";
+        } catch {
+            return Path.GetFileName(filePath);
         }
     }
 
