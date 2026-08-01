@@ -117,6 +117,23 @@ public sealed class ConversionWorkspace : IDisposable
         Project = await _ws.OpenProjectAsync(projectPath);
     }
 
+    /// <summary>
+    /// Opens an existing C# project from a .csproj file path without requiring
+    /// ConversionTargets or a VB6 project name. Used by the standalone
+    /// diagnostics command to load already-converted output.
+    /// </summary>
+    public async Task Open(string csprojPath)
+    {
+        csprojPath = Path.GetFullPath(csprojPath);
+        if (!File.Exists(csprojPath)) {
+            throw new FileNotFoundException("Project file not found.", csprojPath);
+        }
+
+        Targets = [];
+        ActiveTargets = [];
+        Project = await _ws.OpenProjectAsync(csprojPath);
+    }
+
     public async Task<Project> ReloadProject()
     {
         _ws.CloseSolution();

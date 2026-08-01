@@ -158,24 +158,64 @@ public static class Program
         var command = new Command("diagnostics", "Collects machine-readable diagnostics for the converted project.")
         {
             new Option<string>("--project", ["-p"]) {
-                Description = "Path to the VB6 project file.",
+                Description = "Path to the converted C# project file (.csproj).",
                 Required = true,
             },
-            new Option<string>("--output", ["-o"]) {
-                Description = "Output directory for the diagnostics report file.",
-                Required = true,
+            new Option<string>("--output-json", ["-oj"]) {
+                Description = "Exact path for the JSON diagnostics report file. If omitted, JSON output is skipped.",
+            },
+            new Option<string>("--output-text", ["-ot"]) {
+                Description = "Exact path for the text diagnostics report file. If omitted, text output is skipped.",
             },
         };
 
-        command.SetAction(parse => RunDiagnostics(
+        command.SetAction(async (ParseResult parse) => await RunDiagnostics(
             parse.GetValue<string>("--project"),
-            parse.GetValue<string>("--output"))
+            parse.GetValue<string>("--output-json"),
+            parse.GetValue<string>("--output-text"))
         );
 
         return command;
     }
 
-    private static void RunDiagnostics(string v1, string v2) => throw new NotImplementedException();
+    static async Task RunDiagnostics(string projectPath, string? jsonPath, string? txtPath)
+    {
+        using var ws = new ConversionWorkspace();
+        await ws.Open(projectPath);
+        await ws.Compile();
+
+        var diagnostics = ws.Compilation.GetDiagnostics();
+        var errorCount = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
+
+        if (jsonPath is null && txtPath is null) {
+            AnsiConsole.MarkupLineInterpolated($"[red]Errors: {errorCount}[/]");
+            return;
+        }
+
+        // Determine the output root for path normalization: use the directory
+        // of whichever output file is provided (prefer JSON's directory).
+        var outputRoot = jsonPath is not null
+            ? Path.GetDirectoryName(Path.GetFullPath(jsonPath))!
+            : Path.GetDirectoryName(Path.GetFullPath(txtPath!))!;
+
+        if (jsonPath is not null) {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(jsonPath))!);
+            using var jsonWriter = new StreamWriter(jsonPath, false);
+            DiagnosticsReport.WriteJson(jsonWriter, diagnostics, outputRoot);
+            AnsiConsole.MarkupLineInterpolated($"[green]JSON report: {jsonPath}[/]");
+        }
+
+        if (txtPath is not null) {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(txtPath))!);
+            using var txtWriter = new StreamWriter(txtPath, false);
+            DiagnosticsReport.Write(txtWriter, diagnostics, outputRoot);
+            AnsiConsole.MarkupLineInterpolated($"[green]Text report: {txtPath}[/]");
+        }
+
+        AnsiConsole.MarkupLineInterpolated($"[red]Errors: {errorCount}[/]");
+        AnsiConsole.MarkupLineInterpolated($"[green]JSON report: {jsonPath}[/]");
+        AnsiConsole.MarkupLineInterpolated($"[green]Text report: {txtPath}[/]");
+    }
 
     static async Task RunConverter(ConverterOptions options)
     {
@@ -420,16 +460,6 @@ public static class Program
         AnsiConsole.Status()
             .Start("Collecting Diagnostics...", ctx => {
                 var diagnostics = ws.Compilation.GetDiagnostics();
-
-                var diagnosticsPath = !string.IsNullOrEmpty(options.DiagnosticsPath)
-                    ? options.DiagnosticsPath
-                    : Path.Combine(options.OutputDir, "_Diagnostics.txt");
-
-                var diagnosticsRoot = Path.GetDirectoryName(Path.GetFullPath(diagnosticsPath))!;
-
-                using var writer = new StreamWriter(diagnosticsPath, false);
-                DiagnosticsReport.Write(writer, diagnostics, diagnosticsRoot);
-
                 var errorCount = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
                 if (errorCount > 0) {
                     AnsiConsole.MarkupLineInterpolated($"[red]Errors: {errorCount}[/]");
