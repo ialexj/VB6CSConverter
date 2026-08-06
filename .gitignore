@@ -367,3 +367,5 @@ VB6Parser/.antlr*
 
 # Local launchSettings
 VB6Converter/Properties/launchSettings.json
+
+scratch/*

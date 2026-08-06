@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/ComQuery/ComQuery.csproj" />
+    <Project Path="src/ComWrapperGen/ComWrapperGen.csproj" />
     <Project Path="src/ComStubGenerator/ComStubGenerator.csproj" />
     <Project Path="src/VB6Parser/VB6Parser.csproj" />
     <Project Path="src/VB6Converter/VB6Converter.csproj" />
