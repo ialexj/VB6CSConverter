@@ -68,7 +68,9 @@ public record ComQueryType(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     bool IsAppObject = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    bool IsOleObject = false);
+    bool IsOleObject = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    Guid Guid = default);
 
 public record ComQueryDiscoveredDep(Guid Guid, int Major, int Minor);
 

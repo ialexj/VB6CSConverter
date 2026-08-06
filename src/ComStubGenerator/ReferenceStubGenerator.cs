@@ -477,6 +477,17 @@ public static class ReferenceStubGenerator
 
         if (decl == null) return null;
 
+        if (type.Guid != Guid.Empty && decl is BaseTypeDeclarationSyntax typeDeclaration) {
+            var guidArgument = AttributeArgument(LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                Literal(type.Guid.ToString("D"))));
+            var guidAttribute = Attribute(
+                ParseName("System.Runtime.InteropServices.Guid"),
+                AttributeArgumentList(SingletonSeparatedList(guidArgument)));
+            decl = typeDeclaration.WithAttributeLists(SingletonList(
+                AttributeList(SingletonSeparatedList(guidAttribute))));
+        }
+
         var ns = IdentifierName(library.SafeName);
 
         var cu = CompilationUnit(

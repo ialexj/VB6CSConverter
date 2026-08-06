@@ -329,6 +329,7 @@ public sealed class TypeLibraryInspector
             return new ComQueryType(
                 Name: typeName,
                 Kind: kind,
+                Guid: typeAttr.guid,
                 Members: members.Count > 0 ? members : null,
                 EnumValues: enumValues.Count > 0 ? enumValues : null,
                 AliasedType: aliasedType,
