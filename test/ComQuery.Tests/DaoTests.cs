@@ -53,6 +53,20 @@ public class DaoTests : TypeLibraryInspectorIntegrationTestBase
     }
 
     [TestMethod]
+    public void DAO_Inspect_TypesHaveComIdentifiers()
+    {
+        if (!File.Exists(DaoPath)) Assert.Inconclusive("DAO2535.TLB not found — skipping");
+
+        var reference = MakeReference(DaoGuid, 3, 5, "Microsoft DAO 3.5 Object Library", DaoPath);
+        var model = TypeLibraryInspector.Inspect(reference, DaoPath)!;
+
+        model.Types.Should().Contain(t => t.Kind == LibraryTypeKind.Class && t.Guid != Guid.Empty,
+            "coclasses must expose their CLSIDs");
+        model.Types.Should().Contain(t => t.Kind == LibraryTypeKind.Interface && t.Guid != Guid.Empty,
+            "interfaces must expose their IIDs");
+    }
+
+    [TestMethod]
     public void DAO_Generate_Recordset_HasForwardingIndexer()
     {
         if (!File.Exists(DaoPath)) Assert.Inconclusive("DAO2535.TLB not found — skipping");

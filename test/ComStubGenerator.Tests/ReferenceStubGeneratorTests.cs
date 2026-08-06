@@ -87,6 +87,38 @@ public class ReferenceStubGeneratorTests
         }
     }
 
+    [TestMethod]
+    public void Generate_TypesWithGuids_EmitGuidAttributes()
+    {
+        var types = new[] {
+            new ComQueryType("TestEnum", LibraryTypeKind.Enum, EnumValues: [], Guid: new Guid("00000001-0000-0000-0000-000000000000")),
+            new ComQueryType("TestDispatch", LibraryTypeKind.DispatchInterface, Guid: new Guid("00000002-0000-0000-0000-000000000000")),
+            new ComQueryType("TestInterface", LibraryTypeKind.Interface, Guid: new Guid("00000003-0000-0000-0000-000000000000")),
+            new ComQueryType("TestClass", LibraryTypeKind.Class, Guid: new Guid("00000004-0000-0000-0000-000000000000")),
+            new ComQueryType("TestModule", LibraryTypeKind.Module, Guid: new Guid("00000005-0000-0000-0000-000000000000")),
+            new ComQueryType("TestStruct", LibraryTypeKind.Struct, Guid: new Guid("00000006-0000-0000-0000-000000000000")),
+        };
+        var library = MakeLibrary("TestLib", types);
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stubs_{Guid.NewGuid():N}");
+        try {
+            var written = ReferenceStubGenerator.Generate(library, tempDir);
+
+            written.Should().HaveCount(types.Length);
+            foreach (var type in types) {
+                var source = File.ReadAllText(written.Single(path =>
+                    string.Equals(Path.GetFileNameWithoutExtension(path), type.Name, StringComparison.Ordinal)));
+                source.Should().Contain($"[System.Runtime.InteropServices.Guid(\"{type.Guid:D}\")]",
+                    $"{type.Kind} stubs must retain their COM type identifier");
+            }
+        }
+        finally {
+            if (Directory.Exists(tempDir)) {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Interface / class generation
     // ──────────────────────────────────────────────────────────────────────

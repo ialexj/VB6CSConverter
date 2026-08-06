@@ -57,9 +57,15 @@ public sealed class ConversionWorkspace : IDisposable
 
     public Project Project { get; private set; }
 
+    public string Name { get; private set; }
+
+    public ConversionOptions Options { get; set; } = ConversionOptions.Default;
+
+    public ICollection<string> Filter { get; set; } = new List<string>();
+
     public string DefaultNamespace { get; private set; }
 
-    public string OutputPath => Path.GetDirectoryName(Project.FilePath);
+    public string OutputDir => Path.GetDirectoryName(Project.FilePath);
 
     public string MissingTypesPath => Path.Combine(Path.GetDirectoryName(Project.FilePath), "MissingTypes");
 
@@ -70,8 +76,10 @@ public sealed class ConversionWorkspace : IDisposable
 
     public IReadOnlyCollection<ConversionTarget> ActiveTargets { get; private set; }
 
-    public void SetActiveFilter(IReadOnlyCollection<string> filter)
+    public void SetActiveFilter(ICollection<string> filter)
     {
+        Filter = filter ?? [];
+
         if (filter.Count == 0) {
             ActiveTargets = Targets;
             return;
@@ -90,6 +98,8 @@ public sealed class ConversionWorkspace : IDisposable
 
     public async Task Open(IReadOnlyCollection<ConversionTarget> targets, string outDir, string name)
     {
+        Name = name;
+
         Targets = targets ?? throw new ArgumentNullException(nameof(targets));
 
         outDir = Path.GetFullPath(outDir);
@@ -150,27 +160,67 @@ public sealed class ConversionWorkspace : IDisposable
         Compilation = await Project.GetCompilationAsync();
     }
 
+    public IEnumerable<Document> Documents => Project.Documents;
+
+    public IEnumerable<Document> GetActiveDocuments()
+    {
+        if (Filter.Count == 0) {
+            return Documents;
+        }
+        else {
+            return Documents.Where(d =>
+                Filter.Contains(GetDocumentBaseName(d), StringComparer.OrdinalIgnoreCase)
+            );
+        }
+    }
+
+    static string GetDocumentBaseName(Document d)
+    {
+        if (string.IsNullOrEmpty(d.FilePath)) {
+            return d.Name;
+        }
+        else if (d.FilePath.EndsWith(".designer.cs", StringComparison.OrdinalIgnoreCase)) {
+            return Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(d.FilePath)[..^".designer".Length]);
+        }
+        else {
+            return Path.GetFileNameWithoutExtension(d.FilePath);
+        }
+    }
+
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1068:CancellationToken parameters must come last", Justification = "This is a wrapper for a callback, which works best last.")]
     public async ValueTask<bool> WithCompilationUnit(
         ConversionTarget target, CancellationToken cancel,
         Func<CompilationUnitSyntax, ValueTask<CompilationUnitSyntax>> task)
     {
-        var log = Log.ForFile(target.Name);
         var doc = GetOrCreateDocument(target);
-        var st  = await doc.GetSyntaxTreeAsync(cancel);
-        var cu  = st.GetCompilationUnitRoot(cancel);
+
+        return await WithCompilationUnit(doc, cancel, async cu =>
+        {
+            var newcu = await task(cu);
+
+            if (string.IsNullOrEmpty(newcu.SyntaxTree.FilePath)) {
+                var st = newcu.SyntaxTree.WithFilePath(target.OutputPath);
+                newcu = st.GetCompilationUnitRoot(cancel);
+            }
+
+            return newcu;
+        });
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1068:CancellationToken parameters must come last", Justification = "This is a wrapper for a callback, which works best last.")]
+    public async ValueTask<bool> WithCompilationUnit(
+        Document doc, CancellationToken cancel,
+        Func<CompilationUnitSyntax, ValueTask<CompilationUnitSyntax>> task)
+    {
+        var st = await doc.GetSyntaxTreeAsync(cancel);
+        var cu = st.GetCompilationUnitRoot(cancel);
 
         var newcu = await task(cu);
         newcu = newcu.NormalizeWhitespace();
 
-        if (string.IsNullOrEmpty(newcu.SyntaxTree.FilePath)) {
-            st = newcu.SyntaxTree.WithFilePath(target.OutputPath);
-            newcu = st.GetCompilationUnitRoot(cancel);
-        }
-
         if (!RoslynHelpers.IsEquivalentSyntax(cu, newcu)) {
-            doc = await SaveDocument(doc, newcu, cancel);
+            await SaveDocument(doc, newcu, cancel);
             return true;
         }
         else {

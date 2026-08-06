@@ -16,7 +16,7 @@ using VB6Converter.Rewriters;
 using VB6Converter.Rewriters.Forms;
 using VB6Converter.Rewriters.Semantic;
 using VB6Parser;
-using static VB6Converter.ConsoleHelpers;
+using static VB6Converter.ConsoleUI;
 
 namespace VB6Converter;
 
@@ -27,13 +27,12 @@ public static class Program
         public string Project { get; set; } = null!;
         public string OutputDir { get; set; } = null!;
         public string Root { get; set; }
-        public string[] Update { get; set; } = [];
         public string[] Filter { get; set; } = [];
         public bool Show { get; set; }
         public bool SkipCleanSource { get; set; }
         public bool SkipReferenceStubs { get; set; }
         public bool SkipTransform { get; set; }
-        public bool SkipFixup { get; set; }
+        public bool SkipRefinement { get; set; }
         public bool SkipDiagnostics { get; set; }
         public string[] PreferredNamespaces { get; set; } = [];
         public string[] ExcludeReferences { get; set; } = [];
@@ -59,9 +58,6 @@ public static class Program
         var outputOpt = new Option<string>("--output", ["-o"]) {
             Description = "Output directory for the converted files.",
             Required = true,
-        };
-        var updateOpt = new Option<string[]>("--update", ["-u"]) {
-            Description = "Files to update if already converted.",
         };
         var filterOpt = new Option<string[]>("--filter", ["-f"]) {
             Description = "Only process the specified files.",
@@ -110,7 +106,6 @@ public static class Program
         {
             projectOpt,
             outputOpt,
-            updateOpt,
             filterOpt,
             showOpt,
             skipStubsOpt,
@@ -132,13 +127,12 @@ public static class Program
             await RunConverter(new ConverterOptions {
                 Project = result.GetValue(projectOpt)!,
                 OutputDir = result.GetValue(outputOpt)!,
-                Update = result.GetValue(updateOpt) ?? [],
                 Filter = result.GetValue(filterOpt) ?? [],
                 Show = result.GetValue(showOpt),
                 SkipReferenceStubs = result.GetValue(skipStubsOpt),
                 SkipCleanSource = result.GetValue(skipCleanOpt),
                 SkipTransform = result.GetValue(skipTransformOpt),
-                SkipFixup = result.GetValue(skipFixupOpt),
+                SkipRefinement = result.GetValue(skipFixupOpt),
                 SkipDiagnostics = result.GetValue(skipDiagnosticsOpt),
                 PreferredNamespaces = result.GetValue(preferNamespacesOpt) ?? [],
                 ExcludeReferences = result.GetValue(excludeRefsOpt) ?? [],
@@ -219,23 +213,27 @@ public static class Program
 
     static async Task RunConverter(ConverterOptions options)
     {
+        // Set up logging
         Directory.CreateDirectory(options.OutputDir);
         Log.Init(options.OutputDir, options.Verbose);
 
-        var preferredNamespaces = new PreferredNamespaceList(options.PreferredNamespaces);
-
+        // Validate git
         if (options.Git) {
-            await EnsureGitAvailable(options.OutputDir);
+            await GitUtils.EnsureGitAvailable(options.OutputDir);
         }
 
+        // Load the VB6 project
         var vbProject = VisualBasicProject.Load(options.Project);
 
         // Determine root path for the workspace
         var projectBasePath = Path.GetDirectoryName(Path.GetFullPath(options.Project)) ?? Directory.GetCurrentDirectory();
         var rootPath = options.Root is not null
             ? Path.GetFullPath(options.Root)
-            : GetCommonAncestor(projectBasePath, vbProject.Files.Select(f => f.Path));
+            : PathHelper.GetCommonAncestor(projectBasePath, vbProject.Files.Select(f => f.Path));
         AnsiConsole.MarkupLineInterpolated($"[grey]Workspace root: {rootPath}[/]");
+
+        // Set up preferred namespaces
+        var preferredNamespaces = new PreferredNamespaceList(options.PreferredNamespaces);
 
         // Warn about files that fall outside the resolved root (only relevant when
         // --root is specified explicitly and is narrower than the actual file tree)
@@ -254,9 +252,7 @@ public static class Program
         var allTargets = vbProject.Files.SelectMany(f => ConversionTarget.CreateAll(f, options.OutputDir, rootPath)).OrderBy(t => t.Name).ToArray();
         await ws.Open(allTargets, options.OutputDir, vbProject.Name);
 
-        var conversionOptions = ConversionOptions.Default;
-
-        ws.SetActiveFilter([.. options.Filter]);
+        ws.SetActiveFilter(options.Filter);
         if (ws.ActiveTargets.Count == 0) {
             AnsiConsole.MarkupLine("[red]No files to convert.[/]");
             return;
@@ -264,389 +260,110 @@ public static class Program
 
         // Generate COM reference stubs
         if (!options.SkipReferenceStubs) {
-            var referenceDir = Path.Join(options.OutputDir, "_References");
-            await GenerateReferenceStubs(options.Project, referenceDir, options.ExcludeReferences);
-            await CommitOperation(ws, options, "Generate COM reference stubs");
+            await RunPipeline(new ComStubPipeline(ws, options));
         }
         // ────────────────────────────────────────────────────────────────────
 
-
-        var targetsThatNeedTransform = ws.ActiveTargets.Where(t => !t.Exists
-            || options.Filter.Length != 0
-            || options.Update.Contains(t.Name) || options.Update.Contains("*"))
-            .ToArray();
-
-        if (targetsThatNeedTransform.Length > 0) {
-            if (!options.SkipCleanSource) {
-                var cleanChanged = await RunOperations(ws, "Cleaning source files", targetsThatNeedTransform, async (t, ctx, cancel) => {
-                    await VB6ToCSharpConversion.NormalizeSource(t.File.Path);
-                    return true;
-                });
-            }
-
-            if (!options.SkipTransform) {
-                // Do the code transformation
-                var transformChanged = await RunOperations(ws, "Converting VB6 to C#", targetsThatNeedTransform, (t, ctx, cancel) =>
-                    ws.WithCompilationUnit(t, cancel, cu => {
-                        var conversion = VB6ToCSharpConversion.ConvertFile(
-                            t.File.Path, t.OutputPath, t.Name, vbProject.Name, t.File.Type, conversionOptions,
-                            t.SourceRelativePath);
-
-                        var st = SyntaxFactory.SyntaxTree(conversion.CompilationUnit, path: t.OutputPath);
-                        return ValueTask.FromResult(st.GetCompilationUnitRoot(cancel));
-                    }));
-
-                if (transformChanged) {
-                    await CommitOperation(ws, options, "Convert VB6 to C#");
-                }
-
-                // Split Form/Control designer code into separate *.designer.cs partial classes
-                var formControlTargets = targetsThatNeedTransform
-                    .Where(t => t.File.Type is VisualBasicFileType.Form or VisualBasicFileType.Control)
-                    .ToArray();
-
-                if (formControlTargets.Length > 0) {
-                    var newDesignerTargets = new ConcurrentBag<ConversionTarget>();
-                    var designerSplitChanged = await RunOperations(ws, "Splitting designer files", formControlTargets, (t, ctx, cancel) =>
-                        ws.WithCompilationUnit(t, cancel, cu => {
-                            var (mainCu, designerCu) = DesignerFileSplitter.Split(cu);
-                            if (designerCu is not null) {
-                                File.WriteAllText(t.DesignerOutputPath, designerCu.NormalizeWhitespace().ToFullString());
-                                newDesignerTargets.Add(ConversionTarget.CreateForSplit(
-                                    Path.GetFileNameWithoutExtension(t.DesignerOutputPath), t.DesignerOutputPath, rootPath));
-                            }
-                            return ValueTask.FromResult(mainCu);
-                        }));
-
-                    if (designerSplitChanged) {
-                        ws.AddToActiveTargets(newDesignerTargets);
-                        await CommitOperation(ws, options, "Split designer files");
-                    }
-                }
-            }
+        if (!options.SkipCleanSource) {
+            await RunPipeline(new CleanSourcePipeline(ws, options));
         }
 
-        // Compile the solution to update diagnostics and initialize a semantic model.
-        if (ws.Compilation is null) {
-            await Compile(ws, options);
+        if (!options.SkipTransform) {
+            // Do the code transformation
+            await RunPipeline(new ConversionPipeline(ws, options));
+
+            // Split designer code into separate *.designer.cs files for Forms and Controls
+            await RunPipeline(new SplitDesignerPipeline(ws, options));
         }
 
         // At this point we should have the whole solution converted,
         // so we can build a semantic model and perform global rewrites.
-        if (!options.SkipFixup) {
-            AnsiConsole.MarkupLine("[yellow]Running fixups...[/]");
+        if (!options.SkipRefinement) {
+            AnsiConsole.MarkupLine("[yellow]Refining...[/]");
 
             // Reset the rewriter sequence counter for this fixup phase
             RewriterSequenceContext.Reset();
 
             bool hasChanges;
-            int count = 0;
+            int run = 0;
             do {
                 hasChanges = false;
 
-                async Task RunRewriter(string title, Func<ConversionTarget, SemanticModel, Task<LoggedRewriter>> rewriter)
+                IEnumerable<RefinementPipeline> GetRefinementPipelines()
                 {
-                    bool hasRewriterChanges = false;
-                    int iteration = 0;
-                    do {
-                        iteration++;
+                    RefinementPipeline Pipeline(string name, Func<Document, SemanticModel, Task<LoggedRewriter>> rewriter) => new(ws, options, name, rewriter);
 
-                        hasRewriterChanges = await RunOperations(ws, title, ws.ActiveTargets,
-                            async (t, ctx, cancel) => await ws.WithCompilationUnit(t, cancel, async cu => {
-                                var sm = ws.Compilation.GetSemanticModel(cu.SyntaxTree, true);
+                    if (run == 0) {
+                        yield return Pipeline("Converting VB6 Functions", async (t, sem) => new VBCoreRewriter(t.FilePath));
+                        yield return Pipeline("Converting Err.Raise to throw", async (t, sem) => new ErrRaiseRewriter(t.FilePath));
+                        yield return Pipeline("Converting Err object usage", async (t, sem) => new ErrObjectRewriter(t.FilePath));
 
-                                var r = await rewriter(t, sm);
-                                r.RewriterSequence = RewriterSequenceContext.GetNextSequence();
-                                r.Progress = (current, total) => {
-                                    ctx.IsIndeterminate = false;
-                                    ctx.MaxValue = total;
-                                    ctx.Value = current;
-                                };
+                        yield return Pipeline("Converting Cursor Changes", async (t, sem) => new CursorRewriter(t.FilePath));
 
-                                return (CompilationUnitSyntax)r.Visit(cu);
-                            }));
-
-                        if (hasRewriterChanges) {
-                            hasChanges = true;
-                            await CommitOperation(ws, options, $"Fixup: {title} (pass {count + 1}, iteration {iteration})");
-                        }
+                        yield return Pipeline("Using control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
+                        yield return Pipeline("Expanding FRX-backed indexed designer assignments", async (t, sm) => new FrxExpansionRewriter(sm));
+                        yield return Pipeline("Fixing Foreach Variable", async (t, sm) => new ForEachVariableRewriter(sm));
                     }
-                    while (hasRewriterChanges);
+
+                    yield return Pipeline("Finding Types", async (t, sm) => new TypeFinder(sm, preferredNamespaces));
+                    yield return Pipeline("Finding Members", async (t, sm) => new MemberFinder(sm));
+
+                    yield return Pipeline("Expanding default members", async (t, sm) => new DefaultMemberRewriter(sm));
+
+                    yield return Pipeline("Disambiguating Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
+                    yield return Pipeline("Binding property getters to functions", async (t, sm) => new ParameterlessMethodCallRewriter(sm));
+                    yield return Pipeline("Binding parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
+
+                    yield return Pipeline("Refining Variable Types", async (t, sm) => {
+                        var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
+                        await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
+                        return new TypeRefiner(varTypes);
+                    });
+
+                    yield return Pipeline("Refining Array Declarations", async (t, sm) => {
+                        var declaratorTypes = new Dictionary<VariableDeclaratorSyntax, ArrayTypeSyntax>();
+                        var symbolTypes = new Dictionary<ISymbol, ArrayTypeSyntax>(SymbolEqualityComparer.Default);
+                        await ArrayRefinementRewriter.GetAllArrayVariablesAndUsages(sm, ws.Project.Solution, declaratorTypes, symbolTypes);
+                        return new ArrayRefinementRewriter(sm, declaratorTypes, symbolTypes);
+                    });
+
+                    yield return Pipeline("Refining Return Types", async (t, sm) => new PropertyTypeRefiner(sm));
+
+                    yield return Pipeline("Coercing Literals", async (t, sm) => new LiteralCoercionRewriter(sm));
+                    yield return Pipeline("Casting Enums to Numbers", async (t, sm) => new EnumToNumberCastRewriter(sm));
+                    yield return Pipeline("Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
+                    yield return Pipeline("Applying Type Conversions", async (t, sm) => new TypeConversionRewriter(sm));
+                    yield return Pipeline("Converting non-constant const fields to static readonly", async (t, sm) => new ConstFieldRewriter(sm));
+
+                    yield return Pipeline("Rewriting bitwise Or/And", async (t, sm) => new BitwiseOrRewriter(sm));
+                    yield return Pipeline("Rewriting DateTime arithmetic", async (t, sm) => new DateTimeArithmeticRewriter(sm));
+
+                    // Cosmetic - shouldn't change program meaning or reduce errors
+                    //await RunRewriter("Collapsing local declaration + first assignment", async (t, sm) => new LocalDeclarationCollapseRewriter(sm));
+
+                    yield return Pipeline("Rewriting null checks", async (t, sm) => new DefaultToNullRewriter(sm));
+                    yield return Pipeline("Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter(t.FilePath));
+
+                    if (run == 0) {
+                        yield return Pipeline("Declaring undeclared local variables", async (t, sm) => new LocalDeclarationInsertionRewriter(sm));
+                        yield return Pipeline("Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
+                    }
                 }
 
-                if (count == 0) {
-                    // Structural rewrites, should work first time
-                    await RunRewriter("Converting VB6 Functions", async (t, sem) => new VBCoreRewriter(t.File.Name));
-                    await RunRewriter("Converting Err.Raise to throw", async (t, sem) => new ErrRaiseRewriter(t.File.Name));
-                    await RunRewriter("Converting Err object usage", async (t, sem) => new ErrObjectRewriter(t.File.Name));
-
-                    await RunRewriter("Converting Cursor Changes", async (t, sem) => new CursorRewriter(t.File.Name));
-
-                    await RunRewriter("Using control singletons", async (t, sem) => new ControlInstanceRewriter(ws.GetForms(), t.Name));
-                    await RunRewriter("Expanding FRX-backed indexed designer assignments", async (t, sm) => new FrxExpansionRewriter(sm));
-                    await RunRewriter("Fixing Foreach Variable", async (t, sm) => new ForEachVariableRewriter(sm));
+                foreach (var pipeline in GetRefinementPipelines()) {
+                    var result = await RunPipeline(pipeline, repeatUntilStable: true);
+                    hasChanges |= result.MadeChanges;
                 }
-
-                await RunRewriter("Finding Types", async (t, sm) => new TypeFinder(sm, preferredNamespaces));
-                await RunRewriter("Finding Members", async (t, sm) => new MemberFinder(sm));
-
-                await RunRewriter("Expanding default members", async (t, sm) => new DefaultMemberRewriter(sm));
-
-                await RunRewriter("Disambiguating Array Access", async (t, sm) => new ArrayCallDisambiguator(sm));
-                await RunRewriter("Binding property getters to functions", async (t, sm) => new ParameterlessMethodCallRewriter(sm));
-                await RunRewriter("Binding parameterized property setters", async (t, sm) => new ParameterizedPropertyRewriter(sm));
-
-                await RunRewriter("Refining Variable Types", async (t, sm) => {
-                    var varTypes = new ConcurrentDictionary<VariableDeclaratorSyntax, TypeSyntax>();
-                    await TypeRefiner.GetAllVariablesAndUsages(varTypes, sm, ws.Project.Solution);
-                    return new TypeRefiner(varTypes);
-                });
-
-                await RunRewriter("Refining Array Declarations", async (t, sm) => {
-                    var declaratorTypes = new Dictionary<VariableDeclaratorSyntax, ArrayTypeSyntax>();
-                    var symbolTypes = new Dictionary<ISymbol, ArrayTypeSyntax>(SymbolEqualityComparer.Default);
-                    await ArrayRefinementRewriter.GetAllArrayVariablesAndUsages(sm, ws.Project.Solution, declaratorTypes, symbolTypes);
-                    return new ArrayRefinementRewriter(sm, declaratorTypes, symbolTypes);
-                });
-
-                await RunRewriter("Refining Return Types", async (t, sm) => new PropertyTypeRefiner(sm));
-
-                await RunRewriter("Coercing Literals", async (t, sm) => new LiteralCoercionRewriter(sm));
-                await RunRewriter("Casting Enums to Numbers", async (t, sm) => new EnumToNumberCastRewriter(sm));
-                await RunRewriter("Adding Type Casts", async (t, sm) => new TypeCastRewriter(sm));
-                await RunRewriter("Applying Type Conversions", async (t, sm) => new TypeConversionRewriter(sm));
-                await RunRewriter("Converting non-constant const fields to static readonly", async (t, sm) => new ConstFieldRewriter(sm));
-
-                await RunRewriter("Rewriting bitwise Or/And", async (t, sm) => new BitwiseOrRewriter(sm));
-                await RunRewriter("Rewriting DateTime arithmetic", async (t, sm) => new DateTimeArithmeticRewriter(sm));
-
-                // Cosmetic - shouldn't change program meaning or reduce errors
-                //await RunRewriter("Collapsing local declaration + first assignment", async (t, sm) => new LocalDeclarationCollapseRewriter(sm));
-
-                await RunRewriter("Rewriting null checks", async (t, sm) => new DefaultToNullRewriter(sm));
-                await RunRewriter("Removing unneeded returns", async (t, sm) => new UnneededReturnRewriter(t.File.Name));
-
-                if (count == 0) {
-                    await RunRewriter("Declaring undeclared local variables", async (t, sm) => new LocalDeclarationInsertionRewriter(sm));
-                    await RunRewriter("Hoisting out-of-scope local declarations", async (t, sm) => new LocalDeclarationHoistingRewriter(sm));
-                }
-
-                //await RunRewriter("Rewriting DAO", async (t, sm) => new DAORewriter(sm));
 
                 if (hasChanges) {
-                    count++;
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]Changes were made, re-running fixups ({count})...[/]");
+                    run++;
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]Changes were made, re-running refinement ({run})...[/]");
                 }
             }
             while (hasChanges);
         }
     }
 
-    static async Task CommitOperation(ConversionWorkspace ws, ConverterOptions options, string commitMessage)
-    {
-        await Compile(ws, options);
 
-        PauseIfRequested(options.Pause);
-
-        if (options.Git) {
-            await GitCommit(options.OutputDir, commitMessage);
-        }
-    }
-
-    static async Task Compile(ConversionWorkspace ws, ConverterOptions options)
-    {
-        await AnsiConsole.Status().StartAsync("Compiling...", ctx => ws.Compile());
-
-        AnsiConsole.Status()
-            .Start("Collecting Diagnostics...", ctx => {
-                var diagnostics = ws.Compilation.GetDiagnostics();
-                var errorCount = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
-                if (errorCount > 0) {
-                    AnsiConsole.MarkupLineInterpolated($"[red]Errors: {errorCount}[/]");
-                }
-            });
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Reference stub generation — delegates to the ComStubGenerator executable
-    // ─────────────────────────────────────────────────────────────────────
-
-    static async Task GenerateReferenceStubs(string projectPath, string outputDir, IEnumerable<string> excludeReferences)
-    {
-        AnsiConsole.MarkupLine("[yellow]Generating COM reference stubs...[/]");
-
-        if (!OperatingSystem.IsWindows()) {
-            AnsiConsole.MarkupLine("[grey]Reference stub generation skipped (Windows only).[/]");
-            return;
-        }
-
-        var stubGenExe = FindComStubGeneratorExe();
-        if (!File.Exists(stubGenExe)) {
-            AnsiConsole.MarkupLineInterpolated($"[red]ComStubGenerator.exe not found at {stubGenExe}. Skipping reference stubs.[/]");
-            Log.Default.Warning("ComStubGenerator.exe not found; reference stubs will not be generated");
-            return;
-        }
-
-        var psi = new ProcessStartInfo {
-            FileName = stubGenExe,
-            ArgumentList = { "-p", projectPath, "-o", outputDir },
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        var excludeList = excludeReferences.ToList();
-        if (excludeList.Count > 0) {
-            foreach (var name in excludeList) {
-                psi.ArgumentList.Add("--exclude-references");
-                psi.ArgumentList.Add(name);
-            }
-        }
-
-        using var process = Process.Start(psi)!;
-
-        var stdoutTask = RelayOutputAsync(process.StandardOutput);
-        var stderrTask = RelayOutputAsync(process.StandardError);
-
-        await process.WaitForExitAsync();
-        await Task.WhenAll(stdoutTask, stderrTask);
-
-        if (process.ExitCode != 0) {
-            AnsiConsole.MarkupLineInterpolated($"[yellow]ComStubGenerator exited with code {process.ExitCode}; some reference stubs may be missing.[/]");
-        }
-
-        static async Task RelayOutputAsync(System.IO.TextReader reader)
-        {
-            string line;
-            while ((line = await reader.ReadLineAsync()) != null) {
-                AnsiConsole.WriteLine(line);
-            }
-        }
-    }
-
-    static string FindComStubGeneratorExe()
-    {
-        string baseDir = AppContext.BaseDirectory;
-        return Path.Combine(baseDir, "stubs", "ComStubGenerator.exe");
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Git integration — commits the output directory after each rewriter pass
-    // when --git is specified. Repository initialization and .gitignore setup
-    // are the caller's responsibility; the output directory must already be
-    // inside a git repository.
-    // ─────────────────────────────────────────────────────────────────────
-
-    static async Task EnsureGitAvailable(string outputDir)
-    {
-        (int ExitCode, string StdOut, string StdErr) versionResult;
-        try {
-            versionResult = await RunGitProcess(null, "--version");
-        }
-        catch (System.ComponentModel.Win32Exception ex) {
-            throw new InvalidOperationException("--git was specified but 'git' was not found on PATH.", ex);
-        }
-
-        if (versionResult.ExitCode != 0) {
-            throw new InvalidOperationException($"--git was specified but 'git --version' failed: {versionResult.StdErr}");
-        }
-
-        var repoCheck = await RunGitProcess(outputDir, "rev-parse", "--is-inside-work-tree");
-        if (repoCheck.ExitCode != 0 || !repoCheck.StdOut.Trim().Equals("true", StringComparison.OrdinalIgnoreCase)) {
-            throw new InvalidOperationException(
-                $"--git was specified but '{outputDir}' is not inside a git repository. " +
-                $"Initialize one (e.g. 'git init \"{outputDir}\"') before running with --git.");
-        }
-    }
-
-    static async Task GitCommit(string outputDir, string message)
-    {
-        var add = await RunGitProcess(outputDir, "add", "-A");
-        if (add.ExitCode != 0) {
-            throw new InvalidOperationException($"git add failed in '{outputDir}': {add.StdErr}");
-        }
-
-        var commit = await RunGitProcess(outputDir, "commit", "--quiet", "-m", message);
-        if (commit.ExitCode != 0) {
-            throw new InvalidOperationException($"git commit failed in '{outputDir}': {commit.StdErr}{commit.StdOut}");
-        }
-    }
-
-    static async Task<(int ExitCode, string StdOut, string StdErr)> RunGitProcess(string workingDir, params string[] args)
-    {
-        var psi = new ProcessStartInfo {
-            FileName = "git",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        if (workingDir is not null) {
-            psi.ArgumentList.Add("-C");
-            psi.ArgumentList.Add(workingDir);
-        }
-        foreach (var arg in args) {
-            psi.ArgumentList.Add(arg);
-        }
-
-        using var process = Process.Start(psi)!;
-
-        var stdOutTask = process.StandardOutput.ReadToEndAsync();
-        var stdErrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-
-        return (process.ExitCode, await stdOutTask, await stdErrTask);
-    }
-
-    static void PauseIfRequested(bool pause)
-    {
-        if (!pause) return;
-        AnsiConsole.MarkupLine("[grey]Press any key to continue (Ctrl-C to stop)...[/]");
-        Console.ReadKey(intercept: true);
-    }
-
-    /// <summary>
-    /// Returns the deepest common ancestor directory of all supplied paths plus
-    /// <paramref name="projectBasePath"/>.  Falls back to <paramref name="projectBasePath"/>
-    /// when paths span multiple drive roots (Windows) or share no common prefix.
-    /// </summary>
-    static string GetCommonAncestor(string projectBasePath, IEnumerable<string> filePaths)
-    {
-        var allDirs = filePaths
-            .Select(p => Path.GetDirectoryName(Path.GetFullPath(p)) ?? Path.GetFullPath(p))
-            .Prepend(projectBasePath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (allDirs.Length == 1)
-            return allDirs[0];
-
-        var segments = allDirs
-            .Select(d => d.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-                                  StringSplitOptions.RemoveEmptyEntries))
-            .ToArray();
-
-        var first = segments[0];
-        var commonCount = first.Length;
-
-        foreach (var seg in segments.Skip(1)) {
-            var i = 0;
-            while (i < commonCount && i < seg.Length &&
-                   string.Equals(first[i], seg[i], StringComparison.OrdinalIgnoreCase))
-                i++;
-            commonCount = i;
-        }
-
-        if (commonCount == 0)
-            return projectBasePath; // paths span different drives — fall back
-
-        var ancestor = string.Join(Path.DirectorySeparatorChar, first.Take(commonCount));
-
-        // Restore root separator for bare drive letters ("C:" → "C:\")
-        if (ancestor.EndsWith(':'))
-            ancestor += Path.DirectorySeparatorChar;
-
-        return ancestor;
-    }
 }
 

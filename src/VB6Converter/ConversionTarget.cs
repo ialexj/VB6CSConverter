@@ -21,6 +21,8 @@ public class ConversionTarget(VisualBasicProjectFile file, string outputPath, st
 
     public bool Exists => System.IO.File.Exists(OutputPath);
 
+    public bool DesignerExists => System.IO.File.Exists(DesignerOutputPath);
+
     public bool HasErrors => System.IO.File.Exists($"{OutputPath}.log");
 
     public string SourceRelativePath => Path.GetRelativePath(rootPath, File.Path).Replace('\\', '/');
