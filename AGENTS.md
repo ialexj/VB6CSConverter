@@ -13,8 +13,10 @@ See [README.md](README.md) for the motivation and high-level "How" overview.
 | `ComStubGenerator` | Console App | Generates C# stub files from COM type libraries (used before conversion) |
 | `VB6Parser` | Library | ANTLR4-based VB6 parser; grammar + preprocessing |
 | `VB6Converter` | Console App | Conversion orchestrator; Roslyn AST generation + rewriting |
+| `VB6Instrument` | Console App | Build-time VB6 source instrumentation (virtual line numbers, call traces, error guards) |
 | `VB6Converter.Tests` | MSTest | Conversion integration and unit tests |
 | `VB6Parser.Tests` | MSTest | Parser-level unit tests |
+| `VB6Instrument.Tests` | MSTest | Instrumentation pass tests incl. byte-compat goldens |
 | `ComStubGenerator.Tests` | MSTest | Stub generator unit tests |
 | `ComQuery.Tests` | MSTest | ComQuery integration tests |
 
@@ -63,6 +65,33 @@ dotnet run --project src/ComStubGenerator/ComStubGenerator.csproj -- -p <path/to
 
 - **VB6Converter**: See `Program.CommandLineOptions` in [src/VB6Converter/Program.cs](src/VB6Converter/Program.cs)
 - **ComStubGenerator**: See `Program.CommandLineOptions` in [src/ComStubGenerator/Program.cs](src/ComStubGenerator/Program.cs)
+- **VB6Instrument**: `vb6instrument <path> [--line-numbers] [--call-header=<Statement>] [--error-guard[=<Statement>]] [--error-propagation=<fallthrough|raise>] [--codepage <n>] [--whatif]` — see [src/VB6Instrument/Program.cs](src/VB6Instrument/Program.cs). Operates **in place** on the given `.vbp`/file/directory; the caller is responsible for staging a copy.
+
+---
+
+## VB6Instrument — instrumentation pipeline
+
+Instruments VB6 sources for `Erl`-based diagnostics, entry tracing and
+error-chain building. Line-oriented (no ANTLR): a dedicated statement
+tokenizer (port of the incumbent `Set-Vb6LineNumbers.ps1` tokenizer) masks
+strings/comments, folds continuations and splits colon-compounds; passes
+emit line insertions applied bottom-up with a single write per file.
+
+- Passes run **A (line numbers) → B (call traces) → C (error guards)**; B and C
+  re-parse the mutated model, and guard lines precede trace lines.
+- **Pass A** must byte-match the incumbent `Set-Vb6LineNumbers.ps1` output —
+  `test/VB6Instrument.Tests/Fixtures/LineNumbers/` holds the golden corpus.
+- Skip rules: `' [NoTrace]` (traces), `' [NoGuard]` (guards), existing
+  `On Error` in masked code (guards), already-numbered or guard-carrying
+  members (numbering).
+- `src/VB6Instrument/HandlerSemanticsProbe/` — scratch VB6 ActiveX DLL
+  that established the error-handler semantics (§6 of the spec). Probe
+  result (2026-11-25): an active handler falling to `End` without
+  `Resume` **swallows** the error, so the default re-raise strategy is
+  `raise` (explicit `Err.Raise` with the captured Erl baked into the
+  decoration). See its README for the full recorded results.
+- Operation manual (CLI, passes, skip rules, build integration):
+  [src/VB6Instrument/README.md](src/VB6Instrument/README.md).
 
 ---
 

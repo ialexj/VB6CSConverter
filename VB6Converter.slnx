@@ -3,6 +3,7 @@
     <Project Path="src/ComQuery/ComQuery.csproj" />
     <Project Path="src/ComWrapperGen/ComWrapperGen.csproj" />
     <Project Path="src/ComStubGenerator/ComStubGenerator.csproj" />
+    <Project Path="src/VB6Instrument/VB6Instrument.csproj" />
     <Project Path="src/VB6Parser/VB6Parser.csproj" />
     <Project Path="src/VB6Converter/VB6Converter.csproj" />
   </Folder>
@@ -10,6 +11,7 @@
 		<Project Path="test/ComQuery.Tests/ComQuery.Tests.csproj" />
     <Project Path="test/ComStubGenerator.Tests/ComStubGenerator.Tests.csproj" />
     <Project Path="test/VB6Converter.Tests/VB6Converter.Tests.csproj" />
+    <Project Path="test/VB6Instrument.Tests/VB6Instrument.Tests.csproj" />
     <Project Path="test/VB6Parser.Tests/VB6Parser.Tests.csproj" />
   </Folder>
 </Solution>

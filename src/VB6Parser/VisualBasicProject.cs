@@ -5,6 +5,16 @@ public class VisualBasicProject
 {
     public required string Name { get; init; }
 
+    /// <summary>Binary version from the MajorVer/MinorVer/RevisionVersion
+    /// keys, or null when the .vbp declares none.</summary>
+    public VisualBasicProjectVersion? Version { get; set; }
+
+    /// <summary>Descriptive metadata from the Make tab (Title and the
+    /// Version* keys), keyed by friendly name; empty when the .vbp
+    /// declares none.</summary>
+    public IReadOnlyDictionary<string, string> Metadata { get; set; } =
+        new Dictionary<string, string>();
+
     public List<VisualBasicProjectFile> Files { get; set; } = [];
 
     public List<VisualBasicProjectReference> References { get; set; } = [];
@@ -33,6 +43,12 @@ public class VisualBasicProject
             Name = Path.GetFileNameWithoutExtension(path)
         };
 
+        var versionMajor = 0;
+        var versionMinor = 0;
+        var versionRevision = 0;
+        var hasVersion = false;
+        var metadata = new Dictionary<string, string>();
+
         string? line;
         while ((line = reader.ReadLine()) != null) {
             var bits = line.Split('=', 2);
@@ -44,6 +60,20 @@ public class VisualBasicProject
             var value = bits[1].Trim();
 
             switch (key) {
+                case "MajorVer" when int.TryParse(value, out versionMajor):
+                case "MinorVer" when int.TryParse(value, out versionMinor):
+                case "RevisionVersion" when int.TryParse(value, out versionRevision):
+                    hasVersion = true;
+                    break;
+
+                case "Title": AddMetadata(metadata, "title", value); break;
+                case "VersionComments": AddMetadata(metadata, "comments", value); break;
+                case "VersionCompanyName": AddMetadata(metadata, "companyName", value); break;
+                case "VersionFileDescription": AddMetadata(metadata, "fileDescription", value); break;
+                case "VersionLegalCopyright": AddMetadata(metadata, "legalCopyright", value); break;
+                case "VersionLegalTrademarks": AddMetadata(metadata, "legalTrademarks", value); break;
+                case "VersionProductName": AddMetadata(metadata, "productName", value); break;
+
                 case FormMarker:
                 case ModuleMarker:
                 case ClassMarker:
@@ -92,7 +122,32 @@ public class VisualBasicProject
             }
         }
 
+        if (hasVersion) {
+            project.Version = new VisualBasicProjectVersion(versionMajor, versionMinor, versionRevision);
+        }
+        if (metadata.Count > 0) {
+            project.Metadata = metadata;
+        }
+
         return project;
+    }
+
+    /// <summary>Strips one pair of surrounding quotes from a .vbp string value.</summary>
+    static string Unquote(string value)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length >= 2 && trimmed.StartsWith('"') && trimmed.EndsWith('"')
+            ? trimmed[1..^1]
+            : trimmed;
+    }
+
+    /// <summary>Records a Make-tab metadata value; empty (unquoted) values are omitted.</summary>
+    static void AddMetadata(Dictionary<string, string> metadata, string key, string value)
+    {
+        var unquoted = Unquote(value);
+        if (unquoted.Length > 0) {
+            metadata[key] = unquoted;
+        }
     }
 
     /// <summary>
